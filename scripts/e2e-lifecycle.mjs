@@ -313,7 +313,9 @@ if (sensors.body?.length) {
   check('a failed calibration is recorded', fail.ok, `HTTP ${fail.status}`);
 
   const afterFail = (await admin('GET', `/cold-chain/equipment/${sensorId}`)).body;
-  check('a failed calibration does not mark the sensor as calibrated',
+  // Not merely "does not extend": a failure revokes the certificate the sensor
+  // was still carrying, so this holds whether or not it was calibrated before.
+  check('a failed calibration revokes the sensor\'s calibration',
     afterFail.calibrationStatus !== 'VALID', afterFail.calibrationStatus);
 
   const pass = await admin('POST', `/cold-chain/equipment/${sensorId}/calibrations`, {
@@ -389,6 +391,31 @@ check('controlled-register anomalies are reported', anomalies.ok && Array.isArra
   `${anomalies.body?.entriesExamined} entries, ${anomalies.body?.signals?.length} signal(s)`);
 check('the report says plainly that a signal is not a finding',
   typeof anomalies.body?.note === 'string' && /not findings/i.test(anomalies.body.note));
+
+// ============================================================
+console.log('\nTIMELINE AUTHORIZATION (§25, §42)');
+// ============================================================
+
+const pharmacist = client(await login('pharmacist'));
+const anyPatient = (await pharmacist('GET', '/patients?pageSize=1')).body.data?.[0];
+if (anyPatient) {
+  const cashierTimeline = await cashier('GET', `/timeline/PATIENT/${anyPatient.id}`);
+  check('a cashier cannot read a patient timeline', cashierTimeline.status === 403,
+    `HTTP ${cashierTimeline.status}: ${cashierTimeline.body?.error ?? ''}`);
+
+  const clinicalTimeline = await pharmacist('GET', `/timeline/PATIENT/${anyPatient.id}`);
+  check('a pharmacist can', clinicalTimeline.ok, `HTTP ${clinicalTimeline.status}`);
+
+  const productTimeline = await cashier('GET', `/timeline/PRODUCT/${anyPatient.id}`);
+  check('a product timeline is not gated behind the clinical check',
+    productTimeline.ok, `HTTP ${productTimeline.status}`);
+
+  const nonsense = await pharmacist('GET', `/timeline/NONSENSE/${anyPatient.id}`);
+  check('an unknown timeline type is refused rather than returning an empty one',
+    nonsense.status === 400, nonsense.body?.error);
+} else {
+  check('a cashier cannot read a patient timeline', false, 'no patient in the dataset');
+}
 
 // ============================================================
 console.log('\nAUDIT');

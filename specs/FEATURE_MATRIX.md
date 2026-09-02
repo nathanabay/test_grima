@@ -16,10 +16,10 @@ Status values:
 
 ## Totals
 
-- IMPLEMENTED: **742**
-- PARTIALLY IMPLEMENTED: **147**
-- NOT IMPLEMENTED: **111**
-- Weighted (partial counts a half): **816 / 1000**
+- IMPLEMENTED: **780**
+- PARTIALLY IMPLEMENTED: **149**
+- NOT IMPLEMENTED: **71**
+- Weighted (partial counts a half): **854.5 / 1000**
 
 ## Pack 1 — PRODUCT MASTER
 
@@ -180,16 +180,16 @@ Status values:
 | `PHARM-BATCH-037` | 137 | Serial-to-batch relationship. | IMPLEMENTED | SerialNumber.batchId |
 | `PHARM-BATCH-038` | 138 | Serial-to-GTIN relationship. | IMPLEMENTED | serial resolves to batch to product GTIN via the scan endpoint |
 | `PHARM-BATCH-039` | 139 | Serial receiving. | IMPLEMENTED | receiving accepts serials[] per line |
-| `PHARM-BATCH-040` | 140 | Serial dispensing. | NOT IMPLEMENTED | dispensing does not mark a serial DISPENSED |
-| `PHARM-BATCH-041` | 141 | Serial transferring. | NOT IMPLEMENTED | transfers do not move serial ownership |
-| `PHARM-BATCH-042` | 142 | Serial returning. | NOT IMPLEMENTED | returns do not update serial status |
+| `PHARM-BATCH-040` | 140 | Serial dispensing. | IMPLEMENTED | SerialsService.recordEvent DISPENSED; serial.state.ts transition table |
+| `PHARM-BATCH-041` | 141 | Serial transferring. | IMPLEMENTED | SerialsService.recordEvent TRANSFERRED/RECEIVED |
+| `PHARM-BATCH-042` | 142 | Serial returning. | IMPLEMENTED | SerialsService.recordEvent RETURNED, then RELEASED or DESTROYED |
 | `PHARM-BATCH-043` | 143 | Duplicate-serial detection. | PARTIALLY IMPLEMENTED | unique(batchId, serial) blocks duplicates within a batch; the same serial can exist under two batches |
 | `PHARM-BATCH-044` | 144 | Invalid-serial alerts. | PARTIALLY IMPLEMENTED | the scan endpoint warns when a serial is not IN_STOCK; there is no unknown-serial alert flow |
-| `PHARM-BATCH-045` | 145 | Serial status history. | NOT IMPLEMENTED | SerialNumber has a status field but no history rows |
+| `PHARM-BATCH-045` | 145 | Serial status history. | IMPLEMENTED | SerialEvent append-only; GET /serials/:id |
 | `PHARM-BATCH-046` | 146 | Serialization API. | PARTIALLY IMPLEMENTED | serials are readable through scan and search; there is no dedicated serialization API |
-| `PHARM-BATCH-047` | 147 | Mass serial import. | NOT IMPLEMENTED | no serial import path |
+| `PHARM-BATCH-047` | 147 | Mass serial import. | IMPLEMENTED | POST /serials/import; duplicates reported, never overwritten |
 | `PHARM-BATCH-048` | 148 | Serialized product lookup. | IMPLEMENTED | global search and the scan endpoint both resolve a serial |
-| `PHARM-BATCH-049` | 149 | Serial-level audit trail. | NOT IMPLEMENTED | serial changes are not written to the audit log |
+| `PHARM-BATCH-049` | 149 | Serial-level audit trail. | IMPLEMENTED | AuditService.record on every serial event |
 | `PHARM-BATCH-050` | 150 | Serialized recall search. | PARTIALLY IMPLEMENTED | recall trace works from batch to patient; it does not search by serial |
 
 ## Pack 4 — EXPIRY & FEFO ENGINE
@@ -215,15 +215,15 @@ Status values:
 | `PHARM-FEFO-015` | 165 | 365-day expiry bucket. | IMPLEMENTED | bucket DAYS_181_365 |
 | `PHARM-FEFO-016` | 166 | Custom expiry buckets. | IMPLEMENTED | expiry.alertBuckets drives the report ladder, proven by an end-to-end check |
 | `PHARM-FEFO-017` | 167 | Expiry countdown display. | IMPLEMENTED | ExpiryPill shows the day countdown on every at-risk row |
-| `PHARM-FEFO-018` | 168 | Expiry calendar. | NOT IMPLEMENTED | no expiry calendar view |
+| `PHARM-FEFO-018` | 168 | Expiry calendar. | IMPLEMENTED | GET /inventory/expiry/calendar; Calendar tab |
 | `PHARM-FEFO-019` | 169 | Expiry heat map. | NOT IMPLEMENTED | no expiry heat map |
 | `PHARM-FEFO-020` | 170 | Expiry financial-risk calculation. | IMPLEMENTED | potentialLoss per row and totalValueAtRisk |
 | `PHARM-FEFO-021` | 171 | Expiry quantity-risk calculation. | IMPLEMENTED | quantity at risk per bucket |
 | `PHARM-FEFO-022` | 172 | Expiry rate KPI. | IMPLEMENTED | kpis.expiryRatePct from shared/analytics.ts |
-| `PHARM-FEFO-023` | 173 | Historical expiry trend. | NOT IMPLEMENTED | no historical expiry trend series |
-| `PHARM-FEFO-024` | 174 | Branch expiry comparison. | NOT IMPLEMENTED | no branch-versus-branch expiry comparison |
-| `PHARM-FEFO-025` | 175 | Category expiry comparison. | NOT IMPLEMENTED | no category expiry comparison |
-| `PHARM-FEFO-026` | 176 | Supplier expiry comparison. | NOT IMPLEMENTED | no supplier expiry comparison |
+| `PHARM-FEFO-023` | 173 | Historical expiry trend. | IMPLEMENTED | GET /inventory/expiry/trend, read from the ledger at posted cost |
+| `PHARM-FEFO-024` | 174 | Branch expiry comparison. | IMPLEMENTED | GET /inventory/expiry/comparison?dimension=branch |
+| `PHARM-FEFO-025` | 175 | Category expiry comparison. | IMPLEMENTED | GET /inventory/expiry/comparison?dimension=category |
+| `PHARM-FEFO-026` | 176 | Supplier expiry comparison. | IMPLEMENTED | GET /inventory/expiry/comparison?dimension=supplier |
 | `PHARM-FEFO-027` | 177 | Expiry alert escalation. | IMPLEMENTED | automation EXPIRY_90 and EXPIRY_30 rules with escalation ladders |
 | `PHARM-FEFO-028` | 178 | Near-expiry transfer recommendation. | IMPLEMENTED | inventory/expiry/redistribution suggests a receiving branch |
 | `PHARM-FEFO-029` | 179 | Near-expiry return recommendation. | PARTIALLY IMPLEMENTED | returns to supplier are supported; nothing recommends one from expiry risk |
@@ -380,7 +380,7 @@ Status values:
 | `PHARM-SUPP-009` | 309 | Supplier bank details. | IMPLEMENTED | Supplier.bankName and bankAccount |
 | `PHARM-SUPP-010` | 310 | Supplier currencies. | IMPLEMENTED | Supplier.currency |
 | `PHARM-SUPP-011` | 311 | Supplier payment terms. | IMPLEMENTED | Supplier.paymentTerms |
-| `PHARM-SUPP-012` | 312 | Supplier credit limits. | NOT IMPLEMENTED | no supplier credit limit |
+| `PHARM-SUPP-012` | 312 | Supplier credit limits. | IMPLEMENTED | Supplier.creditLimit; assertWithinCreditLimit blocks PO approval |
 | `PHARM-SUPP-013` | 313 | Supplier lead times. | IMPLEMENTED | Supplier.leadTimeDays and avgLeadTimeDays |
 | `PHARM-SUPP-014` | 314 | Supplier product catalog. | IMPLEMENTED | SupplierProduct catalogue |
 | `PHARM-SUPP-015` | 315 | Supplier-specific product codes. | IMPLEMENTED | SupplierProduct.supplierSku |
@@ -409,10 +409,10 @@ Status values:
 | `PHARM-SUPP-038` | 338 | Supplier complaints. | PARTIALLY IMPLEMENTED | raised as a quality incident; there is no complaint entity |
 | `PHARM-SUPP-039` | 339 | Supplier contract management. | NOT IMPLEMENTED | no contract entity |
 | `PHARM-SUPP-040` | 340 | Supplier contract expiration alerts. | PARTIALLY IMPLEMENTED | licence and document expiry are chased; contracts are not modelled |
-| `PHARM-SUPP-041` | 341 | Supplier risk level. | NOT IMPLEMENTED | no risk level field |
+| `PHARM-SUPP-041` | 341 | Supplier risk level. | IMPLEMENTED | Supplier.riskLevel + riskNotes, validated vocabulary |
 | `PHARM-SUPP-042` | 342 | Supplier country risk. | PARTIALLY IMPLEMENTED | Supplier.country is recorded; no country risk rating |
-| `PHARM-SUPP-043` | 343 | Supplier dependency analysis. | NOT IMPLEMENTED | no dependency analysis |
-| `PHARM-SUPP-044` | 344 | Single-source dependency alert. | NOT IMPLEMENTED | no single-source alert |
+| `PHARM-SUPP-043` | 343 | Supplier dependency analysis. | IMPLEMENTED | GET /suppliers/dependency-analysis |
+| `PHARM-SUPP-044` | 344 | Single-source dependency alert. | IMPLEMENTED | dependencyAnalysis severity by supplier risk |
 | `PHARM-SUPP-045` | 345 | Alternate supplier suggestion. | IMPLEMENTED | Product.secondarySupplierId and the supplier catalogue offer alternates |
 | `PHARM-SUPP-046` | 346 | Supplier spend analysis. | PARTIALLY IMPLEMENTED | supplier purchases are reportable through the report builder; there is no spend analysis view |
 | `PHARM-SUPP-047` | 347 | Supplier payment analysis. | IMPLEMENTED | supplier-invoices/ageing |
@@ -542,7 +542,7 @@ Status values:
 | --- | ---: | --- | --- | --- |
 | `PHARM-COUNT-001` | 451 | Full physical counts. | IMPLEMENTED | CountType FULL |
 | `PHARM-COUNT-002` | 452 | Cycle counting. | IMPLEMENTED | CountType CYCLE |
-| `PHARM-COUNT-003` | 453 | Blind counting. | NOT IMPLEMENTED | the count sheet shows the system quantity; there is no blind mode |
+| `PHARM-COUNT-003` | 453 | Blind counting. | IMPLEMENTED | StockCount.isBlind; maskBlind hides systemQty server-side |
 | `PHARM-COUNT-004` | 454 | Double counting. | NOT IMPLEMENTED | no double-count step |
 | `PHARM-COUNT-005` | 455 | Random counting. | IMPLEMENTED | CountType RANDOM |
 | `PHARM-COUNT-006` | 456 | ABC-based counting. | PARTIALLY IMPLEMENTED | ABC analysis exists and can select products; the count does not consume it |
@@ -560,7 +560,7 @@ Status values:
 | `PHARM-COUNT-018` | 468 | Offline count capture. | IMPLEMENTED | the offline queue replays count entries when the connection returns |
 | `PHARM-COUNT-019` | 469 | Count-sheet generation. | IMPLEMENTED | the stock-count document renders a count sheet |
 | `PHARM-COUNT-020` | 470 | Count assignment. | IMPLEMENTED | StockCount.countedById |
-| `PHARM-COUNT-021` | 471 | Count freeze option. | NOT IMPLEMENTED | no freeze of movement during a count |
+| `PHARM-COUNT-021` | 471 | Count freeze option. | IMPLEMENTED | StockCount.isFrozen; LedgerService.assertNotFrozen refuses the movement |
 | `PHARM-COUNT-022` | 472 | Snapshot quantity. | IMPLEMENTED | StockCountItem.systemQty |
 | `PHARM-COUNT-023` | 473 | Physical quantity. | IMPLEMENTED | StockCountItem.countedQty |
 | `PHARM-COUNT-024` | 474 | Variance quantity. | IMPLEMENTED | StockCountItem.varianceQty |
@@ -575,9 +575,9 @@ Status values:
 | `PHARM-COUNT-033` | 483 | Count adjustment ledger. | IMPLEMENTED | the count posts through the ledger like any other movement |
 | `PHARM-COUNT-034` | 484 | Shrinkage classification. | PARTIALLY IMPLEMENTED | shrinkage is measured in aggregate; the loss is not classified per line |
 | `PHARM-COUNT-035` | 485 | Damage classification. | IMPLEMENTED | damage is its own document type and ledger type |
-| `PHARM-COUNT-036` | 486 | Theft-loss classification. | NOT IMPLEMENTED | no theft classification |
+| `PHARM-COUNT-036` | 486 | Theft-loss classification. | IMPLEMENTED | StockAdjustmentItem.lossType THEFT; loss analysis by cause |
 | `PHARM-COUNT-037` | 487 | Unknown-loss classification. | PARTIALLY IMPLEMENTED | an unexplained variance is recorded with a free-text reason; there is no category |
-| `PHARM-COUNT-038` | 488 | Misplacement classification. | NOT IMPLEMENTED | no misplacement classification |
+| `PHARM-COUNT-038` | 488 | Misplacement classification. | IMPLEMENTED | StockAdjustmentItem.lossType MISPLACEMENT |
 | `PHARM-COUNT-039` | 489 | Variance root-cause analysis. | PARTIALLY IMPLEMENTED | every variance carries a reason; there is no root-cause analysis |
 | `PHARM-COUNT-040` | 490 | Repeated variance alerts. | IMPLEMENTED | the COUNT_VARIANCE rule escalates a subject that keeps matching |
 | `PHARM-COUNT-041` | 491 | Inventory accuracy KPI. | IMPLEMENTED | kpis.inventoryAccuracyPct and the health score accuracy factor |
@@ -624,10 +624,10 @@ Status values:
 | `PHARM-XFER-025` | 525 | Cold-chain transfer tracking. | PARTIALLY IMPLEMENTED | cold-chain products keep their flags and storage rules; the transfer carries no chain record |
 | `PHARM-XFER-026` | 526 | Courier information. | IMPLEMENTED | StockTransfer.vehicleOrCourier |
 | `PHARM-XFER-027` | 527 | Vehicle information. | IMPLEMENTED | StockTransfer.vehicleOrCourier |
-| `PHARM-XFER-028` | 528 | Driver information. | NOT IMPLEMENTED | no driver field |
-| `PHARM-XFER-029` | 529 | Tracking-number support. | NOT IMPLEMENTED | no tracking number |
-| `PHARM-XFER-030` | 530 | Expected arrival. | NOT IMPLEMENTED | no expected arrival date |
-| `PHARM-XFER-031` | 531 | Delayed transfer alerts. | NOT IMPLEMENTED | no delayed-transfer alert |
+| `PHARM-XFER-028` | 528 | Driver information. | IMPLEMENTED | StockTransfer.driverName/driverPhone, captured at dispatch |
+| `PHARM-XFER-029` | 529 | Tracking-number support. | IMPLEMENTED | StockTransfer.trackingNumber |
+| `PHARM-XFER-030` | 530 | Expected arrival. | IMPLEMENTED | StockTransfer.expectedArrival, validated to be in the future |
+| `PHARM-XFER-031` | 531 | Delayed transfer alerts. | IMPLEMENTED | GET /transfers/overdue with severity by lateness |
 | `PHARM-XFER-032` | 532 | Transfer proof of delivery. | PARTIALLY IMPLEMENTED | receivedById and receivedAt are recorded; there is no proof-of-delivery capture |
 | `PHARM-XFER-033` | 533 | Transfer receiving signatures. | PARTIALLY IMPLEMENTED | receivedById records who signed for it; there is no signature capture |
 | `PHARM-XFER-034` | 534 | Transfer barcode verification. | IMPLEMENTED | receiving a transfer scans the batch, and a mismatch is refused |
@@ -806,12 +806,12 @@ Status values:
 | `PHARM-CRM-036` | 686 | Customer notes. | IMPLEMENTED | Patient.notes |
 | `PHARM-CRM-037` | 687 | Restricted-note permissions. | PARTIALLY IMPLEMENTED | patient reads need sales.patient.READ; notes are not separately restricted |
 | `PHARM-CRM-038` | 688 | Patient document attachments. | IMPLEMENTED | Document entityType PATIENT through the generic store |
-| `PHARM-CRM-039` | 689 | Duplicate patient detection. | NOT IMPLEMENTED | no duplicate detection |
-| `PHARM-CRM-040` | 690 | Patient merge workflow. | NOT IMPLEMENTED | mergedIntoId exists on the model but no merge workflow sets it |
+| `PHARM-CRM-039` | 689 | Duplicate patient detection. | IMPLEMENTED | GET /patients/duplicates; normalised phone and name+DOB |
+| `PHARM-CRM-040` | 690 | Patient merge workflow. | IMPLEMENTED | POST /patients/:id/merge; history repointed, allergies combined |
 | `PHARM-CRM-041` | 691 | Data correction history. | IMPLEMENTED | every patient edit is in the audit chain with old and new values |
 | `PHARM-CRM-042` | 692 | Data export controls. | IMPLEMENTED | patient exports need the EXPORT permission and are themselves audited |
-| `PHARM-CRM-043` | 693 | Account anonymization workflow. | NOT IMPLEMENTED | isAnonymized and anonymizedAt exist on the model but nothing sets them |
-| `PHARM-CRM-044` | 694 | Retention-policy engine. | NOT IMPLEMENTED | no retention policy engine |
+| `PHARM-CRM-043` | 693 | Account anonymization workflow. | IMPLEMENTED | POST /patients/:id/anonymize; record kept, identity cleared |
+| `PHARM-CRM-044` | 694 | Retention-policy engine. | PARTIALLY IMPLEMENTED | Lists dormant records and blocks any with an outstanding balance. It never erases on a timer by design — that is how a record still needed for an open recall disappears — so the deciding half is a person, not an engine. |
 | `PHARM-CRM-045` | 695 | Privacy-access auditing. | IMPLEMENTED | reading patient data through a report is audited as a sensitive export |
 | `PHARM-CRM-046` | 696 | Patient portal readiness. | PARTIALLY IMPLEMENTED | FHIR Patient read and search make a portal possible; there is no portal |
 | `PHARM-CRM-047` | 697 | Customer satisfaction survey. | NOT IMPLEMENTED | no satisfaction survey |
@@ -890,8 +890,8 @@ Status values:
 | `PHARM-COLD-006` | 756 | Cold-room records. | PARTIALLY IMPLEMENTED | as above, a cold room is a COLD location with a sensor |
 | `PHARM-COLD-007` | 757 | Temperature sensor registry. | IMPLEMENTED | TemperatureSensor registry |
 | `PHARM-COLD-008` | 758 | Humidity sensor registry. | PARTIALLY IMPLEMENTED | humidity arrives on the same sensor reading; there is no separate humidity sensor type |
-| `PHARM-COLD-009` | 759 | Sensor calibration history. | NOT IMPLEMENTED | no calibration history |
-| `PHARM-COLD-010` | 760 | Sensor calibration expiration. | NOT IMPLEMENTED | no calibration expiry |
+| `PHARM-COLD-009` | 759 | Sensor calibration history. | IMPLEMENTED | SensorCalibration append-only; GET /cold-chain/equipment/:id |
+| `PHARM-COLD-010` | 760 | Sensor calibration expiration. | IMPLEMENTED | TemperatureSensor.calibrationDueAt; a FAIL revokes it |
 | `PHARM-COLD-011` | 761 | IoT gateway support. | IMPLEMENTED | cold-chain/readings accepts gateway posts, gated by feature.iotIngest |
 | `PHARM-COLD-012` | 762 | Sensor API ingestion. | IMPLEMENTED | POST cold-chain/readings, also reachable with an API key |
 | `PHARM-COLD-013` | 763 | Scheduled temperature imports. | PARTIALLY IMPLEMENTED | readings can be posted in bulk at any time; there is no scheduled import |
@@ -923,9 +923,9 @@ Status values:
 | `PHARM-COLD-039` | 789 | Cold-chain transfer monitoring. | NOT IMPLEMENTED | no in-transit cold-chain monitoring |
 | `PHARM-COLD-040` | 790 | Delivery temperature logging. | PARTIALLY IMPLEMENTED | ShipmentPackage.departureTempC records the temperature a box left at; nothing logs the journey |
 | `PHARM-COLD-041` | 791 | Temperature-log exports. | IMPLEMENTED | the cold-chain report exports the log |
-| `PHARM-COLD-042` | 792 | Calibration reminders. | NOT IMPLEMENTED | no calibration reminder |
-| `PHARM-COLD-043` | 793 | Maintenance reminders. | NOT IMPLEMENTED | no maintenance reminder |
-| `PHARM-COLD-044` | 794 | Equipment service history. | NOT IMPLEMENTED | no equipment service history |
+| `PHARM-COLD-042` | 792 | Calibration reminders. | IMPLEMENTED | GET /cold-chain/equipment/due, severity CRITICAL when never calibrated |
+| `PHARM-COLD-043` | 793 | Maintenance reminders. | IMPLEMENTED | SensorMaintenance.nextDueAt surfaced by equipment/due |
+| `PHARM-COLD-044` | 794 | Equipment service history. | IMPLEMENTED | SensorMaintenance append-only |
 | `PHARM-COLD-045` | 795 | Backup refrigeration location. | NOT IMPLEMENTED | no backup refrigeration location |
 | `PHARM-COLD-046` | 796 | Cold-chain emergency workflow. | PARTIALLY IMPLEMENTED | an excursion quarantines stock and raises an incident; there is no emergency runbook |
 | `PHARM-COLD-047` | 797 | Temperature compliance KPI. | IMPLEMENTED | the health score cold-chain factor |
@@ -968,11 +968,11 @@ Status values:
 | `PHARM-CTRL-027` | 827 | Controlled register printout. | IMPLEMENTED | the controlled-register report prints |
 | `PHARM-CTRL-028` | 828 | Controlled register export restrictions. | IMPLEMENTED | export needs dispensing.controlled.EXPORT and the export is audited |
 | `PHARM-CTRL-029` | 829 | Controlled access logs. | IMPLEMENTED | every register read and write is in the audit chain |
-| `PHARM-CTRL-030` | 830 | Suspicious transaction alerts. | NOT IMPLEMENTED | no suspicious-transaction detection |
+| `PHARM-CTRL-030` | 830 | Suspicious transaction alerts. | IMPLEMENTED | GET /controlled-register/anomalies, five signal types |
 | `PHARM-CTRL-031` | 831 | Excess-quantity alerts. | PARTIALLY IMPLEMENTED | Product.maxDispenseQty caps a single dispense; there is no excess-quantity alert |
-| `PHARM-CTRL-032` | 832 | Unusual-frequency alerts. | NOT IMPLEMENTED | no frequency-anomaly alert |
+| `PHARM-CTRL-032` | 832 | Unusual-frequency alerts. | IMPLEMENTED | DISPENSER_VOLUME_OUTLIER and PRESCRIBER_CONCENTRATION signals |
 | `PHARM-CTRL-033` | 833 | Repeated-void alerts. | NOT IMPLEMENTED | no repeated-void alert |
-| `PHARM-CTRL-034` | 834 | After-hours access alerts. | NOT IMPLEMENTED | no after-hours access alert |
+| `PHARM-CTRL-034` | 834 | After-hours access alerts. | IMPLEMENTED | OUT_OF_HOURS signal |
 | `PHARM-CTRL-035` | 835 | Controlled stockout alert. | IMPLEMENTED | the STOCKOUT automation rule covers controlled products |
 | `PHARM-CTRL-036` | 836 | Controlled expiry tracking. | IMPLEMENTED | controlled batches follow the same expiry rules and appear in the expiry report |
 | `PHARM-CTRL-037` | 837 | Controlled waste tracking. | IMPLEMENTED | entryType DESTRUCTION plus the disposal module |
@@ -1032,8 +1032,8 @@ Status values:
 | `PHARM-ANLY-034` | 884 | Weighted-moving-average forecast. | IMPLEMENTED | weightedMovingAverage |
 | `PHARM-ANLY-035` | 885 | Exponential-smoothing forecast. | IMPLEMENTED | exponentialSmoothing |
 | `PHARM-ANLY-036` | 886 | Seasonal forecast support. | IMPLEMENTED | seasonalNaive plus Product.seasonalProfile |
-| `PHARM-ANLY-037` | 887 | Forecast accuracy calculation. | NOT IMPLEMENTED | no forecast accuracy measure |
-| `PHARM-ANLY-038` | 888 | Forecast-versus-actual report. | NOT IMPLEMENTED | no forecast-versus-actual report |
+| `PHARM-ANLY-037` | 887 | Forecast accuracy calculation. | IMPLEMENTED | GET /analytics/forecast/:id/accuracy; walk-forward MAE/MAPE/bias |
+| `PHARM-ANLY-038` | 888 | Forecast-versus-actual report. | IMPLEMENTED | per-month predicted vs actual points in the accuracy response |
 | `PHARM-ANLY-039` | 889 | Reorder recommendations. | IMPLEMENTED | replenishment recommendations, which only ever suggest |
 | `PHARM-ANLY-040` | 890 | Excess-stock prediction. | IMPLEMENTED | the redistribution engine identifies surplus above maximum stock |
 | `PHARM-ANLY-041` | 891 | Stockout prediction. | IMPLEMENTED | the forecast and the STOCKOUT rule both predict a stockout |
@@ -1044,7 +1044,7 @@ Status values:
 | `PHARM-ANLY-046` | 896 | AI explanation of recommendations. | IMPLEMENTED | every recommendation returns the inputs that produced it, in words |
 | `PHARM-ANLY-047` | 897 | No autonomous high-risk approval. | IMPLEMENTED | nothing is approved automatically; the six automation actions exclude approval |
 | `PHARM-ANLY-048` | 898 | Dashboard drill-down everywhere. | IMPLEMENTED | dashboard cards, health score factors and command centre rows all link through |
-| `PHARM-ANLY-049` | 899 | Scheduled report delivery. | NOT IMPLEMENTED | SavedReport stores a schedule and recipients but no job delivers them |
+| `PHARM-ANLY-049` | 899 | Scheduled report delivery. | IMPLEMENTED | ReportBuilderService.deliverScheduled, hourly, as the report owner |
 | `PHARM-ANLY-050` | 900 | Custom report builder. | IMPLEMENTED | the report builder over a whitelist of sources and columns |
 
 ## Pack 19 — SECURITY, AUDIT & ENTERPRISE ADMINISTRATION
@@ -1112,7 +1112,7 @@ Status values:
 | --- | ---: | --- | --- | --- |
 | `PHARM-PLAT-001` | 951 | REST API. | IMPLEMENTED | a REST API across 23 controllers and about 306 routes |
 | `PHARM-PLAT-002` | 952 | OpenAPI documentation. | IMPLEMENTED | Swagger at /api/docs |
-| `PHARM-PLAT-003` | 953 | API versioning. | NOT IMPLEMENTED | the prefix is /api with no version segment |
+| `PHARM-PLAT-003` | 953 | API versioning. | IMPLEMENTED | URI versioning: every route served at /api and /api/v1 |
 | `PHARM-PLAT-004` | 954 | API authentication. | IMPLEMENTED | bearer tokens and X-Api-Key |
 | `PHARM-PLAT-005` | 955 | API authorization. | IMPLEMENTED | the same permission and scope checks apply to both |
 | `PHARM-PLAT-006` | 956 | API rate limiting. | IMPLEMENTED | the throttler, plus a per-key rateLimit field |
@@ -1150,7 +1150,7 @@ Status values:
 | `PHARM-PLAT-038` | 988 | Background sync. | PARTIALLY IMPLEMENTED | the queue replays when connectivity returns; there is no Background Sync API registration |
 | `PHARM-PLAT-039` | 989 | Global search. | IMPLEMENTED | cross-entity search, permission-gated per entity type |
 | `PHARM-PLAT-040` | 990 | Typo-tolerant search. | NOT IMPLEMENTED | substring matching only; no trigram or fuzzy search |
-| `PHARM-PLAT-041` | 991 | Saved filters. | NOT IMPLEMENTED | no saved filters |
+| `PHARM-PLAT-041` | 991 | Saved filters. | PARTIALLY IMPLEMENTED | DataTable saved views persist per browser in localStorage. They are not stored server-side, so they do not follow a user to another device. |
 | `PHARM-PLAT-042` | 992 | Saved views. | PARTIALLY IMPLEMENTED | saved reports persist a definition; there is no saved view on a list screen |
 | `PHARM-PLAT-043` | 993 | Configurable dashboards. | NOT IMPLEMENTED | the dashboard is fixed |
 | `PHARM-PLAT-044` | 994 | Notification rule engine. | IMPLEMENTED | NotificationRule plus the automation engine |

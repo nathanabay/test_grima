@@ -99,10 +99,17 @@ export class ColdChainService {
         },
       });
 
-      // A failed calibration does not extend the due date: the instrument is
-      // not calibrated, and marking it as such would be the opposite of what
-      // the certificate says.
-      if (result !== 'FAIL') {
+      if (result === 'FAIL') {
+        // A failure does not merely fail to extend the due date — it revokes
+        // the certificate the sensor was still carrying. An instrument that has
+        // demonstrably drifted is not calibrated just because its previous
+        // certificate has not expired yet, and leaving it reading VALID would
+        // let a QA release rest on a reading nobody should trust.
+        await tx.temperatureSensor.update({
+          where: { id: sensorId },
+          data: { calibrationDueAt: null },
+        });
+      } else {
         await tx.temperatureSensor.update({
           where: { id: sensorId },
           data: { lastCalibratedAt: calibratedAt, calibrationDueAt: validUntil },

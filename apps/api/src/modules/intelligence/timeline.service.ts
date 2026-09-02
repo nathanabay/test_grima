@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 
 export interface TimelineEvent {
@@ -25,9 +26,30 @@ export interface TimelineEvent {
  * could drift from them. Every entry links to the transaction behind it, so
  * the timeline is a way into the evidence rather than a summary of it.
  */
+/**
+ * The permission each timeline requires.
+ *
+ * The route cannot declare this with a decorator because the answer depends on
+ * the entity type in the path: a product timeline is stock data, a patient
+ * timeline is clinical data, and treating them alike would let a cashier read
+ * a patient's prescriptions through a URL meant for looking up a product.
+ */
+const TIMELINE_PERMISSION: Record<string, string> = {
+  PRODUCT: 'catalog.product.READ',
+  BATCH: 'inventory.batch.READ',
+  PATIENT: 'dispensing.dispensing.READ',
+  SUPPLIER: 'procurement.supplier.READ',
+};
+
+/** Roles with a clinical reason to see a patient's history (§25). */
+const CLINICAL_ROLES = ['PHARMACIST', 'PHARMACY_ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER'];
+
 @Injectable()
 export class TimelineService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async forEntity(
     entityType: string,
@@ -38,6 +60,22 @@ export class TimelineService {
     const type = entityType.toUpperCase();
     const take = Math.min(limit, 500);
 
+    const required = TIMELINE_PERMISSION[type];
+    if (!required) {
+      throw new BadRequestException(
+        `No timeline is defined for '${entityType}'. Supported: ${Object.keys(TIMELINE_PERMISSION).join(', ')}.`,
+      );
+    }
+    if (!user.permissions.includes(required)) {
+      throw new ForbiddenException(`Reading a ${type.toLowerCase()} timeline requires ${required}`);
+    }
+    if (type === 'PATIENT' && !user.roles.some((r) => CLINICAL_ROLES.includes(r))) {
+      // The permission is necessary but not sufficient: a patient timeline is
+      // prescriptions, prescribers and dispensings, which only a clinical role
+      // has a reason to read.
+      throw new ForbiddenException('You are not authorized to view patient history');
+    }
+
     const events =
       type === 'PRODUCT'
         ? await this.product(entityId, take)
@@ -47,13 +85,24 @@ export class TimelineService {
             ? await this.patient(entityId, user, take)
             : type === 'SUPPLIER'
               ? await this.supplier(entityId, take)
-              : (() => {
-                  throw new BadRequestException(
-                    `No timeline is defined for '${entityType}'. Supported: PRODUCT, BATCH, PATIENT, SUPPLIER.`,
-                  );
-                })();
+              : [];
 
     events.sort((a, b) => b.at.getTime() - a.at.getTime());
+
+    if (type === 'PATIENT') {
+      // Reading a patient record is itself an auditable event, whichever screen
+      // it was read from (§42).
+      await this.audit.record({
+        userId: user.id,
+        userLabel: user.fullName,
+        module: 'dispensing',
+        action: 'READ',
+        entityType: 'Patient',
+        entityId,
+        reason: 'Patient timeline viewed',
+      });
+    }
+
     return { entityType: type, entityId, events: events.slice(0, take) };
   }
 

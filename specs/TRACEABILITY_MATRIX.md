@@ -152,16 +152,16 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-BATCH-037` | 137 | Serial-to-batch relationship. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-038` | 138 | Serial-to-GTIN relationship. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-039` | 139 | Serial receiving. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
-| `PHARM-BATCH-040` | 140 | Serial dispensing. | `08-batches` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-BATCH-041` | 141 | Serial transferring. | `08-batches` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-BATCH-042` | 142 | Serial returning. | `08-batches` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-BATCH-040` | 140 | Serial dispensing. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-BATCH-041` | 141 | Serial transferring. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-BATCH-042` | 142 | Serial returning. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-BATCH-043` | 143 | Duplicate-serial detection. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-BATCH-044` | 144 | Invalid-serial alerts. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-BATCH-045` | 145 | Serial status history. | `08-batches` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-BATCH-045` | 145 | Serial status history. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-BATCH-046` | 146 | Serialization API. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-BATCH-047` | 147 | Mass serial import. | `08-batches` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-BATCH-047` | 147 | Mass serial import. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-BATCH-048` | 148 | Serialized product lookup. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
-| `PHARM-BATCH-049` | 149 | Serial-level audit trail. | `08-batches` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-BATCH-049` | 149 | Serial-level audit trail. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-BATCH-050` | 150 | Serialized recall search. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-FEFO-001` | 151 | Automatic FEFO picking. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-FEFO-002` | 152 | Configurable FIFO fallback. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise | IMPLEMENTED |
@@ -180,15 +180,15 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-FEFO-015` | 165 | 365-day expiry bucket. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-FEFO-016` | 166 | Custom expiry buckets. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-FEFO-017` | 167 | Expiry countdown display. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise | IMPLEMENTED |
-| `PHARM-FEFO-018` | 168 | Expiry calendar. | `11-fefo` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-FEFO-018` | 168 | Expiry calendar. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-FEFO-019` | 169 | Expiry heat map. | `11-fefo` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
 | `PHARM-FEFO-020` | 170 | Expiry financial-risk calculation. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-FEFO-021` | 171 | Expiry quantity-risk calculation. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-FEFO-022` | 172 | Expiry rate KPI. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise | IMPLEMENTED |
-| `PHARM-FEFO-023` | 173 | Historical expiry trend. | `11-fefo` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-FEFO-024` | 174 | Branch expiry comparison. | `11-fefo` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-FEFO-025` | 175 | Category expiry comparison. | `11-fefo` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-FEFO-026` | 176 | Supplier expiry comparison. | `11-fefo` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-FEFO-023` | 173 | Historical expiry trend. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-FEFO-024` | 174 | Branch expiry comparison. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-FEFO-025` | 175 | Category expiry comparison. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-FEFO-026` | 176 | Supplier expiry comparison. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-FEFO-027` | 177 | Expiry alert escalation. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-FEFO-028` | 178 | Near-expiry transfer recommendation. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-FEFO-029` | 179 | Near-expiry return recommendation. | `11-fefo` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, expiry.spec, e2e-enterprise (partial) | PARTIALLY IMPLEMENTED |
@@ -324,7 +324,7 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-SUPP-009` | 309 | Supplier bank details. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement | IMPLEMENTED |
 | `PHARM-SUPP-010` | 310 | Supplier currencies. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement | IMPLEMENTED |
 | `PHARM-SUPP-011` | 311 | Supplier payment terms. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement | IMPLEMENTED |
-| `PHARM-SUPP-012` | 312 | Supplier credit limits. | `15-suppliers` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-SUPP-012` | 312 | Supplier credit limits. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-SUPP-013` | 313 | Supplier lead times. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement | IMPLEMENTED |
 | `PHARM-SUPP-014` | 314 | Supplier product catalog. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement | IMPLEMENTED |
 | `PHARM-SUPP-015` | 315 | Supplier-specific product codes. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement | IMPLEMENTED |
@@ -353,10 +353,10 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-SUPP-038` | 338 | Supplier complaints. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-SUPP-039` | 339 | Supplier contract management. | `15-suppliers` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
 | `PHARM-SUPP-040` | 340 | Supplier contract expiration alerts. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-SUPP-041` | 341 | Supplier risk level. | `15-suppliers` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-SUPP-041` | 341 | Supplier risk level. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-SUPP-042` | 342 | Supplier country risk. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-SUPP-043` | 343 | Supplier dependency analysis. | `15-suppliers` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-SUPP-044` | 344 | Single-source dependency alert. | `15-suppliers` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-SUPP-043` | 343 | Supplier dependency analysis. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-SUPP-044` | 344 | Single-source dependency alert. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-SUPP-045` | 345 | Alternate supplier suggestion. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement | IMPLEMENTED |
 | `PHARM-SUPP-046` | 346 | Supplier spend analysis. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-SUPP-047` | 347 | Supplier payment analysis. | `15-suppliers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-procurement | IMPLEMENTED |
@@ -465,7 +465,7 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-LEDG-050` | 450 | Inventory forensic timeline. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-001` | 451 | Full physical counts. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-002` | 452 | Cycle counting. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-COUNT-003` | 453 | Blind counting. | `19-stock-counts` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-COUNT-003` | 453 | Blind counting. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-COUNT-004` | 454 | Double counting. | `19-stock-counts` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
 | `PHARM-COUNT-005` | 455 | Random counting. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-006` | 456 | ABC-based counting. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
@@ -483,7 +483,7 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-COUNT-018` | 468 | Offline count capture. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-019` | 469 | Count-sheet generation. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-020` | 470 | Count assignment. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-COUNT-021` | 471 | Count freeze option. | `19-stock-counts` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-COUNT-021` | 471 | Count freeze option. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-COUNT-022` | 472 | Snapshot quantity. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-023` | 473 | Physical quantity. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-024` | 474 | Variance quantity. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
@@ -498,9 +498,9 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-COUNT-033` | 483 | Count adjustment ledger. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-034` | 484 | Shrinkage classification. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-COUNT-035` | 485 | Damage classification. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-COUNT-036` | 486 | Theft-loss classification. | `19-stock-counts` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-COUNT-036` | 486 | Theft-loss classification. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-COUNT-037` | 487 | Unknown-loss classification. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-COUNT-038` | 488 | Misplacement classification. | `19-stock-counts` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-COUNT-038` | 488 | Misplacement classification. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-COUNT-039` | 489 | Variance root-cause analysis. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-COUNT-040` | 490 | Repeated variance alerts. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-041` | 491 | Inventory accuracy KPI. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
@@ -540,10 +540,10 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-XFER-025` | 525 | Cold-chain transfer tracking. | `18-transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-XFER-026` | 526 | Courier information. | `18-transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-XFER-027` | 527 | Vehicle information. | `18-transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-XFER-028` | 528 | Driver information. | `18-transfers` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-XFER-029` | 529 | Tracking-number support. | `18-transfers` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-XFER-030` | 530 | Expected arrival. | `18-transfers` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-XFER-031` | 531 | Delayed transfer alerts. | `18-transfers` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-XFER-028` | 528 | Driver information. | `18-transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-XFER-029` | 529 | Tracking-number support. | `18-transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-XFER-030` | 530 | Expected arrival. | `18-transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-XFER-031` | 531 | Delayed transfer alerts. | `18-transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-XFER-032` | 532 | Transfer proof of delivery. | `18-transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-XFER-033` | 533 | Transfer receiving signatures. | `18-transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-XFER-034` | 534 | Transfer barcode verification. | `18-transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
@@ -701,12 +701,12 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-CRM-036` | 686 | Customer notes. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-CRM-037` | 687 | Restricted-note permissions. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-CRM-038` | 688 | Patient document attachments. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-CRM-039` | 689 | Duplicate patient detection. | `23-patients` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-CRM-040` | 690 | Patient merge workflow. | `23-patients` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-CRM-039` | 689 | Duplicate patient detection. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-CRM-040` | 690 | Patient merge workflow. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-CRM-041` | 691 | Data correction history. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-CRM-042` | 692 | Data export controls. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-CRM-043` | 693 | Account anonymization workflow. | `23-patients` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-CRM-044` | 694 | Retention-policy engine. | `23-patients` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-CRM-043` | 693 | Account anonymization workflow. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-CRM-044` | 694 | Retention-policy engine. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | — | e2e-lifecycle | PARTIALLY IMPLEMENTED |
 | `PHARM-CRM-045` | 695 | Privacy-access auditing. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-CRM-046` | 696 | Patient portal readiness. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-CRM-047` | 697 | Customer satisfaction survey. | `23-patients` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
@@ -771,8 +771,8 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-COLD-006` | 756 | Cold-room records. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-COLD-007` | 757 | Temperature sensor registry. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COLD-008` | 758 | Humidity sensor registry. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-COLD-009` | 759 | Sensor calibration history. | `28-cold-chain` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-COLD-010` | 760 | Sensor calibration expiration. | `28-cold-chain` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-COLD-009` | 759 | Sensor calibration history. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-COLD-010` | 760 | Sensor calibration expiration. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-COLD-011` | 761 | IoT gateway support. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COLD-012` | 762 | Sensor API ingestion. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COLD-013` | 763 | Scheduled temperature imports. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
@@ -804,9 +804,9 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-COLD-039` | 789 | Cold-chain transfer monitoring. | `28-cold-chain` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
 | `PHARM-COLD-040` | 790 | Delivery temperature logging. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-COLD-041` | 791 | Temperature-log exports. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-COLD-042` | 792 | Calibration reminders. | `28-cold-chain` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-COLD-043` | 793 | Maintenance reminders. | `28-cold-chain` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-COLD-044` | 794 | Equipment service history. | `28-cold-chain` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-COLD-042` | 792 | Calibration reminders. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-COLD-043` | 793 | Maintenance reminders. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-COLD-044` | 794 | Equipment service history. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-COLD-045` | 795 | Backup refrigeration location. | `28-cold-chain` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
 | `PHARM-COLD-046` | 796 | Cold-chain emergency workflow. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-COLD-047` | 797 | Temperature compliance KPI. | `28-cold-chain` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
@@ -842,11 +842,11 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-CTRL-027` | 827 | Controlled register printout. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow, e2e-capa | IMPLEMENTED |
 | `PHARM-CTRL-028` | 828 | Controlled register export restrictions. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow, e2e-capa | IMPLEMENTED |
 | `PHARM-CTRL-029` | 829 | Controlled access logs. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow, e2e-capa | IMPLEMENTED |
-| `PHARM-CTRL-030` | 830 | Suspicious transaction alerts. | `27-controlled-drugs` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-CTRL-030` | 830 | Suspicious transaction alerts. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-CTRL-031` | 831 | Excess-quantity alerts. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow, e2e-capa (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-CTRL-032` | 832 | Unusual-frequency alerts. | `27-controlled-drugs` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-CTRL-032` | 832 | Unusual-frequency alerts. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-CTRL-033` | 833 | Repeated-void alerts. | `27-controlled-drugs` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-CTRL-034` | 834 | After-hours access alerts. | `27-controlled-drugs` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-CTRL-034` | 834 | After-hours access alerts. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-CTRL-035` | 835 | Controlled stockout alert. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow, e2e-capa | IMPLEMENTED |
 | `PHARM-CTRL-036` | 836 | Controlled expiry tracking. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow, e2e-capa | IMPLEMENTED |
 | `PHARM-CTRL-037` | 837 | Controlled waste tracking. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow, e2e-capa | IMPLEMENTED |
@@ -899,8 +899,8 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-ANLY-034` | 884 | Weighted-moving-average forecast. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-ANLY-035` | 885 | Exponential-smoothing forecast. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-ANLY-036` | 886 | Seasonal forecast support. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
-| `PHARM-ANLY-037` | 887 | Forecast accuracy calculation. | `31-analytics` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-ANLY-038` | 888 | Forecast-versus-actual report. | `31-analytics` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-ANLY-037` | 887 | Forecast accuracy calculation. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
+| `PHARM-ANLY-038` | 888 | Forecast-versus-actual report. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-ANLY-039` | 889 | Reorder recommendations. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-ANLY-040` | 890 | Excess-stock prediction. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-ANLY-041` | 891 | Stockout prediction. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
@@ -911,7 +911,7 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-ANLY-046` | 896 | AI explanation of recommendations. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-ANLY-047` | 897 | No autonomous high-risk approval. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-ANLY-048` | 898 | Dashboard drill-down everywhere. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
-| `PHARM-ANLY-049` | 899 | Scheduled report delivery. | `31-analytics` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-ANLY-049` | 899 | Scheduled report delivery. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-ANLY-050` | 900 | Custom report builder. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-SEC-001` | 901 | Secure authentication. | `42-security` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-enterprise, e2e-capa | IMPLEMENTED |
 | `PHARM-SEC-002` | 902 | Role-based access control. | `42-security` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-enterprise, e2e-capa | IMPLEMENTED |
@@ -965,7 +965,7 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-SEC-050` | 950 | System-health dashboard. | `42-security` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-enterprise, e2e-capa | IMPLEMENTED |
 | `PHARM-PLAT-001` | 951 | REST API. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fhir.spec, automation.spec, import.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-PLAT-002` | 952 | OpenAPI documentation. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fhir.spec, automation.spec, import.spec, e2e-enterprise | IMPLEMENTED |
-| `PHARM-PLAT-003` | 953 | API versioning. | `35-integrations` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-PLAT-003` | 953 | API versioning. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-PLAT-004` | 954 | API authentication. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fhir.spec, automation.spec, import.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-PLAT-005` | 955 | API authorization. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fhir.spec, automation.spec, import.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-PLAT-006` | 956 | API rate limiting. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fhir.spec, automation.spec, import.spec, e2e-enterprise | IMPLEMENTED |
@@ -1003,7 +1003,7 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-PLAT-038` | 988 | Background sync. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fhir.spec, automation.spec, import.spec, e2e-enterprise (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-PLAT-039` | 989 | Global search. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fhir.spec, automation.spec, import.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-PLAT-040` | 990 | Typo-tolerant search. | `35-integrations` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-PLAT-041` | 991 | Saved filters. | `35-integrations` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-PLAT-041` | 991 | Saved filters. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | — | e2e-lifecycle | PARTIALLY IMPLEMENTED |
 | `PHARM-PLAT-042` | 992 | Saved views. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fhir.spec, automation.spec, import.spec, e2e-enterprise (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-PLAT-043` | 993 | Configurable dashboards. | `35-integrations` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
 | `PHARM-PLAT-044` | 994 | Notification rule engine. | `35-integrations` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fhir.spec, automation.spec, import.spec, e2e-enterprise | IMPLEMENTED |
