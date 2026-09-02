@@ -210,8 +210,13 @@ export class ControlledRegisterService {
       evidence: Record<string, unknown>;
     }> = [];
 
+    // The caption travels with an empty report too: a quiet result must not
+    // read as a clean bill of health just because there is nothing to caption.
+    const note =
+      'These are prompts to investigate, not findings. Nothing here is evidence of wrongdoing on its own.';
+
     if (!entries.length) {
-      return { days, since, entriesExamined: 0, signals };
+      return { days, since, entriesExamined: 0, note, signals };
     }
 
     // --- Dispenser volume against the peer average.
@@ -329,8 +334,7 @@ export class ControlledRegisterService {
       days,
       since,
       entriesExamined: entries.length,
-      // Stated plainly so nobody reads a quiet report as a clean bill of health.
-      note: 'These are prompts to investigate, not findings. Nothing here is evidence of wrongdoing on its own.',
+      note,
       signals,
     };
   }

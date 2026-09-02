@@ -19,6 +19,7 @@
     "test:e2e:capa": "node scripts/e2e-capa-workflow.mjs",
     "test:e2e:pos": "node scripts/e2e-damage-pos.mjs",
     "test:e2e:warehouse": "node scripts/e2e-warehouse.mjs",
-    "test:e2e:enterprise": "node scripts/e2e-enterprise.mjs"
+    "test:e2e:enterprise": "node scripts/e2e-enterprise.mjs",
+    "test:e2e:lifecycle": "node scripts/e2e-lifecycle.mjs"
   }
 }
