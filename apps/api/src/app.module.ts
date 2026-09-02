@@ -15,6 +15,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { ScanningModule } from './modules/scanning/scanning.module';
+import { SerialsModule } from './modules/serials/serials.module';
 import { ProcurementModule } from './modules/procurement/procurement.module';
 import { ReceivingModule } from './modules/receiving/receiving.module';
 import { TransfersModule } from './modules/transfers/transfers.module';
@@ -59,6 +60,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     CatalogModule,
     InventoryModule,
     ScanningModule,
+    SerialsModule,
     ProcurementModule,
     ReceivingModule,
     TransfersModule,

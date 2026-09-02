@@ -13,7 +13,24 @@ interface Line {
   onHand: number;
   quantityDelta: string;
   reason: string;
+  /** Only meaningful on a write-off; the API refuses an unclassified loss. */
+  lossType: string;
 }
+
+/**
+ * Mirrors LOSS_TYPES on the API. The server is the authority - this list only
+ * decides what the operator is offered.
+ */
+const LOSS_TYPES = [
+  { value: 'SHRINKAGE', label: 'Shrinkage (unexplained)' },
+  { value: 'DAMAGE', label: 'Damage' },
+  { value: 'THEFT', label: 'Theft' },
+  { value: 'MISPLACEMENT', label: 'Misplaced stock' },
+  { value: 'EXPIRY', label: 'Expiry' },
+  { value: 'COUNTING_ERROR', label: 'Counting error' },
+  { value: 'SUPPLIER_SHORTAGE', label: 'Supplier shortage' },
+  { value: 'UNKNOWN', label: 'Unknown' },
+];
 
 export default function AdjustmentsPage() {
   const [branches, setBranches] = useState<any[]>([]);
@@ -80,6 +97,7 @@ export default function AdjustmentsPage() {
         onHand: Number(balance.onHand),
         quantityDelta: '',
         reason: '',
+        lossType: '',
       },
     ]);
     setSearch('');
@@ -97,9 +115,18 @@ export default function AdjustmentsPage() {
           batchId: l.batchId,
           quantityDelta: Number(l.quantityDelta),
           reason: l.reason || undefined,
+          // A positive line is stock found, not a loss, and must carry no type.
+          lossType: Number(l.quantityDelta) < 0 ? l.lossType || undefined : undefined,
         }));
       if (!payload.length) {
         setError('Enter a non-zero adjustment on at least one line.');
+        return;
+      }
+      const unclassified = payload.filter((l) => l.quantityDelta < 0 && !l.lossType);
+      if (unclassified.length) {
+        setError(
+          `${unclassified.length} write-off line(s) need a loss type before they can be posted.`,
+        );
         return;
       }
       const result = await api('/stock-adjustments', {
@@ -200,7 +227,7 @@ export default function AdjustmentsPage() {
 
           {lines.length > 0 && (
             <div className="mt-4">
-              <Table head={['Batch', 'On hand', 'Adjust by', 'New', 'Line reason', '']}>
+              <Table head={['Batch', 'On hand', 'Adjust by', 'New', 'Loss type', 'Line reason', '']}>
                 {lines.map((l, i) => {
                   const delta = Number(l.quantityDelta || 0);
                   return (
@@ -222,6 +249,27 @@ export default function AdjustmentsPage() {
                       </td>
                       <td className={`td num ${l.onHand + delta < 0 ? 'text-danger font-medium' : ''}`}>
                         {qty(l.onHand + delta)}
+                      </td>
+                      <td className="td">
+                        {delta < 0 ? (
+                          <select
+                            className="input text-xs"
+                            value={l.lossType}
+                            aria-label={`Loss type for ${l.label}`}
+                            onChange={(e) =>
+                              setLines((p) =>
+                                p.map((x, xi) => (xi === i ? { ...x, lossType: e.target.value } : x)),
+                              )
+                            }
+                          >
+                            <option value="">Select a cause…</option>
+                            {LOSS_TYPES.map((t) => (
+                              <option key={t.value} value={t.value}>{t.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs text-ink-subtle">—</span>
+                        )}
                       </td>
                       <td className="td">
                         <input

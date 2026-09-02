@@ -35,6 +35,20 @@ export class ProcurementController {
     return this.suppliers.performanceReport();
   }
 
+  @Get('suppliers/dependency-analysis')
+  @RequirePermissions('procurement.supplier.READ')
+  @ApiOperation({ summary: 'Products that stop if one supplier stops (§13)' })
+  dependencyAnalysis() {
+    return this.suppliers.dependencyAnalysis();
+  }
+
+  @Get('suppliers/:id/credit')
+  @RequirePermissions('procurement.supplier.READ')
+  @ApiOperation({ summary: 'Outstanding balance against the agreed credit limit (§13)' })
+  supplierCredit(@Param('id') id: string) {
+    return this.suppliers.creditExposure(id);
+  }
+
   @Get('suppliers/:id')
   @RequirePermissions('procurement.supplier.READ')
   supplier(@Param('id') id: string) {

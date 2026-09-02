@@ -6,6 +6,7 @@ import { AuthenticatedUser } from '../../common/decorators';
 import { ScopeService } from '../../common/guards/scope.service';
 import { LedgerService } from '../inventory/ledger.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
+import { ConfigService } from '../../common/config/config.service';
 
 /**
  * Stock transfers (§20).
@@ -23,6 +24,7 @@ export class TransfersService {
     private readonly audit: AuditService,
     private readonly docNumbers: DocumentNumberService,
     private readonly scope: ScopeService,
+    private readonly config: ConfigService,
   ) {}
 
   async create(data: any, user: AuthenticatedUser) {
@@ -111,7 +113,14 @@ export class TransfersService {
     id: string,
     lines: Array<{ itemId: string; quantity: number }>,
     user: AuthenticatedUser,
-    vehicleOrCourier?: string,
+    logistics: {
+      vehicleOrCourier?: string;
+      driverName?: string;
+      driverPhone?: string;
+      trackingNumber?: string;
+      /** When the destination should expect it; drives the overdue alert. */
+      expectedArrival?: string | Date;
+    } = {},
   ) {
     const transfer = await this.prisma.stockTransfer.findUniqueOrThrow({
       where: { id },
@@ -121,6 +130,19 @@ export class TransfersService {
       throw new ConflictException(
         `Transfer must be APPROVED before dispatch; it is ${transfer.status}`,
       );
+    }
+
+    let expectedArrival: Date | null = null;
+    if (logistics.expectedArrival) {
+      expectedArrival = new Date(logistics.expectedArrival);
+      if (Number.isNaN(expectedArrival.getTime())) {
+        throw new BadRequestException('The expected arrival is not a valid date');
+      }
+      if (expectedArrival.getTime() < Date.now() - 60_000) {
+        // An arrival already in the past would make the transfer overdue the
+        // moment it left, which tells the destination nothing.
+        throw new BadRequestException('The expected arrival must be in the future');
+      }
     }
 
     await this.prisma.$transaction(
@@ -165,7 +187,11 @@ export class TransfersService {
             status: TransferStatus.IN_TRANSIT,
             dispatchedById: user.id,
             dispatchedAt: new Date(),
-            vehicleOrCourier: vehicleOrCourier ?? null,
+            vehicleOrCourier: logistics.vehicleOrCourier ?? null,
+            driverName: logistics.driverName ?? null,
+            driverPhone: logistics.driverPhone ?? null,
+            trackingNumber: logistics.trackingNumber ?? null,
+            expectedArrival: expectedArrival ?? null,
           },
         });
       },
@@ -179,7 +205,15 @@ export class TransfersService {
       action: 'TRANSFER_DISPATCH',
       entityType: 'StockTransfer',
       entityId: id,
-      newValue: { lines: lines.length, vehicleOrCourier },
+      newValue: {
+        lines: lines.length,
+        vehicleOrCourier: logistics.vehicleOrCourier ?? null,
+        trackingNumber: logistics.trackingNumber ?? null,
+        // The driver's phone is deliberately not written to the audit payload:
+        // it is personal data, and the transfer row already holds it (§73).
+        driverName: logistics.driverName ?? null,
+        expectedArrival: expectedArrival?.toISOString() ?? null,
+      },
       branchId: transfer.fromBranchId,
     });
 
@@ -292,6 +326,74 @@ export class TransfersService {
     return this.prisma.stockTransfer.findUniqueOrThrow({
       where: { id },
       include: { items: true },
+    });
+  }
+
+  /**
+   * Transfers that should have arrived and have not (§20: feature 233).
+   *
+   * Stock in transit is stock nobody can sell and nobody has counted. A
+   * transfer that quietly stays IN_TRANSIT is either lost, stolen, or sitting
+   * in a receiving bay unrecorded, and all three need somebody to look.
+   *
+   * Where no expected arrival was given, the configured transit allowance is
+   * used, so a dispatch made without logistics detail is still watched.
+   */
+  async overdueInTransit(defaultTransitDays?: number) {
+    const allowanceDays =
+      defaultTransitDays ?? (await this.config.getNumber('inventory.transferTransitDays'));
+    const now = Date.now();
+    const fallbackCutoff = new Date(now - allowanceDays * 86_400_000);
+
+    const transfers = await this.prisma.stockTransfer.findMany({
+      where: {
+        status: { in: [TransferStatus.IN_TRANSIT, TransferStatus.PARTIALLY_RECEIVED] },
+        OR: [
+          { expectedArrival: { lt: new Date(now) } },
+          { expectedArrival: null, dispatchedAt: { lt: fallbackCutoff } },
+        ],
+      },
+      include: { items: true },
+      orderBy: [{ dispatchedAt: 'asc' }],
+    });
+
+    const warehouseIds = [
+      ...new Set(transfers.flatMap((t) => [t.fromWarehouseId, t.toWarehouseId])),
+    ];
+    const warehouses = warehouseIds.length
+      ? await this.prisma.warehouse.findMany({
+          where: { id: { in: warehouseIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const nameById = new Map(warehouses.map((w) => [w.id, w.name]));
+
+    return transfers.map((t) => {
+      const due = t.expectedArrival ?? new Date((t.dispatchedAt?.getTime() ?? now) + allowanceDays * 86_400_000);
+      const daysLate = Math.floor((now - due.getTime()) / 86_400_000);
+      const inTransitQty = t.items.reduce(
+        (sum, i) => sum.plus(i.dispatchedQty.minus(i.receivedQty)),
+        new Prisma.Decimal(0),
+      );
+
+      return {
+        id: t.id,
+        transferNo: t.transferNo,
+        status: t.status,
+        fromWarehouse: nameById.get(t.fromWarehouseId) ?? t.fromWarehouseId,
+        toWarehouse: nameById.get(t.toWarehouseId) ?? t.toWarehouseId,
+        dispatchedAt: t.dispatchedAt,
+        expectedArrival: t.expectedArrival,
+        expectedBasis: t.expectedArrival ? 'STATED' : 'DEFAULT_TRANSIT_ALLOWANCE',
+        daysLate,
+        inTransitQuantity: inTransitQty.toString(),
+        vehicleOrCourier: t.vehicleOrCourier,
+        trackingNumber: t.trackingNumber,
+        driverName: t.driverName,
+        // Escalation is by lateness, because a day late is a phone call and a
+        // week late is an investigation.
+        severity: daysLate >= 7 ? 'CRITICAL' : daysLate >= 3 ? 'HIGH' : 'MEDIUM',
+      };
     });
   }
 

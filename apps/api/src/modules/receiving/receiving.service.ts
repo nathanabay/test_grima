@@ -284,10 +284,42 @@ export class ReceivingService {
           });
 
           if (line.serials?.length) {
-            await tx.serialNumber.createMany({
-              data: line.serials.map((serial) => ({ batchId: batch!.id, serial })),
-              skipDuplicates: true,
-            });
+            // Each pack is registered with the warehouse it landed in and an
+            // opening RECEIVED event, so its history starts at the door rather
+            // than at the first time somebody happened to move it (§3: 145).
+            const receivedAt = new Date();
+            for (const serial of line.serials) {
+              const existing = await tx.serialNumber.findUnique({
+                where: { batchId_serial: { batchId: batch!.id, serial } },
+                select: { id: true },
+              });
+              if (existing) continue;
+
+              const created = await tx.serialNumber.create({
+                data: {
+                  batchId: batch!.id,
+                  serial,
+                  status: 'IN_STOCK',
+                  warehouseId: input.warehouseId,
+                  lastReferenceType: 'GOODS_RECEIPT',
+                  lastReferenceId: receipt.id,
+                  lastMovedAt: receivedAt,
+                },
+              });
+              await tx.serialEvent.create({
+                data: {
+                  serialId: created.id,
+                  eventType: 'RECEIVED',
+                  toStatus: 'IN_STOCK',
+                  referenceType: 'GOODS_RECEIPT',
+                  referenceId: receipt.id,
+                  referenceNo: grnNo,
+                  warehouseId: input.warehouseId,
+                  performedById: user.id,
+                  occurredAt: receivedAt,
+                },
+              });
+            }
           }
 
           // Stock physically arrives now; the QUARANTINED batch status is what

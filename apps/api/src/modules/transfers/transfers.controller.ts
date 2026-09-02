@@ -20,6 +20,13 @@ export class TransfersController {
     });
   }
 
+  @Get('overdue')
+  @RequirePermissions('inventory.transfer.READ')
+  @ApiOperation({ summary: 'Transfers still in transit past their expected arrival (§20)' })
+  overdue(@Query('transitDays') transitDays?: string) {
+    return this.transfers.overdueInTransit(transitDays ? Number(transitDays) : undefined);
+  }
+
   @Get(':id')
   @RequirePermissions('inventory.transfer.READ')
   findOne(@Param('id') id: string) {
@@ -49,10 +56,24 @@ export class TransfersController {
   @ApiOperation({ summary: 'Dispatch stock out of the origin warehouse (supports partial shipment)' })
   dispatch(
     @Param('id') id: string,
-    @Body() body: { lines: Array<{ itemId: string; quantity: number }>; vehicleOrCourier?: string },
+    @Body()
+    body: {
+      lines: Array<{ itemId: string; quantity: number }>;
+      vehicleOrCourier?: string;
+      driverName?: string;
+      driverPhone?: string;
+      trackingNumber?: string;
+      expectedArrival?: string;
+    },
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.transfers.dispatch(id, body.lines, user, body.vehicleOrCourier);
+    return this.transfers.dispatch(id, body.lines, user, {
+      vehicleOrCourier: body.vehicleOrCourier,
+      driverName: body.driverName,
+      driverPhone: body.driverPhone,
+      trackingNumber: body.trackingNumber,
+      expectedArrival: body.expectedArrival,
+    });
   }
 
   @Post(':id/receive')

@@ -1,8 +1,48 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
+
+/**
+ * How exposed the pharmacy is to this supplier failing (§13: features 274-278).
+ */
+export const SUPPLIER_RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+export type SupplierRiskLevel = (typeof SUPPLIER_RISK_LEVELS)[number];
+
+/**
+ * Fields a client may set on a supplier.
+ *
+ * KPI fields (supplierScore, onTimeDeliveryRate, rejectionRate, ...) are
+ * deliberately absent: they are computed from receipts and incidents by
+ * recomputeScore, and letting a request write them would make the scorecard a
+ * self-assessment. Passing the request body straight to Prisma would have
+ * allowed exactly that (§73).
+ */
+const WRITABLE_SUPPLIER_FIELDS = [
+  'code',
+  'companyName',
+  'contactName',
+  'email',
+  'phone',
+  'alternatePhone',
+  'address',
+  'city',
+  'country',
+  'taxId',
+  'licenseNumber',
+  'licenseExpiry',
+  'paymentTerms',
+  'currency',
+  'leadTimeDays',
+  'minimumOrderValue',
+  'notes',
+  'isActive',
+  'isApproved',
+  'riskLevel',
+  'riskNotes',
+  'creditLimit',
+] as const;
 
 /**
  * Supplier management and scoring (§13).
@@ -59,8 +99,38 @@ export class SuppliersService {
     });
   }
 
+  /**
+   * Keep only the fields a client is allowed to set, and validate the ones with
+   * a fixed vocabulary. Unknown keys are dropped rather than rejected so a
+   * client sending a whole supplier record back does not need to strip it.
+   */
+  private sanitize(data: Record<string, unknown>): Record<string, unknown> {
+    const clean: Record<string, unknown> = {};
+    for (const field of WRITABLE_SUPPLIER_FIELDS) {
+      if (data[field] !== undefined) clean[field] = data[field];
+    }
+
+    if (clean.riskLevel !== undefined) {
+      if (!(SUPPLIER_RISK_LEVELS as readonly string[]).includes(String(clean.riskLevel))) {
+        throw new BadRequestException(
+          `Risk level must be one of ${SUPPLIER_RISK_LEVELS.join(', ')}`,
+        );
+      }
+    }
+    if (clean.creditLimit !== undefined) {
+      const limit = Number(clean.creditLimit);
+      if (Number.isNaN(limit) || limit < 0) {
+        throw new BadRequestException('The credit limit must be zero or a positive amount');
+      }
+      clean.creditLimit = new Prisma.Decimal(limit);
+    }
+    if (clean.licenseExpiry) clean.licenseExpiry = new Date(clean.licenseExpiry as string);
+
+    return clean;
+  }
+
   async create(data: any, user: AuthenticatedUser) {
-    const supplier = await this.prisma.supplier.create({ data });
+    const supplier = await this.prisma.supplier.create({ data: this.sanitize(data) as any });
     await this.audit.record({
       userId: user.id,
       module: 'procurement',
@@ -74,15 +144,21 @@ export class SuppliersService {
 
   async update(id: string, data: any, user: AuthenticatedUser) {
     const before = await this.prisma.supplier.findUniqueOrThrow({ where: { id } });
-    const updated = await this.prisma.supplier.update({ where: { id }, data });
+    const clean = this.sanitize(data);
+    const updated = await this.prisma.supplier.update({ where: { id }, data: clean as any });
     await this.audit.record({
       userId: user.id,
       module: 'procurement',
       action: 'EDIT',
       entityType: 'Supplier',
       entityId: id,
-      previousValue: { isActive: before.isActive, isApproved: before.isApproved },
-      newValue: data,
+      previousValue: {
+        isActive: before.isActive,
+        isApproved: before.isApproved,
+        riskLevel: before.riskLevel,
+        creditLimit: before.creditLimit,
+      },
+      newValue: clean,
     });
     return updated;
   }
@@ -162,6 +238,140 @@ export class SuppliersService {
     const suppliers = await this.prisma.supplier.findMany({ select: { id: true } });
     for (const s of suppliers) await this.recomputeScore(s.id);
     return { updated: suppliers.length };
+  }
+
+  /**
+   * Single-source dependency analysis (§13: feature 277).
+   *
+   * The question this answers is "which medicines stop if one supplier stops".
+   * A product bought from exactly one approved supplier is a single point of
+   * failure; when that supplier is also rated HIGH or CRITICAL risk, it is the
+   * one worth acting on first.
+   */
+  async dependencyAnalysis() {
+    const links = await this.prisma.supplierProduct.findMany({
+      where: { supplier: { isActive: true } },
+      select: {
+        productId: true,
+        supplierId: true,
+        supplier: { select: { id: true, code: true, companyName: true, riskLevel: true, supplierScore: true } },
+      },
+    });
+
+    const suppliersByProduct = new Map<string, typeof links>();
+    for (const link of links) {
+      const list = suppliersByProduct.get(link.productId) ?? [];
+      list.push(link);
+      suppliersByProduct.set(link.productId, list);
+    }
+
+    const singleSourced = [...suppliersByProduct.entries()].filter(([, v]) => v.length === 1);
+    const productIds = singleSourced.map(([productId]) => productId);
+
+    const products = productIds.length
+      ? await this.prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: {
+            id: true,
+            sku: true,
+            genericName: true,
+            strength: true,
+            isControlled: true,
+            isColdChain: true,
+          },
+        })
+      : [];
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    // Stock cover matters: a single-sourced product with three months on the
+    // shelf is a different problem from one with three days.
+    const balances = productIds.length
+      ? await this.prisma.inventoryBalance.groupBy({
+          by: ['productId'],
+          where: { productId: { in: productIds } },
+          _sum: { onHand: true },
+        })
+      : [];
+    const onHandByProduct = new Map(balances.map((b) => [b.productId, b._sum.onHand]));
+
+    const rows = singleSourced
+      .map(([productId, list]) => {
+        const product = productById.get(productId);
+        const supplier = list[0].supplier;
+        if (!product) return null;
+        const onHand = onHandByProduct.get(productId);
+        const risky = supplier.riskLevel === 'HIGH' || supplier.riskLevel === 'CRITICAL';
+        return {
+          productId,
+          sku: product.sku,
+          product: `${product.genericName} ${product.strength}`.trim(),
+          isControlled: product.isControlled,
+          isColdChain: product.isColdChain,
+          supplierId: supplier.id,
+          supplierCode: supplier.code,
+          supplierName: supplier.companyName,
+          supplierRiskLevel: supplier.riskLevel,
+          supplierScore: supplier.supplierScore,
+          onHand: onHand ? onHand.toString() : '0',
+          severity: risky ? (supplier.riskLevel === 'CRITICAL' ? 'CRITICAL' : 'HIGH') : 'MEDIUM',
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+
+    const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 } as const;
+    rows.sort((a, b) => order[a.severity as keyof typeof order] - order[b.severity as keyof typeof order]);
+
+    return {
+      productsWithASupplier: suppliersByProduct.size,
+      singleSourcedCount: rows.length,
+      atRiskCount: rows.filter((r) => r.severity !== 'MEDIUM').length,
+      rows,
+    };
+  }
+
+  /**
+   * How much this supplier is currently owed against their credit limit
+   * (§13: feature 276).
+   *
+   * Only posted, unpaid invoices count. A limit of zero means no limit was
+   * agreed, which is reported as such rather than as "nothing may be ordered".
+   */
+  async creditExposure(supplierId: string) {
+    const supplier = await this.prisma.supplier.findUniqueOrThrow({
+      where: { id: supplierId },
+      select: { id: true, code: true, companyName: true, creditLimit: true, currency: true },
+    });
+
+    const invoices = await this.prisma.supplierInvoice.findMany({
+      where: { supplierId, status: { notIn: ['CANCELLED', 'DRAFT'] } },
+      select: { id: true, internalNo: true, grandTotal: true, amountPaid: true, dueDate: true, status: true },
+    });
+
+    const outstanding = invoices.reduce(
+      (sum, i) => sum.plus(i.grandTotal.minus(i.amountPaid)),
+      new Prisma.Decimal(0),
+    );
+    const now = Date.now();
+    const overdue = invoices
+      .filter((i) => i.dueDate && i.dueDate.getTime() < now && i.grandTotal.greaterThan(i.amountPaid))
+      .reduce((sum, i) => sum.plus(i.grandTotal.minus(i.amountPaid)), new Prisma.Decimal(0));
+
+    const hasLimit = supplier.creditLimit.greaterThan(0);
+    return {
+      supplierId: supplier.id,
+      supplierCode: supplier.code,
+      supplierName: supplier.companyName,
+      currency: supplier.currency,
+      creditLimit: supplier.creditLimit.toFixed(2),
+      hasLimit,
+      outstanding: outstanding.toFixed(2),
+      overdue: overdue.toFixed(2),
+      headroom: hasLimit ? supplier.creditLimit.minus(outstanding).toFixed(2) : null,
+      utilisationPercent: hasLimit
+        ? outstanding.dividedBy(supplier.creditLimit).times(100).toFixed(1)
+        : null,
+      overLimit: hasLimit && outstanding.greaterThan(supplier.creditLimit),
+    };
   }
 
   /** Supplier performance report (§41). */

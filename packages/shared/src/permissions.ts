@@ -63,6 +63,7 @@ export const RESOURCE_CATALOG: ResourceDefinition[] = [
   { module: 'inventory', resource: 'expiry', label: 'Expiry Management', actions: REPORTING },
   { module: 'inventory', resource: 'fefo_override', label: 'FEFO Batch Override', actions: ['CREATE'] },
   { module: 'inventory', resource: 'task', label: 'Warehouse Tasks & Picking', actions: [...CRUD, 'CANCEL'] },
+  { module: 'inventory', resource: 'serial', label: 'Serial Numbers', actions: ['READ', 'EDIT', 'IMPORT', 'EXPORT'] },
 
   { module: 'dispensing', resource: 'prescription', label: 'Prescriptions', actions: CRUD_APPROVE },
   { module: 'dispensing', resource: 'dispensing', label: 'Dispensing', actions: ['CREATE', 'READ', 'PRINT'] },
@@ -169,6 +170,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
       ...resourceCodes('inventory', 'balance'),
       ...resourceCodes('inventory', 'ledger'),
       ...resourceCodes('inventory', 'batch', ['READ']),
+      ...resourceCodes('inventory', 'serial', ['READ', 'EDIT']),
       ...resourceCodes('inventory', 'expiry'),
       ...resourceCodes('inventory', 'fefo_override'),
       ...resourceCodes('quality', 'return', ['CREATE', 'READ']),
@@ -190,6 +192,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
       ...resourceCodes('inventory', 'transfer', ['CREATE', 'READ', 'PRINT']),
       ...resourceCodes('inventory', 'count', ['CREATE', 'READ', 'EDIT']),
       ...resourceCodes('inventory', 'expiry', ['READ']),
+      ...resourceCodes('inventory', 'serial', ['READ']),
       ...resourceCodes('dispensing', 'prescription', ['READ']),
       ...resourceCodes('catalog', 'product', ['READ']),
     ],
@@ -265,6 +268,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     permissions: [
       ...moduleCodes('quality'),
       ...resourceCodes('inventory', 'batch'),
+      ...resourceCodes('inventory', 'serial', ['READ', 'EDIT']),
       ...resourceCodes('inventory', 'balance'),
       ...resourceCodes('inventory', 'ledger'),
       ...resourceCodes('inventory', 'expiry'),

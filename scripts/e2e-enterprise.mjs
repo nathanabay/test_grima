@@ -518,7 +518,7 @@ if (anyBatch) {
     warehouseId: anyBatch.warehouseId,
     reason: 'End-to-end check of the movement dating controls',
     occurredAt,
-    items: [{ productId: anyBatch.productId, batchId: anyBatch.batchId, quantityDelta: -1 }],
+    items: [{ productId: anyBatch.productId, batchId: anyBatch.batchId, quantityDelta: -1, lossType: 'DAMAGE' }],
   });
 
   const futureMove = await admin('POST', '/stock-adjustments', adjustBody(future));

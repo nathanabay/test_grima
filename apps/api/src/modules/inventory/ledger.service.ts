@@ -4,7 +4,7 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { Prisma, TransactionType } from '@prisma/client';
+import { DocumentStatus, Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { CacheService } from '../../common/cache/cache.service';
@@ -135,6 +135,40 @@ export class LedgerService {
    * the lock, the balance read, the ledger insert and the balance update all
    * commit or roll back together.
    */
+  /**
+   * Refuse a movement that would disturb a stock position an open count has
+   * frozen (§21: feature 176).
+   *
+   * The check is deliberately narrow - one warehouse, one product - so a freeze
+   * on the cold room never stops the front counter selling paracetamol.
+   */
+  private async assertNotFrozen(
+    tx: Prisma.TransactionClient,
+    input: MovementInput,
+  ): Promise<void> {
+    const frozen = await tx.stockCount.findFirst({
+      where: {
+        isFrozen: true,
+        status: { notIn: [DocumentStatus.CLOSED, DocumentStatus.CANCELLED] },
+        warehouseId: input.warehouseId,
+        items: {
+          some: {
+            productId: input.productId,
+            ...(input.batchId ? { batchId: input.batchId } : {}),
+          },
+        },
+      },
+      select: { countNo: true },
+    });
+
+    if (frozen) {
+      throw new ConflictException(
+        `Stock count ${frozen.countNo} has frozen this position. ` +
+          `Post or unfreeze the count before moving this stock.`,
+      );
+    }
+  }
+
   async post(tx: Prisma.TransactionClient, input: MovementInput): Promise<{
     transactionId: string;
     balanceAfter: Prisma.Decimal;
@@ -199,6 +233,14 @@ export class LedgerService {
           );
         }
       }
+    }
+
+    // A frozen count has claimed this position: the counter is standing at the
+    // shelf right now, and any movement posted underneath them makes the
+    // variance they report meaningless. The count's own posting is exempt,
+    // because that is the movement the freeze exists to protect (§21).
+    if (input.referenceType !== 'STOCK_COUNT') {
+      await this.assertNotFrozen(tx, input);
     }
 
     // Balances are keyed by product + batch + warehouse + location, so a

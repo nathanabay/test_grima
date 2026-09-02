@@ -469,6 +469,18 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     max: 365,
   },
   {
+    key: 'inventory.transferTransitDays',
+    group: 'Inventory',
+    label: 'Expected transit time (days)',
+    description:
+      'How long a transfer is expected to take when the dispatcher did not state an arrival date. ' +
+      'Once this is exceeded the transfer is reported as overdue in transit.',
+    type: 'number',
+    default: 3,
+    min: 1,
+    max: 60,
+  },
+  {
     key: 'inventory.allowFutureDating',
     group: 'Inventory',
     label: 'Allow future-dated movements',

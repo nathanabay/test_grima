@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PatientsService } from './patients.service';
 import { AuthenticatedUser, CurrentUser, RequirePermissions } from '../../common/decorators';
 
@@ -19,6 +19,20 @@ export class PatientsController {
       },
       user,
     );
+  }
+
+  @Get('duplicates')
+  @RequirePermissions('sales.patient.READ')
+  @ApiOperation({ summary: 'Candidate duplicate records for review; nothing is merged automatically (§14)' })
+  duplicates(@Query('limit') limit?: string) {
+    return this.patients.findDuplicates(limit ? Number(limit) : 50);
+  }
+
+  @Get('retention-candidates')
+  @RequirePermissions('sales.patient.DELETE')
+  @ApiOperation({ summary: 'Dormant records eligible for anonymisation under the retention policy (§14)' })
+  retention(@Query('years') years?: string) {
+    return this.patients.retentionCandidates(years ? Number(years) : 7);
   }
 
   @Get(':id')
@@ -43,5 +57,30 @@ export class PatientsController {
   @RequirePermissions('sales.patient.EDIT')
   update(@Param('id') id: string, @Body() body: any, @CurrentUser() user: AuthenticatedUser) {
     return this.patients.update(id, body, user);
+  }
+
+  @Post(':id/merge')
+  @RequirePermissions('sales.patient.EDIT', 'sales.patient.DELETE')
+  @ApiOperation({
+    summary:
+      'Merge this duplicate into the surviving record; history is repointed and the duplicate is kept (§14)',
+  })
+  merge(
+    @Param('id') id: string,
+    @Body() body: { targetId: string; reason?: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.patients.merge(id, body.targetId, user, body.reason);
+  }
+
+  @Post(':id/anonymize')
+  @RequirePermissions('sales.patient.DELETE')
+  @ApiOperation({ summary: 'Clear the identifying fields while keeping the pharmacy record (§14)' })
+  anonymize(
+    @Param('id') id: string,
+    @Body() body: { reason: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.patients.anonymize(id, body?.reason, user);
   }
 }

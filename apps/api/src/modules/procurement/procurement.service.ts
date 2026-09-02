@@ -576,6 +576,65 @@ export class ProcurementService {
     return po;
   }
 
+  /**
+   * Refuse to approve an order that would take the supplier past the credit
+   * limit that was agreed with them (§13: feature 276).
+   *
+   * Approval is the checkpoint rather than creation: a draft is a proposal, and
+   * blocking it would stop a buyer preparing an order they intend to have the
+   * limit raised for. A limit of zero means none was agreed, and is not treated
+   * as "may not order anything".
+   */
+  private async assertWithinCreditLimit(
+    supplierId: string,
+    orderTotal: Prisma.Decimal,
+    poNo: string,
+  ): Promise<void> {
+    const supplier = await this.prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: { companyName: true, creditLimit: true, currency: true },
+    });
+    if (!supplier || !supplier.creditLimit.greaterThan(0)) return;
+
+    const invoices = await this.prisma.supplierInvoice.findMany({
+      where: { supplierId, status: { notIn: ['CANCELLED', 'DRAFT'] } },
+      select: { grandTotal: true, amountPaid: true },
+    });
+    const outstanding = invoices.reduce(
+      (sum, i) => sum.plus(i.grandTotal.minus(i.amountPaid)),
+      new Prisma.Decimal(0),
+    );
+
+    // Orders already approved but not yet invoiced are committed money too, so
+    // they count against the limit. Leaving them out would let a dozen orders
+    // each pass the check individually and blow the limit together.
+    const committed = await this.prisma.purchaseOrder.aggregate({
+      where: {
+        supplierId,
+        status: {
+          in: [
+            PurchaseOrderStatus.APPROVED,
+            PurchaseOrderStatus.ORDERED,
+            PurchaseOrderStatus.PARTIALLY_RECEIVED,
+          ],
+        },
+      },
+      _sum: { grandTotal: true },
+    });
+
+    const exposure = outstanding
+      .plus(committed._sum.grandTotal ?? new Prisma.Decimal(0))
+      .plus(orderTotal);
+
+    if (exposure.greaterThan(supplier.creditLimit)) {
+      throw new BadRequestException(
+        `Approving ${poNo} would take ${supplier.companyName} to ${exposure.toFixed(2)} ${supplier.currency} ` +
+          `against a credit limit of ${supplier.creditLimit.toFixed(2)}. ` +
+          `Settle outstanding invoices or raise the limit before approving.`,
+      );
+    }
+  }
+
   /** Move a PO through its approval chain (§43). */
   async transitionPurchaseOrder(
     id: string,
@@ -603,6 +662,10 @@ export class ProcurementService {
         `Cannot move purchase order from ${po.status} to ${next}. ` +
           `Permitted: ${allowed[po.status]?.join(', ') || 'none'}`,
       );
+    }
+
+    if (next === PurchaseOrderStatus.APPROVED) {
+      await this.assertWithinCreditLimit(po.supplierId, po.grandTotal, po.poNo);
     }
 
     const updated = await this.prisma.purchaseOrder.update({

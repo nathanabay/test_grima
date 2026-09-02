@@ -11,18 +11,21 @@ export class CountsController {
 
   @Get('stock-counts')
   @RequirePermissions('inventory.count.READ')
-  list(@Query() query: any) {
-    return this.counts.findAll({
-      warehouseId: query.warehouseId,
-      page: query.page ? Number(query.page) : 1,
-      pageSize: query.pageSize ? Number(query.pageSize) : 25,
-    });
+  list(@Query() query: any, @CurrentUser() user: AuthenticatedUser) {
+    return this.counts.findAll(
+      {
+        warehouseId: query.warehouseId,
+        page: query.page ? Number(query.page) : 1,
+        pageSize: query.pageSize ? Number(query.pageSize) : 25,
+      },
+      user,
+    );
   }
 
   @Get('stock-counts/:id')
   @RequirePermissions('inventory.count.READ')
-  findOne(@Param('id') id: string) {
-    return this.counts.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.counts.findOne(id, user);
   }
 
   @Post('stock-counts')
@@ -43,6 +46,8 @@ export class CountsController {
       locationId?: string;
       categoryId?: string;
       sampleSize?: number;
+      isBlind?: boolean;
+      freeze?: boolean;
     },
     @CurrentUser() user: AuthenticatedUser,
   ) {
@@ -75,6 +80,31 @@ export class CountsController {
   @ApiOperation({ summary: 'Post variances as adjustments; large variances need approval' })
   post(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.counts.post(id, user);
+  }
+
+  @Post('stock-counts/:id/freeze')
+  @RequirePermissions('inventory.count.EDIT')
+  @ApiOperation({
+    summary: 'Freeze the counted positions so no movement can change them mid-count (§21)',
+  })
+  freeze(
+    @Param('id') id: string,
+    @Body() body: { freeze?: boolean },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.counts.setFreeze(id, body?.freeze !== false, user);
+  }
+
+  @Get('stock-adjustments/loss-analysis')
+  @RequirePermissions('inventory.adjustment.READ')
+  @ApiOperation({ summary: 'Shrinkage by cause and by product (§21)' })
+  lossAnalysis(@Query() query: any) {
+    return this.counts.lossAnalysis({
+      from: query.from ? new Date(query.from) : undefined,
+      to: query.to ? new Date(query.to) : undefined,
+      warehouseId: query.warehouseId,
+      branchId: query.branchId,
+    });
   }
 
   @Post('stock-adjustments')

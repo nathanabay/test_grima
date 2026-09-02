@@ -1136,6 +1136,13 @@ model Supplier {
   isApproved        Boolean   @default(false)
 
   // Rolling KPIs (§13), recomputed by the supplier scoring job
+  /// Risk rating (§7: feature 341), set by a buyer or derived from the KPIs
+  /// below: LOW | MEDIUM | HIGH | CRITICAL
+  riskLevel   String  @default("LOW")
+  riskNotes   String?
+  /// Credit the supplier extends, checked when an invoice is approved (§7: 312).
+  creditLimit Decimal @default(0) @db.Decimal(18, 4)
+
   onTimeDeliveryRate Decimal @default(0) @db.Decimal(6, 4)
   avgLeadTimeDays    Decimal @default(0) @db.Decimal(8, 2)
   rejectionRate      Decimal @default(0) @db.Decimal(6, 4)
@@ -1219,17 +1226,54 @@ model Batch {
 }
 
 model SerialNumber {
-  id        String   @id @default(uuid()) @db.Uuid
-  batchId   String   @db.Uuid
-  serial    String
-  status    String   @default("IN_STOCK") // IN_STOCK | DISPENSED | RECALLED | DESTROYED
-  createdAt DateTime @default(now())
+  id                String    @id @default(uuid()) @db.Uuid
+  batchId           String    @db.Uuid
+  serial            String
+  /// IN_STOCK | DISPENSED | SOLD | TRANSFERRED | RETURNED | RECALLED | DESTROYED
+  status            String    @default("IN_STOCK")
+  /// Where the pack physically is, so a transfer moves the serial with it.
+  warehouseId       String?   @db.Uuid
+  /// The document that last moved it, for a trace that has to reach a person.
+  lastReferenceType String?
+  lastReferenceId   String?   @db.Uuid
+  lastMovedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
 
-  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch  Batch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  events SerialEvent[]
 
   @@unique([batchId, serial])
   @@index([serial])
+  @@index([status])
   @@map("serial_numbers")
+}
+
+/// Append-only history of what happened to one serialised pack (§3: features
+/// 145, 149). A status field alone answers "where is it now" but not "how did
+/// it get there", which is the question a regulator asks.
+model SerialEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  serialId      String   @db.Uuid
+  /// RECEIVED | DISPENSED | SOLD | TRANSFERRED | RETURNED | RECALLED | DESTROYED | CORRECTED
+  eventType     String
+  fromStatus    String?
+  toStatus      String
+  referenceType String?
+  referenceId   String?  @db.Uuid
+  referenceNo   String?
+  warehouseId   String?  @db.Uuid
+  branchId      String?  @db.Uuid
+  /// Who did it, and why where a reason is required.
+  performedById String?  @db.Uuid
+  reason        String?
+  occurredAt    DateTime @default(now())
+
+  serial SerialNumber @relation(fields: [serialId], references: [id], onDelete: Cascade)
+
+  @@index([serialId, occurredAt])
+  @@index([eventType])
+  @@map("serial_events")
 }
 
 // ============================================================
@@ -1649,6 +1693,12 @@ model StockTransfer {
   dispatchedById   String?        @db.Uuid
   receivedById     String?        @db.Uuid
   vehicleOrCourier String?
+  /// Logistics (§11: features 528-530). Who is carrying it, how it is tracked,
+  /// and when it is expected — without which a late transfer cannot be noticed.
+  driverName       String?
+  driverPhone      String?
+  trackingNumber   String?
+  expectedArrival  DateTime?
   dispatchedAt     DateTime?
   receivedAt       DateTime?
   isRecallMovement Boolean        @default(false)
@@ -1682,6 +1732,14 @@ model StockCount {
   warehouseId  String         @db.Uuid
   branchId     String         @db.Uuid
   countType    CountType      @default(CYCLE)
+  /// Blind count (§10: feature 453): the counter is not shown the system
+  /// quantity, so they record what is on the shelf rather than confirming what
+  /// the system already believes.
+  isBlind      Boolean        @default(false)
+  /// Freeze (§10: feature 471): while set, the ledger refuses movements of the
+  /// counted positions, so the count is of a stationary shelf.
+  isFrozen     Boolean        @default(false)
+  frozenAt     DateTime?
   status       DocumentStatus @default(DRAFT)
   scheduledAt  DateTime?
   startedAt    DateTime?
@@ -1736,6 +1794,11 @@ model StockAdjustmentItem {
   productId     String  @db.Uuid
   batchId       String  @db.Uuid
   quantityDelta Decimal @db.Decimal(18, 4) // signed
+  /// What kind of loss this was (§10: features 484-488). Recorded per line
+  /// because one count can find damage on one shelf and theft on another:
+  /// SHRINKAGE | DAMAGE | THEFT | MISPLACEMENT | EXPIRY | COUNTING_ERROR |
+  /// SUPPLIER_SHORTAGE | UNKNOWN
+  lossType      String?
   reason        String?
 
   adjustment StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
@@ -1782,6 +1845,12 @@ model Patient {
   /// dispensing stays auditable; the identifying fields are cleared (§14).
   isAnonymized       Boolean   @default(false)
   anonymizedAt       DateTime?
+  anonymizedById     String?   @db.Uuid
+  /// Why the record was anonymised, kept because the act itself is auditable
+  /// even though the identifying data is gone.
+  anonymizedReason   String?
+  mergedAt           DateTime?
+  mergedById         String?   @db.Uuid
   /// Points at the surviving record after a duplicate merge.
   mergedIntoId       String?   @db.Uuid
 

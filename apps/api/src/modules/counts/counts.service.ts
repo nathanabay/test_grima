@@ -17,6 +17,30 @@ import { ConfigService } from '../../common/config/config.service';
  */
 
 /**
+ * Why stock was lost (§21: feature 180).
+ *
+ * Classification is what turns "we are short 40 boxes this quarter" into an
+ * action: breakage points at handling, theft at access control, expiry at
+ * ordering. An unclassified loss is a number nobody can do anything with.
+ */
+export const LOSS_TYPES = [
+  'SHRINKAGE',
+  'DAMAGE',
+  'THEFT',
+  'MISPLACEMENT',
+  'EXPIRY',
+  'COUNTING_ERROR',
+  'SUPPLIER_SHORTAGE',
+  'UNKNOWN',
+] as const;
+
+export type LossType = (typeof LOSS_TYPES)[number];
+
+export function isLossType(value: string): value is LossType {
+  return (LOSS_TYPES as readonly string[]).includes(value);
+}
+
+/**
  * Physical inventory counts and adjustments (§21).
  *
  * Counting never writes stock directly: the count records what was found, and
@@ -57,6 +81,10 @@ export class CountsService {
       locationId?: string;
       categoryId?: string;
       sampleSize?: number;
+      /** Hide system quantities from the counter until the sheet is submitted. */
+      isBlind?: boolean;
+      /** Stop movements on the counted positions from the moment it opens. */
+      freeze?: boolean;
     },
     user: AuthenticatedUser,
   ) {
@@ -142,6 +170,9 @@ export class CountsService {
           status: DocumentStatus.DRAFT,
           startedAt: new Date(),
           countedById: user.id,
+          isBlind: data.isBlind ?? false,
+          isFrozen: data.freeze ?? false,
+          frozenAt: data.freeze ? new Date() : null,
           items: {
             create: balances.map((b) => ({
               productId: b.productId,
@@ -270,7 +301,7 @@ export class CountsService {
       });
     });
 
-    return this.findOne(id);
+    return this.findOne(id, user);
   }
 
   /**
@@ -362,17 +393,188 @@ export class CountsService {
       branchId: count.branchId,
     });
 
-    return this.findOne(id);
+    return this.findOne(id, user);
   }
 
-  async findOne(id: string) {
-    return this.prisma.stockCount.findUniqueOrThrow({
+  /**
+   * A blind count hides what the system thinks is on the shelf (§21: 175).
+   *
+   * Showing the expected quantity to the person holding the clipboard is how a
+   * count silently becomes a confirmation exercise. The figures are masked
+   * server-side, not merely hidden by the UI (§73), and are revealed once the
+   * sheet is submitted or to a supervisor who has to judge the variance.
+   */
+  private maskBlind<T extends { isBlind: boolean; status: DocumentStatus; items: any[] }>(
+    count: T,
+    user?: AuthenticatedUser,
+  ): T & { blindMasked: boolean } {
+    const revealed =
+      !count.isBlind ||
+      count.status === DocumentStatus.CLOSED ||
+      count.status === DocumentStatus.SUBMITTED ||
+      Boolean(user?.permissions.includes('inventory.count.APPROVE'));
+
+    if (revealed) return { ...count, blindMasked: false };
+
+    return {
+      ...count,
+      blindMasked: true,
+      items: count.items.map((item) => ({
+        ...item,
+        systemQty: null,
+        varianceQty: null,
+        varianceValue: null,
+        requiresApproval: null,
+      })),
+    };
+  }
+
+  async findOne(id: string, user?: AuthenticatedUser) {
+    const count = await this.prisma.stockCount.findUniqueOrThrow({
       where: { id },
       include: { items: true },
     });
+    return this.maskBlind(count, user);
   }
 
-  async findAll(query: { warehouseId?: string; page?: number; pageSize?: number }) {
+  /**
+   * Freeze or release the stock positions on this count (§21: feature 176).
+   *
+   * While frozen, the ledger refuses any movement touching a counted position,
+   * so the number written on the sheet is still true when it is keyed in.
+   */
+  async setFreeze(id: string, freeze: boolean, user: AuthenticatedUser) {
+    const count = await this.prisma.stockCount.findUniqueOrThrow({ where: { id } });
+    if (count.status === DocumentStatus.CLOSED) {
+      throw new BadRequestException('This count has already been posted');
+    }
+    await this.scope.assertWarehouse(user, count.warehouseId);
+
+    const updated = await this.prisma.stockCount.update({
+      where: { id },
+      data: { isFrozen: freeze, frozenAt: freeze ? new Date() : null },
+    });
+
+    await this.audit.record({
+      userId: user.id,
+      userLabel: user.fullName,
+      module: 'inventory',
+      action: 'EDIT',
+      entityType: 'StockCount',
+      entityId: id,
+      previousValue: { isFrozen: count.isFrozen },
+      newValue: { isFrozen: freeze, countNo: count.countNo },
+      reason: freeze ? 'Stock frozen for physical count' : 'Stock released after count',
+      branchId: count.branchId,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Loss analysis: what we lost, and why (§21: feature 180).
+   *
+   * Only negative movements are losses. A positive adjustment is stock found,
+   * which is a different question and would cancel out real losses if netted.
+   */
+  async lossAnalysis(query: { from?: Date; to?: Date; warehouseId?: string; branchId?: string }) {
+    const items = await this.prisma.stockAdjustmentItem.findMany({
+      where: {
+        quantityDelta: { lt: 0 },
+        adjustment: {
+          ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
+          ...(query.branchId ? { branchId: query.branchId } : {}),
+          ...(query.from || query.to
+            ? {
+                createdAt: {
+                  ...(query.from ? { gte: query.from } : {}),
+                  ...(query.to ? { lte: query.to } : {}),
+                },
+              }
+            : {}),
+        },
+      },
+    });
+
+    // StockAdjustmentItem stores the product as a plain id, so costs and names
+    // are resolved in one follow-up query rather than per line.
+    const productIds = [...new Set(items.map((i) => i.productId))];
+    const products = productIds.length
+      ? await this.prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, sku: true, genericName: true, averageCost: true },
+        })
+      : [];
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    const byType = new Map<string, { quantity: Prisma.Decimal; value: Prisma.Decimal; lines: number }>();
+    const byProduct = new Map<
+      string,
+      { productId: string; sku: string; name: string; quantity: Prisma.Decimal; value: Prisma.Decimal }
+    >();
+
+    for (const item of items) {
+      const product = productById.get(item.productId);
+      if (!product) continue;
+      const quantity = item.quantityDelta.abs();
+      const value = quantity.times(product.averageCost);
+      const type = item.lossType ?? 'UNCLASSIFIED';
+
+      const t = byType.get(type) ?? {
+        quantity: new Prisma.Decimal(0),
+        value: new Prisma.Decimal(0),
+        lines: 0,
+      };
+      byType.set(type, {
+        quantity: t.quantity.plus(quantity),
+        value: t.value.plus(value),
+        lines: t.lines + 1,
+      });
+
+      const p = byProduct.get(item.productId) ?? {
+        productId: item.productId,
+        sku: product.sku,
+        name: product.genericName,
+        quantity: new Prisma.Decimal(0),
+        value: new Prisma.Decimal(0),
+      };
+      byProduct.set(item.productId, {
+        ...p,
+        quantity: p.quantity.plus(quantity),
+        value: p.value.plus(value),
+      });
+    }
+
+    const totalValue = [...byType.values()].reduce(
+      (sum, t) => sum.plus(t.value),
+      new Prisma.Decimal(0),
+    );
+
+    return {
+      totalLines: items.length,
+      totalValue: totalValue.toFixed(2),
+      // Unclassified losses are reported as their own row rather than dropped:
+      // the size of the unexplained pile is itself the finding.
+      byType: [...byType.entries()]
+        .map(([lossType, t]) => ({
+          lossType,
+          lines: t.lines,
+          quantity: t.quantity.toFixed(2),
+          value: t.value.toFixed(2),
+          sharePercent: totalValue.isZero()
+            ? '0.00'
+            : t.value.dividedBy(totalValue).times(100).toFixed(2),
+        }))
+        .sort((a, b) => Number(b.value) - Number(a.value)),
+      topProducts: [...byProduct.values()]
+        .sort((a, b) => b.value.comparedTo(a.value))
+        .slice(0, 20)
+        .map((p) => ({ ...p, quantity: p.quantity.toFixed(2), value: p.value.toFixed(2) })),
+      lossTypes: LOSS_TYPES,
+    };
+  }
+
+  async findAll(query: { warehouseId?: string; page?: number; pageSize?: number }, user?: AuthenticatedUser) {
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(100, query.pageSize ?? 25);
     const where = query.warehouseId ? { warehouseId: query.warehouseId } : {};
@@ -386,7 +588,7 @@ export class CountsService {
       }),
       this.prisma.stockCount.count({ where }),
     ]);
-    return { data, total, page, pageSize };
+    return { data: data.map((c) => this.maskBlind(c, user)), total, page, pageSize };
   }
 
   /** Direct stock adjustment outside a count (§21). Always needs a reason. */
@@ -402,12 +604,38 @@ export class CountsService {
        * forward at all.
        */
       occurredAt?: string | Date;
-      items: Array<{ productId: string; batchId: string; quantityDelta: number; reason?: string }>;
+      items: Array<{
+        productId: string;
+        batchId: string;
+        quantityDelta: number;
+        reason?: string;
+        /** Required on a loss so it can be analysed later (§21: feature 180). */
+        lossType?: string;
+      }>;
     },
     user: AuthenticatedUser,
   ) {
     if (!data.reason?.trim()) throw new BadRequestException('An adjustment reason is required');
     if (!data.items?.length) throw new BadRequestException('Nothing to adjust');
+
+    // A negative adjustment is a loss, and an unclassified loss cannot be acted
+    // on. Positive adjustments are stock found, which needs no loss reason.
+    for (const item of data.items) {
+      if (item.quantityDelta < 0) {
+        if (!item.lossType) {
+          throw new BadRequestException(
+            `Write-offs must state why the stock was lost (one of ${LOSS_TYPES.join(', ')})`,
+          );
+        }
+        if (!isLossType(item.lossType)) {
+          throw new BadRequestException(
+            `"${item.lossType}" is not a recognised loss type. Use one of ${LOSS_TYPES.join(', ')}`,
+          );
+        }
+      } else if (item.lossType) {
+        throw new BadRequestException('A positive adjustment is stock found, not a loss');
+      }
+    }
 
     const occurredAt = data.occurredAt ? new Date(data.occurredAt) : undefined;
     if (occurredAt && Number.isNaN(occurredAt.getTime())) {
@@ -432,6 +660,7 @@ export class CountsService {
               batchId: i.batchId,
               quantityDelta: new Prisma.Decimal(i.quantityDelta),
               reason: i.reason ?? null,
+              lossType: i.lossType ?? null,
             })),
           },
         },
