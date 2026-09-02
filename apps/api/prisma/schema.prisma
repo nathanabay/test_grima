@@ -2491,6 +2491,217 @@ model JobRun {
   @@map("job_runs")
 }
 
+// ============================================================
+// ACCOUNTING (§32)
+//
+// Deliberately separated from inventory movement. FEFO decides which physical
+// pack leaves the shelf; valuation decides what that movement is worth, and the
+// two are configured independently. Nothing in this section writes stock, and
+// nothing in the inventory ledger writes a journal.
+// ============================================================
+
+/// Chart of accounts.
+model Account {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  name        String
+  /// ASSET | LIABILITY | EQUITY | INCOME | EXPENSE
+  type        String
+  /// Narrower classification for reporting, e.g. CURRENT_ASSET, COST_OF_SALES.
+  subType     String?
+  parentId    String?  @db.Uuid
+  currency    String   @default("ETB")
+  /// Stable handle the posting rules use, so renaming or renumbering an
+  /// account never breaks posting: INVENTORY_ASSET, COGS, VAT_INPUT,
+  /// VAT_OUTPUT, ACCOUNTS_PAYABLE, ACCOUNTS_RECEIVABLE, CASH, SALES_REVENUE,
+  /// INVENTORY_WRITE_OFF, INVENTORY_ADJUSTMENT, PURCHASE_DISCOUNT, FREIGHT,
+  /// WITHHOLDING_TAX, STOCK_IN_TRANSIT.
+  systemKey   String?  @unique
+  /// A system account cannot be deleted, because posting rules point at it.
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent   Account?      @relation("AccountTree", fields: [parentId], references: [id])
+  children Account[]     @relation("AccountTree")
+  lines    JournalLine[]
+
+  @@index([type])
+  @@index([parentId])
+  @@map("accounts")
+}
+
+/// A balanced double-entry journal.
+model JournalEntry {
+  id           String    @id @default(uuid()) @db.Uuid
+  entryNo      String    @unique
+  entryDate    DateTime
+  description  String
+  /// What produced this entry: GOODS_RECEIPT | SALE | DISPENSING | ADJUSTMENT |
+  /// DISPOSAL | DAMAGE | TRANSFER | SUPPLIER_INVOICE | PAYMENT | CREDIT_NOTE |
+  /// DEBIT_NOTE | MANUAL
+  sourceType   String
+  sourceId     String?   @db.Uuid
+  branchId     String?   @db.Uuid
+  departmentId String?   @db.Uuid
+  currency     String    @default("ETB")
+  /// DRAFT | POSTED | REVERSED
+  status       String    @default("POSTED")
+  totalDebit   Decimal   @default(0) @db.Decimal(18, 4)
+  totalCredit  Decimal   @default(0) @db.Decimal(18, 4)
+  /// A posted entry is never edited or deleted; it is reversed by another
+  /// entry that points back at it (§53 soft-delete policy).
+  reversalOfId String?   @db.Uuid
+  reversedById String?   @db.Uuid
+  postedById   String?   @db.Uuid
+  postedAt     DateTime?
+  createdAt    DateTime  @default(now())
+
+  lines      JournalLine[]
+  reversalOf JournalEntry?  @relation("JournalReversal", fields: [reversalOfId], references: [id])
+  reversals  JournalEntry[] @relation("JournalReversal")
+
+  /// One entry per source document, so a replayed posting cannot double-post.
+  @@unique([sourceType, sourceId])
+  @@index([entryDate])
+  @@index([status])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id           String  @id @default(uuid()) @db.Uuid
+  entryId      String  @db.Uuid
+  accountId    String  @db.Uuid
+  debit        Decimal @default(0) @db.Decimal(18, 4)
+  credit       Decimal @default(0) @db.Decimal(18, 4)
+  description  String?
+  branchId     String? @db.Uuid
+  departmentId String? @db.Uuid
+  /// Kept for inventory reporting, never for driving stock.
+  productId    String? @db.Uuid
+  batchId      String? @db.Uuid
+  lineNumber   Int     @default(0)
+
+  entry   JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account Account      @relation(fields: [accountId], references: [id])
+
+  @@index([entryId])
+  @@index([accountId])
+  @@map("journal_lines")
+}
+
+/// A FIFO cost layer: one receipt of stock at one cost, consumed oldest first.
+///
+/// Only used when the organization is configured for FIFO. Weighted average
+/// needs no layers — it keeps a running cost on the product. Layers are
+/// consumed in receipt order, which is deliberately NOT the same as FEFO: the
+/// pack that physically leaves and the cost that is relieved are separate
+/// decisions (§32).
+model CostLayer {
+  id                String   @id @default(uuid()) @db.Uuid
+  productId         String   @db.Uuid
+  batchId           String?  @db.Uuid
+  warehouseId       String   @db.Uuid
+  /// The receipt that created this layer.
+  transactionId     String?  @db.Uuid
+  receivedAt        DateTime
+  quantity          Decimal  @db.Decimal(18, 4)
+  remainingQuantity Decimal  @db.Decimal(18, 4)
+  unitCost          Decimal  @db.Decimal(18, 6)
+  createdAt         DateTime @default(now())
+
+  @@index([productId, warehouseId, receivedAt])
+  @@index([batchId])
+  @@map("cost_layers")
+}
+
+/// Which cost layers a single issue consumed, and at what cost.
+///
+/// Kept so a COGS figure can be explained line by line rather than asserted.
+model CostConsumption {
+  id            String   @id @default(uuid()) @db.Uuid
+  layerId       String   @db.Uuid
+  transactionId String   @db.Uuid
+  productId     String   @db.Uuid
+  quantity      Decimal  @db.Decimal(18, 4)
+  unitCost      Decimal  @db.Decimal(18, 6)
+  totalCost     Decimal  @db.Decimal(18, 4)
+  createdAt     DateTime @default(now())
+
+  @@index([transactionId])
+  @@index([layerId])
+  @@map("cost_consumptions")
+}
+
+/// Credit and debit notes in both directions (§32).
+model FinanceNote {
+  id            String    @id @default(uuid()) @db.Uuid
+  noteNo        String    @unique
+  /// CREDIT | DEBIT
+  noteType      String
+  /// CUSTOMER | SUPPLIER
+  direction     String
+  supplierId    String?   @db.Uuid
+  patientId     String?   @db.Uuid
+  branchId      String    @db.Uuid
+  /// What it adjusts: SUPPLIER_INVOICE | SALE | RETURN
+  referenceType String?
+  referenceId   String?   @db.Uuid
+  noteDate      DateTime  @default(now())
+  currency      String    @default("ETB")
+  subtotal      Decimal   @default(0) @db.Decimal(18, 4)
+  taxTotal      Decimal   @default(0) @db.Decimal(18, 4)
+  grandTotal    Decimal   @default(0) @db.Decimal(18, 4)
+  /// DRAFT | ISSUED | APPLIED | CANCELLED
+  status        String    @default("DRAFT")
+  reason        String
+  createdById   String?   @db.Uuid
+  approvedById  String?   @db.Uuid
+  approvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  lines FinanceNoteLine[]
+
+  @@index([direction, status])
+  @@index([supplierId])
+  @@map("finance_notes")
+}
+
+model FinanceNoteLine {
+  id          String  @id @default(uuid()) @db.Uuid
+  noteId      String  @db.Uuid
+  productId   String? @db.Uuid
+  description String
+  quantity    Decimal @default(1) @db.Decimal(18, 4)
+  unitPrice   Decimal @default(0) @db.Decimal(18, 4)
+  taxRate     Decimal @default(0) @db.Decimal(6, 4)
+  lineTotal   Decimal @default(0) @db.Decimal(18, 4)
+
+  note FinanceNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId])
+  @@map("finance_note_lines")
+}
+
+/// Accounting periods, so a posted month can be closed against late entries.
+model AccountingPeriod {
+  id         String    @id @default(uuid()) @db.Uuid
+  code       String    @unique
+  startDate  DateTime
+  endDate    DateTime
+  /// OPEN | CLOSED
+  status     String    @default("OPEN")
+  closedById String?   @db.Uuid
+  closedAt   DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([startDate, endDate])
+  @@map("accounting_periods")
+}
+
 model IdempotencyKey {
   key       String   @id
   scope     String

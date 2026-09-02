@@ -79,7 +79,9 @@ export const RESOURCE_CATALOG: ResourceDefinition[] = [
   { module: 'quality', resource: 'disposal', label: 'Waste & Disposal', actions: [...CRUD, 'APPROVE', 'PRINT'] },
   { module: 'quality', resource: 'cold_chain', label: 'Cold Chain', actions: ['READ', 'EDIT', 'APPROVE'] },
 
-  { module: 'finance', resource: 'invoice', label: 'Invoices', actions: [...CRUD, 'APPROVE'] },
+  { module: 'finance', resource: 'invoice', label: 'Invoices & Credit Notes', actions: [...CRUD, 'APPROVE'] },
+  { module: 'finance', resource: 'account', label: 'Chart of Accounts', actions: CRUD },
+  { module: 'finance', resource: 'journal', label: 'General Ledger', actions: [...CRUD, 'APPROVE', 'CANCEL'] },
   { module: 'finance', resource: 'report', label: 'Financial Reports', actions: REPORTING },
 
   { module: 'analytics', resource: 'dashboard', label: 'Dashboards', actions: READ_ONLY },

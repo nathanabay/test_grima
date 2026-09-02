@@ -17,6 +17,7 @@ loadEnv(__dirname);
 
 import { PrismaClient, Prisma, BatchStatus, PaymentMethod } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { DEFAULT_ACCOUNTS } from '../src/modules/accounting/chart-of-accounts';
 import {
   DEFAULT_ROLES,
   RESOURCE_CATALOG,
@@ -286,6 +287,8 @@ async function main(): Promise<void> {
       price_history, product_barcodes, product_units, products,
       product_categories, manufacturers,
       job_runs, integration_deliveries, integration_endpoints,
+      finance_note_lines, finance_notes, cost_consumptions, cost_layers,
+      journal_lines, journal_entries, accounts, accounting_periods,
       shipment_package_lines, shipment_packages, warehouse_tasks, pick_waves, docks,
       user_scopes, user_roles, sessions, login_attempts, role_permissions, permissions, roles, users,
       departments, warehouse_locations, warehouses, branches, regions, business_units,
@@ -310,6 +313,20 @@ async function main(): Promise<void> {
       allowNegativeStock: false,
     },
   });
+
+  // ---- Chart of accounts and the current period (§32) ----
+  await prisma.account.createMany({
+    data: DEFAULT_ACCOUNTS.map((a) => ({ ...a, isSystem: Boolean(a.systemKey) })),
+  });
+  const now = new Date();
+  await prisma.accountingPeriod.create({
+    data: {
+      code: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+      startDate: new Date(now.getFullYear(), now.getMonth(), 1),
+      endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59),
+    },
+  });
+  console.log(`  Created ${DEFAULT_ACCOUNTS.length} ledger accounts and an open period`);
 
   // ---- Business units and regions (§33) ----
   const retailUnit = await prisma.businessUnit.create({
@@ -1090,6 +1107,19 @@ async function main(): Promise<void> {
               lastMovementAt: daysFromNow(-randomInt(1, 120)),
             },
           });
+          // A cost layer per receipt, so FIFO valuation has real history to
+          // consume rather than starting empty (§32).
+          await prisma.costLayer.create({
+            data: {
+              productId: product.id,
+              batchId: batch.id,
+              warehouseId: warehouse.id,
+              receivedAt: batch.receivedDate,
+              quantity: new Prisma.Decimal(quantity),
+              remainingQuantity: new Prisma.Decimal(quantity),
+              unitCost: new Prisma.Decimal(cost.toFixed(6)),
+            },
+          });
           await prisma.inventoryTransaction.create({
             data: {
               type: 'PURCHASE_RECEIPT',
@@ -1120,6 +1150,7 @@ async function main(): Promise<void> {
     }
   }
   console.log(`  Created ${batchCount} batches and ${transactionCount} opening stock movements`);
+
 
   // ---- Patients (§25) and their CRM records (§14) ----
   const patients: any[] = [];
@@ -1637,6 +1668,61 @@ async function main(): Promise<void> {
     recalls: await prisma.recall.count(),
     users: await prisma.user.count(),
   };
+
+  // ---- Make the costing data agree with the stock it describes (§32) ----
+  //
+  // Batches were received at costs varying around the list price, so a product
+  // whose averageCost was never recomputed would value its stock at a figure
+  // no batch was actually bought at. Derive both the FIFO layers and the
+  // weighted average from the movements that were just written, so the two
+  // valuation methods reconcile against the same physical stock instead of
+  // disagreeing for a reason nobody can explain.
+  const layerRows = await prisma.costLayer.findMany({
+    select: { id: true, productId: true, batchId: true, warehouseId: true, quantity: true, unitCost: true },
+  });
+  const onHandRows = await prisma.inventoryBalance.groupBy({
+    by: ['productId', 'batchId', 'warehouseId'],
+    _sum: { onHand: true },
+  });
+  const onHandByKey = new Map(
+    onHandRows.map((r) => [`${r.productId}|${r.batchId}|${r.warehouseId}`, r._sum.onHand ?? new Prisma.Decimal(0)]),
+  );
+
+  const valueByProduct = new Map<string, { qty: Prisma.Decimal; value: Prisma.Decimal }>();
+  for (const layer of layerRows) {
+    const key = `${layer.productId}|${layer.batchId}|${layer.warehouseId}`;
+    const onHand = onHandByKey.get(key) ?? new Prisma.Decimal(0);
+    // A layer can never have more left than the shelf holds.
+    const remaining = Prisma.Decimal.min(layer.quantity, onHand);
+
+    if (!remaining.equals(layer.quantity)) {
+      await prisma.costLayer.update({
+        where: { id: layer.id },
+        data: { remainingQuantity: remaining },
+      });
+    }
+
+    const entry = valueByProduct.get(layer.productId) ?? {
+      qty: new Prisma.Decimal(0),
+      value: new Prisma.Decimal(0),
+    };
+    entry.qty = entry.qty.plus(remaining);
+    entry.value = entry.value.plus(remaining.times(layer.unitCost));
+    valueByProduct.set(layer.productId, entry);
+  }
+
+  let recosted = 0;
+  for (const [productId, entry] of valueByProduct) {
+    if (entry.qty.lessThanOrEqualTo(0)) continue;
+    await prisma.product.update({
+      where: { id: productId },
+      data: {
+        averageCost: entry.value.dividedBy(entry.qty).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP),
+      },
+    });
+    recosted += 1;
+  }
+  console.log(`  Reconciled ${layerRows.length} cost layers and recosted ${recosted} products`);
 
   console.log('\nSeed complete:');
   for (const [key, value] of Object.entries(summary)) {

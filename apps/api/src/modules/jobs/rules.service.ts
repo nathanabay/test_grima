@@ -8,6 +8,7 @@ import { ProcurementService } from '../procurement/procurement.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { JobRunnerService } from './job-runner.service';
+import { PostingService } from '../accounting/posting.service';
 
 /**
  * Rule engine and scheduled jobs (§58).
@@ -28,6 +29,7 @@ export class RulesService implements OnModuleInit {
     private readonly notifications: NotificationsService,
     private readonly integrations: IntegrationsService,
     private readonly runner: JobRunnerService,
+    private readonly posting: PostingService,
   ) {}
 
   /**
@@ -69,6 +71,14 @@ export class RulesService implements OnModuleInit {
       description: 'Raises replenishment recommendations for stock at or below its reorder point.',
       schedule: 'Daily at 06:00',
       run: () => this.runLowStockAlerts(),
+    });
+    this.runner.register({
+      key: 'accounting.postPending',
+      label: 'Post to the general ledger',
+      description:
+        'Translates stock movements, sales, supplier invoices and payments into journal entries.',
+      schedule: 'Hourly',
+      run: () => this.runPostToLedger(),
     });
     this.runner.register({
       key: 'documents.expiryAlerts',
@@ -276,5 +286,37 @@ export class RulesService implements OnModuleInit {
   @Cron(CronExpression.EVERY_DAY_AT_7AM)
   async documentExpiryAlertsCron() {
     return this.runner.execute('documents.expiryAlerts');
+  }
+
+  /**
+   * Accounting runs on a schedule rather than inline (§32).
+   *
+   * A ledger problem must never stop a pharmacist dispensing, so posting is
+   * deliberately off the critical path. It is idempotent, so a missed run
+   * catches up on the next one.
+   */
+  async runPostToLedger() {
+    const result = await this.posting.postPending(1000);
+    if (result.failed) {
+      this.logger.warn(`Ledger posting: ${result.failed} document(s) could not be posted`);
+      await this.notifications.emit({
+        eventType: 'POSTING_FAILED',
+        severity: 'WARNING',
+        title: `${result.failed} document(s) could not be posted to the ledger`,
+        body:
+          result.errors
+            .slice(0, 10)
+            .map((e) => `${e.type} ${e.id}: ${e.error}`)
+            .join('\n') || 'See the accounting screen for detail.',
+        roleCodes: ['FINANCE_OFFICER', 'PHARMACY_ADMIN'],
+        linkUrl: '/accounting',
+      });
+    }
+    return result;
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async postToLedgerCron() {
+    return this.runner.execute('accounting.postPending');
   }
 }

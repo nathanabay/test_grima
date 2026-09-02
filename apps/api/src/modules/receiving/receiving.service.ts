@@ -11,6 +11,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { ScopeService } from '../../common/guards/scope.service';
+import { ValuationService } from '../accounting/valuation.service';
 import { LedgerService } from '../inventory/ledger.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -62,6 +63,7 @@ export class ReceivingService {
     private readonly docNumbers: DocumentNumberService,
     private readonly notifications: NotificationsService,
     private readonly scope: ScopeService,
+    private readonly valuation: ValuationService,
   ) {}
 
   /**
@@ -305,28 +307,18 @@ export class ReceivingService {
             });
           }
 
-          // Weighted-average cost update (§32, §45).
-          const product = await tx.product.findUniqueOrThrow({
-            where: { id: line.productId },
-            select: { averageCost: true },
-          });
-          const totalOnHand = await tx.inventoryBalance.aggregate({
-            where: { productId: line.productId },
-            _sum: { onHand: true },
-          });
-          const priorQty = Number(totalOnHand._sum.onHand ?? 0) - baseQuantity;
-          const newAverage =
-            priorQty > 0
-              ? (priorQty * Number(product.averageCost) + baseQuantity * baseUnitCost) /
-                (priorQty + baseQuantity)
-              : baseUnitCost;
-
-          await tx.product.update({
-            where: { id: line.productId },
-            data: {
-              averageCost: new Prisma.Decimal(newAverage.toFixed(4)),
-              lastPurchaseCost: new Prisma.Decimal(baseUnitCost.toFixed(4)),
-            },
+          // Costing (§32). Delegated to the valuation service, which writes the
+          // FIFO cost layer and recomputes the weighted average in decimal
+          // arithmetic. This used to be done inline in floating point, which
+          // §51 forbids for money and which drifted by fractions of a cent on
+          // every receipt.
+          await this.valuation.recordReceipt(tx, {
+            productId: line.productId,
+            batchId: batch.id,
+            warehouseId: input.warehouseId,
+            quantity: baseQuantity,
+            unitCost: baseUnitCost,
+            receivedAt: receipt.receivedAt ?? new Date(),
           });
 
           createdBatches.push({ id: batch.id, batchNumber: batch.batchNumber, flags });
