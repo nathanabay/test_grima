@@ -2354,25 +2354,31 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+/// Delivery outcome per channel is recorded on the notification row, so an
+/// alert that never reached anyone is visible rather than assumed sent (§35).
 model Notification {
-  id            String               @id @default(uuid()) @db.Uuid
-  userId        String?              @db.Uuid
-  roleCode      String?
-  branchId      String?              @db.Uuid
-  channel       NotificationChannel  @default(IN_APP)
-  severity      NotificationSeverity @default(INFO)
-  eventType     String
-  title         String
-  body          String
-  linkUrl       String?
-  payload       Json?
-  readAt        DateTime?
-  sentAt        DateTime?
-  deliveryError String?
-  createdAt     DateTime             @default(now())
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String?              @db.Uuid
+  roleCode         String?
+  branchId         String?              @db.Uuid
+  channel          NotificationChannel  @default(IN_APP)
+  severity         NotificationSeverity @default(INFO)
+  eventType        String
+  title            String
+  body             String
+  linkUrl          String?
+  payload          Json?
+  readAt           DateTime?
+  sentAt           DateTime?
+  deliveryError    String?
+  /// The provider's own message id, so a delivery can be traced at their end.
+  providerRef      String?
+  deliveryAttempts Int                  @default(0)
+  createdAt        DateTime             @default(now())
 
   @@index([userId, readAt])
   @@index([eventType])
+  @@index([channel, sentAt])
   @@map("notifications")
 }
 
@@ -2806,6 +2812,79 @@ model AutomationEscalation {
   @@unique([ruleId, subjectType, subjectId])
   @@index([status, nextDueAt])
   @@map("automation_escalations")
+}
+
+/// Machine-to-machine credential (§53).
+///
+/// Only a hash is stored, so someone reading the database cannot use the key.
+/// Scopes are permission codes, checked by the same guard that checks a user's,
+/// which means an integration can never do something no role could do.
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  /// First characters of the key, shown in the list so a key can be identified
+  /// without being revealed.
+  prefix      String    @unique
+  keyHash     String
+  /// Permission codes this key may exercise.
+  scopes      String[]  @default([])
+  /// Restrict to one branch; null is organization-wide.
+  branchId    String?   @db.Uuid
+  /// Requests per minute. 0 means the global limit applies.
+  rateLimit   Int       @default(120)
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  usageCount  Int       @default(0)
+  revokedAt   DateTime?
+  revokedById String?   @db.Uuid
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([isActive])
+  @@map("api_keys")
+}
+
+/// Every FHIR exchange, in and out (§54).
+///
+/// Kept because an interoperability problem is always a question of what was
+/// actually sent or received, and a log that only records failures cannot
+/// answer it.
+model FhirExchange {
+  id             String   @id @default(uuid()) @db.Uuid
+  /// INBOUND | OUTBOUND
+  direction      String
+  /// Patient | Practitioner | Organization | Medication | MedicationRequest |
+  /// MedicationDispense
+  resourceType   String
+  /// The resource id in the external system.
+  externalId     String?
+  /// The record this mapped to or from, once resolved.
+  internalId     String?  @db.Uuid
+  /// The FHIR release the payload was interpreted as, e.g. "4.0.1".
+  fhirVersion    String   @default("4.0.1")
+  operation      String? // read | search | create | update
+  /// RECEIVED | MAPPED | ACCEPTED | REJECTED | FAILED
+  status         String
+  /// Validation problems, one per line, when the payload was rejected.
+  issues         Json?
+  requestBody    Json?
+  responseBody   Json?
+  /// Supplied by the caller so a retry cannot create the record twice.
+  idempotencyKey String?
+  attempts       Int      @default(1)
+  errorMessage   String?
+  apiKeyId       String?  @db.Uuid
+  userId         String?  @db.Uuid
+  durationMs     Int?
+  createdAt      DateTime @default(now())
+
+  @@unique([idempotencyKey])
+  @@index([resourceType, status])
+  @@index([createdAt])
+  @@map("fhir_exchanges")
 }
 
 model IdempotencyKey {

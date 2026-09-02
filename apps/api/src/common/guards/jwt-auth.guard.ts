@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY, AuthenticatedUser } from '../decorators';
 import { PrismaService } from '../prisma/prisma.service';
+import { ApiKeysService } from '../../modules/integrations/api-keys.service';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -15,6 +16,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly jwt: JwtService,
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
+    private readonly apiKeys: ApiKeysService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -25,6 +27,32 @@ export class JwtAuthGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest();
+
+    // Machine-to-machine callers present an API key instead of a session token
+    // (§53). It is resolved into the same AuthenticatedUser shape, so every
+    // downstream permission and scope check is identical to a person's — an
+    // integration can never reach something no role could.
+    const apiKeyHeader: string | undefined =
+      request.headers['x-api-key'] ?? request.headers['X-Api-Key'];
+    if (apiKeyHeader) {
+      const key = await this.apiKeys.verify(String(apiKeyHeader));
+      if (!key) throw new UnauthorizedException('Invalid or expired API key');
+
+      request.user = {
+        id: key.id,
+        email: `${key.name}@api-key.local`,
+        username: `apikey:${key.name}`,
+        fullName: `API key: ${key.name}`,
+        roles: ['API_KEY'],
+        permissions: key.scopes,
+        branchIds: key.branchId ? [key.branchId] : [],
+        warehouseIds: [],
+        sessionId: `apikey:${key.id}`,
+      } satisfies AuthenticatedUser;
+      request.apiKeyId = key.id;
+      return true;
+    }
+
     const header: string | undefined = request.headers.authorization;
     if (!header?.startsWith('Bearer ')) {
       throw new UnauthorizedException('Missing bearer token');

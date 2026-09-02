@@ -1,16 +1,20 @@
-import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   IntegrationsService,
   IntegrationEvent,
   INTEGRATION_EVENTS,
 } from './integrations.service';
+import { ApiKeysService } from './api-keys.service';
 import { AuthenticatedUser, CurrentUser, RequirePermissions } from '../../common/decorators';
 
 @ApiTags('Integrations')
 @Controller('integrations')
 export class IntegrationsController {
-  constructor(private readonly integrations: IntegrationsService) {}
+  constructor(
+    private readonly integrations: IntegrationsService,
+    private readonly apiKeys: ApiKeysService,
+  ) {}
 
   @Get('events')
   @RequirePermissions('admin.setting.READ')
@@ -81,5 +85,35 @@ export class IntegrationsController {
   @ApiOperation({ summary: 'Send everything currently due, without waiting for the scheduler' })
   process() {
     return this.integrations.processQueue();
+  }
+
+  // ---- API keys (§53) ----
+
+  @Get('api-keys')
+  @RequirePermissions('admin.setting.READ')
+  @ApiOperation({ summary: 'Machine-to-machine keys. The key itself is never returned.' })
+  listApiKeys() {
+    return this.apiKeys.list();
+  }
+
+  @Post('api-keys')
+  @RequirePermissions('admin.setting.EDIT')
+  @ApiOperation({
+    summary: 'Create a key. It is shown once and cannot be recovered afterwards.',
+  })
+  createApiKey(@Body() body: any, @CurrentUser() user: AuthenticatedUser) {
+    return this.apiKeys.create(body, user);
+  }
+
+  @Patch('api-keys/:id')
+  @RequirePermissions('admin.setting.EDIT')
+  updateApiKey(@Param('id') id: string, @Body() body: any, @CurrentUser() user: AuthenticatedUser) {
+    return this.apiKeys.update(id, body, user);
+  }
+
+  @Post('api-keys/:id/revoke')
+  @RequirePermissions('admin.setting.EDIT')
+  revokeApiKey(@Param('id') id: string, @Body() body: any, @CurrentUser() user: AuthenticatedUser) {
+    return this.apiKeys.revoke(id, body?.reason ?? 'Revoked by an administrator', user);
   }
 }
