@@ -37,6 +37,7 @@ import { WarehouseModule } from './modules/warehouse/warehouse.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { AutomationModule } from './modules/automation/automation.module';
 import { FhirModule } from './modules/fhir/fhir.module';
+import { IntelligenceModule } from './modules/intelligence/intelligence.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
@@ -78,6 +79,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     AccountingModule,
     AutomationModule,
     FhirModule,
+    IntelligenceModule,
   ],
   providers: [
     // Global: authenticate, then authorize, then rate-limit. Routes opt out of

@@ -2887,6 +2887,44 @@ model FhirExchange {
   @@map("fhir_exchanges")
 }
 
+/// A report an authorized user defined for themselves (§60).
+///
+/// The definition names a data source, columns, filters, grouping and sort.
+/// It is never SQL: a saved report cannot become a way to run arbitrary
+/// queries, and the permission required to read the source is checked on every
+/// run, not when the report was saved.
+model SavedReport {
+  id            String    @id @default(uuid()) @db.Uuid
+  name          String
+  description   String?
+  /// Key from the report catalogue, e.g. inventory_balances.
+  dataSource    String
+  /// Column keys, in display order.
+  columns       String[]  @default([])
+  /// [{ field, operator, value }]
+  filters       Json      @default("[]")
+  groupBy       String?
+  /// [{ field, direction }]
+  sort          Json      @default("[]")
+  /// COUNT | SUM | AVG | MIN | MAX per column, when grouped.
+  aggregates    Json      @default("{}")
+  /// TABLE | BAR | LINE | PIE
+  visualization String    @default("TABLE")
+  /// Shared reports are visible to everyone who can read the data source.
+  isShared      Boolean   @default(false)
+  /// Cron expression for scheduled delivery, or null for on demand.
+  schedule      String?
+  /// Role codes the scheduled run is delivered to.
+  recipients    String[]  @default([])
+  lastRunAt     DateTime?
+  ownerId       String?   @db.Uuid
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([ownerId])
+  @@map("saved_reports")
+}
+
 model IdempotencyKey {
   key       String   @id
   scope     String

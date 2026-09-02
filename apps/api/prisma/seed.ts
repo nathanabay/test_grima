@@ -287,7 +287,7 @@ async function main(): Promise<void> {
       product_relations, product_attributes, attribute_definitions, product_ingredients,
       price_history, product_barcodes, product_units, products,
       product_categories, manufacturers,
-      job_runs, fhir_exchanges, api_keys,
+      job_runs, fhir_exchanges, api_keys, saved_reports,
       integration_deliveries, integration_endpoints,
       automation_escalations, automation_runs, automation_rules,
       finance_note_lines, finance_notes, cost_consumptions, cost_layers,
@@ -1745,6 +1745,39 @@ async function main(): Promise<void> {
     recosted += 1;
   }
   console.log(`  Reconciled ${layerRows.length} cost layers and recosted ${recosted} products`);
+
+  // ---- Make the planning levels agree with the stock actually held ----
+  //
+  // Reorder points and maximum levels were drawn at random, so most products
+  // sat far above a maximum nobody had set deliberately. That made the excess
+  // stock and availability measures report a problem that was an artefact of
+  // the demo data rather than anything about the pharmacy. Derive them from
+  // the stock that exists, the way a real setup would after a stock take.
+  const holdings = await prisma.inventoryBalance.groupBy({
+    by: ['productId'],
+    where: { onHand: { gt: 0 } },
+    _sum: { onHand: true },
+  });
+
+  let replanned = 0;
+  for (const holding of holdings) {
+    const onHand = Number(holding._sum.onHand ?? 0);
+    if (onHand <= 0) continue;
+
+    await prisma.product.update({
+      where: { id: holding.productId },
+      data: {
+        // Roughly a quarter of the holding triggers a reorder, a tenth is the
+        // safety floor, and the ceiling sits a third above what is held.
+        reorderLevel: new Prisma.Decimal(Math.round(onHand * 0.25)),
+        safetyStock: new Prisma.Decimal(Math.round(onHand * 0.1)),
+        maximumStock: new Prisma.Decimal(Math.round(onHand * 1.35)),
+        economicOrderQty: new Prisma.Decimal(Math.round(onHand * 0.3)),
+      },
+    });
+    replanned += 1;
+  }
+  console.log(`  Set planning levels from actual holdings for ${replanned} products`);
 
   console.log('\nSeed complete:');
   for (const [key, value] of Object.entries(summary)) {

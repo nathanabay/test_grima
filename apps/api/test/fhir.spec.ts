@@ -225,7 +225,7 @@ describe('Outbound resources are R4-shaped', () => {
     // R5 spells these doseForm and item; the CapabilityStatement advertises R4.
     expect(resource).toHaveProperty('form');
     expect(resource).not.toHaveProperty('doseForm');
-    expect(resource.ingredient[0]).toHaveProperty('itemCodeableConcept');
+    expect(resource.ingredient?.[0]).toHaveProperty('itemCodeableConcept');
     expect(resource.code.coding[0].system).toBe('http://www.whocc.no/atc');
   });
 
@@ -283,10 +283,11 @@ describe('Outbound resources are R4-shaped', () => {
       ],
     });
 
-    const batch = resource.extension.find((e: any) => e.url === 'urn:pharmacore:batch');
-    const expiry = resource.extension.find((e: any) => e.url === 'urn:pharmacore:expiry');
-    expect(batch.valueString).toBe('AMX-2026-001');
-    expect(expiry.valueDate).toBe('2027-06-30');
+    const extension = (resource.extension ?? []) as { url: string; valueString?: string; valueDate?: string }[];
+    const batch = extension.find((e) => e.url === 'urn:pharmacore:batch');
+    const expiry = extension.find((e) => e.url === 'urn:pharmacore:expiry');
+    expect(batch?.valueString).toBe('AMX-2026-001');
+    expect(expiry?.valueDate).toBe('2027-06-30');
   });
 
   it('maps every prescription status onto the FHIR value set', () => {
@@ -333,7 +334,7 @@ describe('Outbound resources are R4-shaped', () => {
     expect(bundle.resourceType).toBe('Bundle');
     expect(bundle.type).toBe('searchset');
     expect(bundle.total).toBe(1);
-    expect(bundle.entry[0].resource.resourceType).toBe('Patient');
+    expect((bundle.entry[0].resource as { resourceType: string }).resourceType).toBe('Patient');
   });
 
   it('reports failures as an OperationOutcome', () => {
