@@ -196,14 +196,31 @@ export class PostingService {
 
     // Cash and credit are different assets: a sale on account is a receivable,
     // not money in the drawer.
-    const cashPaid = sale.payments
+    //
+    // The till records what the customer handed over, not what the sale was
+    // worth — 1000 birr tendered against a 2.07 sale is a normal cash
+    // transaction, and the 997.93 difference goes back across the counter as
+    // change. Only what the drawer keeps is an asset, so the tender is capped
+    // at the sale total. Posting the tender itself would put money into the
+    // accounts that the pharmacy never had, and the entry would not balance.
+    const tendered = sale.payments
       .filter((p) => p.method !== 'CREDIT')
       .reduce((sum, p) => sum.plus(p.amount), new Prisma.Decimal(0));
+    const cashPaid = Prisma.Decimal.min(tendered, gross);
+    const changeGiven = tendered.minus(cashPaid);
     const onAccount = gross.minus(cashPaid);
 
     const lines = [
       ...(cashPaid.greaterThan(0)
-        ? [{ systemKey: 'CASH', debit: cashPaid, description: 'Cash and card takings' }]
+        ? [
+            {
+              systemKey: 'CASH',
+              debit: cashPaid,
+              description: changeGiven.greaterThan(0)
+                ? `Cash and card takings (${tendered.toFixed(2)} tendered, ${changeGiven.toFixed(2)} change given)`
+                : 'Cash and card takings',
+            },
+          ]
         : []),
       ...(onAccount.greaterThan(0)
         ? [
@@ -352,45 +369,22 @@ export class PostingService {
     const posted = { movements: 0, sales: 0, invoices: 0, payments: 0, skipped: 0, failed: 0 };
     const errors: { type: string; id: string; error: string }[] = [];
 
-    const movements = await this.prisma.inventoryTransaction.findMany({
-      where: {
-        // Types with no accounting effect are excluded up front rather than
-        // fetched and discarded.
-        type: {
-          notIn: [
-            TransactionType.TRANSFER_IN,
-            TransactionType.TRANSFER_OUT,
-            TransactionType.RECALL,
-            TransactionType.RESERVATION,
-            TransactionType.RESERVATION_RELEASE,
-          ],
-        },
-      },
-      orderBy: { occurredAt: 'asc' },
-      take: limit,
-      select: { id: true },
-    });
-
-    const postedIds = new Set(
-      (
-        await this.prisma.journalEntry.findMany({
-          where: {
-            sourceType: 'INVENTORY_MOVEMENT',
-            sourceId: { in: movements.map((m) => m.id) },
-          },
-          select: { sourceId: true },
-        })
-      ).map((e) => e.sourceId as string),
-    );
+    // Only what is actually outstanding is fetched.
+    //
+    // Selecting the oldest `limit` documents and filtering the posted ones out
+    // in memory looks equivalent and is not: once more than `limit` documents
+    // exist, the window sits entirely on already-posted history and a movement
+    // recorded today is never reached, however often the job runs. The join
+    // below is the same one `unpostedDocuments` reports from, so the queue the
+    // administration screen shows is the queue this drains.
+    const { movements, sales } = await this.unpostedDocuments(limit);
 
     for (const movement of movements) {
-      if (postedIds.has(movement.id)) {
-        posted.skipped += 1;
-        continue;
-      }
       try {
         const entry = await this.postMovement(movement.id, actor);
         if (entry) posted.movements += 1;
+        // A movement with no accounting effect (a zero-value adjustment, say)
+        // is not a failure; it is simply nothing to post.
         else posted.skipped += 1;
       } catch (error) {
         posted.failed += 1;
@@ -398,45 +392,52 @@ export class PostingService {
       }
     }
 
-    const sales = await this.prisma.sale.findMany({
-      where: { status: 'COMPLETED' },
-      orderBy: { soldAt: 'asc' },
-      take: limit,
-      select: { id: true },
-    });
     for (const sale of sales) {
       try {
         const entry = await this.postSale(sale.id, actor);
         if (entry) posted.sales += 1;
+        else posted.skipped += 1;
       } catch (error) {
         posted.failed += 1;
         errors.push({ type: 'SALE', id: sale.id, error: (error as Error).message });
       }
     }
 
-    const invoices = await this.prisma.supplierInvoice.findMany({
-      where: { status: { in: ['APPROVED', 'PAID', 'PARTIALLY_PAID'] } },
-      take: limit,
-      select: { id: true },
-    });
+    // Same reasoning as above: select what is missing from the ledger, not the
+    // first `limit` rows of the table.
+    const invoices = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT i.id
+      FROM supplier_invoices i
+      LEFT JOIN journal_entries j
+        ON j."sourceType" = 'SUPPLIER_INVOICE' AND j."sourceId" = i.id
+      WHERE j.id IS NULL
+        AND i.status IN ('APPROVED', 'PAID', 'PARTIALLY_PAID')
+      ORDER BY i."createdAt" ASC
+      LIMIT ${limit}`;
     for (const invoice of invoices) {
       try {
         const entry = await this.postSupplierInvoice(invoice.id, actor);
         if (entry) posted.invoices += 1;
+        else posted.skipped += 1;
       } catch (error) {
         posted.failed += 1;
         errors.push({ type: 'SUPPLIER_INVOICE', id: invoice.id, error: (error as Error).message });
       }
     }
 
-    const payments = await this.prisma.supplierPayment.findMany({
-      take: limit,
-      select: { id: true },
-    });
+    const payments = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT p.id
+      FROM supplier_payments p
+      LEFT JOIN journal_entries j
+        ON j."sourceType" = 'SUPPLIER_PAYMENT' AND j."sourceId" = p.id
+      WHERE j.id IS NULL
+      ORDER BY p."paidAt" ASC
+      LIMIT ${limit}`;
     for (const payment of payments) {
       try {
         const entry = await this.postSupplierPayment(payment.id, actor);
         if (entry) posted.payments += 1;
+        else posted.skipped += 1;
       } catch (error) {
         posted.failed += 1;
         errors.push({ type: 'SUPPLIER_PAYMENT', id: payment.id, error: (error as Error).message });

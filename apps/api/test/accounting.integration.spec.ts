@@ -191,6 +191,23 @@ describe('Double entry (§32)', () => {
     await expect(journal.postStandalone(input)).rejects.toThrow();
   });
 
+  it('refuses a line naming neither an account nor a system key', async () => {
+    // A malformed line must come back as a client error with a usable message.
+    // Left unchecked, `where: { systemKey: undefined }` reaches Prisma and the
+    // caller gets a 500 that says nothing about what was wrong.
+    await expect(
+      journal.postStandalone({
+        description: 'Line with no account',
+        sourceType: source(),
+        sourceId: crypto.randomUUID(),
+        lines: [
+          { debit: 100 },
+          { accountId: FIXTURE.revenueId, credit: 100 },
+        ],
+      }),
+    ).rejects.toThrow(/must name an account/);
+  });
+
   it('resolves an account by its stable system key', async () => {
     const entry = await journal.postStandalone({
       description: 'By system key',

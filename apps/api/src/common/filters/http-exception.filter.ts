@@ -47,6 +47,26 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
+    // A FHIR client parses the body as a FHIR resource, so an OperationOutcome
+    // must arrive as the body rather than wrapped in this application's
+    // envelope — a conformant client reading `.issue` would otherwise find
+    // nothing and report the server as broken rather than the request as
+    // invalid (§54).
+    const outcome = message as { resourceType?: string } | undefined;
+    if (outcome && typeof outcome === 'object' && outcome.resourceType === 'OperationOutcome') {
+      if (status >= 500) {
+        this.logger.error(
+          `${request.method} ${request.url} -> ${status}`,
+          exception instanceof Error ? exception.stack : String(exception),
+        );
+      }
+      response
+        .status(status)
+        .type('application/fhir+json')
+        .json(outcome);
+      return;
+    }
+
     if (status >= 500) {
       this.logger.error(
         `${request.method} ${request.url} -> ${status}`,

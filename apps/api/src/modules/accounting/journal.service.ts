@@ -136,6 +136,14 @@ export class JournalService {
       }
       if (debit.isZero() && credit.isZero()) continue;
 
+      // A line naming neither an account nor a system key is a malformed
+      // request, not a server fault: say so with a 400 rather than letting
+      // `where: { systemKey: undefined }` reach Prisma and surface as a 500.
+      if (!line.accountId && !line.systemKey) {
+        throw new BadRequestException(
+          'Every journal line must name an account, by accountId or by systemKey',
+        );
+      }
       const accountId = line.accountId ?? (await this.accountByKey(tx, line.systemKey!)).id;
       resolved.push({
         accountId,
