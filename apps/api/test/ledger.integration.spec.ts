@@ -10,11 +10,12 @@ import { BatchStatus, Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../src/common/prisma/prisma.service';
 import { AuditService } from '../src/common/audit/audit.service';
 import { LedgerService } from '../src/modules/inventory/ledger.service';
+import { CacheService } from '../src/common/cache/cache.service';
 import { FefoService } from '../src/modules/inventory/fefo.service';
 
 const prisma = new PrismaService();
 const audit = new AuditService(prisma);
-const ledger = new LedgerService(prisma, audit);
+const ledger = new LedgerService(prisma, audit, new CacheService());
 const fefo = new FefoService(prisma);
 
 // Fixture ids, so the tests never touch seeded demo data.

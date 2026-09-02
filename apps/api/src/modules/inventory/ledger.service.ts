@@ -7,6 +7,7 @@ import {
 import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { CacheService } from '../../common/cache/cache.service';
 
 export type MovementDirection = 'IN' | 'OUT';
 
@@ -72,6 +73,7 @@ export class LedgerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly cache: CacheService,
   ) {}
 
   private toDecimal(value: number | Prisma.Decimal): Prisma.Decimal {
@@ -227,6 +229,9 @@ export class LedgerService {
         },
       });
     }
+
+    // Stock moved, so any cached dashboard figure is now stale.
+    this.cache.invalidate('dashboard:');
 
     return { transactionId: transaction.id, balanceAfter };
   }

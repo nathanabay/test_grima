@@ -6,6 +6,7 @@ import { BatchService } from '../inventory/batch.service';
 import { SuppliersService } from '../procurement/suppliers.service';
 import { ProcurementService } from '../procurement/procurement.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { IntegrationsService } from '../integrations/integrations.service';
 
 /**
  * Rule engine and scheduled jobs (§58).
@@ -24,7 +25,21 @@ export class RulesService {
     private readonly suppliers: SuppliersService,
     private readonly procurement: ProcurementService,
     private readonly notifications: NotificationsService,
+    private readonly integrations: IntegrationsService,
   ) {}
+
+  /**
+   * Drain the webhook queue (§53). Runs often, because a partner waiting on a
+   * stock event should not wait an hour for it.
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async deliverWebhooks() {
+    const result = await this.integrations.processQueue(100);
+    if (result.sent || result.failed) {
+      this.logger.log(`Webhooks: ${result.sent} delivered, ${result.failed} failed`);
+    }
+    return result;
+  }
 
   /** IF expiry < threshold THEN alert the inventory manager. */
   @Cron(CronExpression.EVERY_DAY_AT_1AM)

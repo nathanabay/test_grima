@@ -143,32 +143,30 @@ scripts/           end-to-end workflow verification
 
 Reported honestly rather than left to be discovered:
 
-- **Per-page translation.** Navigation and app chrome are fully translated into
-  English, Amharic and Afaan Oromo, and the Administration screen shows live
-  coverage. Individual page copy (headings, table labels, button text inside
-  screens) is not yet extracted into the catalogues, so those strings render in
-  English whatever locale is selected.
-- **GS1 DataMatrix rendering.** Label printing emits GS1-128, which carries the
-  same Application Identifiers and scans on the same readers. DataMatrix needs
-  Reed-Solomon ECC200 encoding; rather than ship something that scans
-  inconsistently, it is omitted and the limitation is stated on the label sheet.
-  A QR code is never substituted, per §62/§73.
-- **External notification delivery.** In-app notifications are written and read;
-  the email/SMS/Telegram/WhatsApp adapters are deliberately inert stubs that log
-  and return rather than reporting a delivery that did not happen (§35).
+- **Per-page translation.** Navigation and app chrome are translated into
+  English, Amharic and Afaan Oromo, with live coverage shown in Administration.
+  Individual page copy is not yet extracted into the catalogues, so those
+  strings render in English whatever locale is selected.
+- **GS1 DataMatrix rendering.** Labels emit GS1-128, which carries the same
+  Application Identifiers and scans on the same readers. DataMatrix needs
+  Reed-Solomon ECC200; rather than ship something that scans inconsistently it
+  is omitted and the limitation is stated on the label sheet. A QR code is never
+  substituted, per §62/§73.
+- **External notification delivery.** In-app notifications work end to end. The
+  email/SMS/Telegram/WhatsApp adapters are inert stubs that log and return
+  rather than reporting a delivery that did not happen (§35). Outbound
+  **webhooks are fully implemented** (§53) with HMAC signing and retry.
 - **Automated restore.** Backups are taken, encrypted, verified and pruned, and
-  a backup can be decrypted to a file. Restoring is deliberately left as an
-  operator action at the console with the service stopped — overwriting a live
-  pharmaceutical database from an HTTP endpoint is not a button worth having.
-- **Clinical decision support** (drug interactions, allergy and dose checking).
-  §24 asks for these only as optional external integrations, and explicitly
-  warns against inventing clinical recommendations, so the dispensing checks
-  cover product, strength, quantity, batch, expiry, prescription requirement and
-  stock only.
+  can be decrypted to a file. Restoring is an operator procedure at the console
+  — see [docs/disaster-recovery.md](docs/disaster-recovery.md).
+- **Clinical decision support** (interactions, allergy and dose checking). §24
+  asks for these only as optional external integrations and warns against
+  inventing clinical recommendations, so dispensing checks cover product,
+  strength, quantity, batch, expiry, prescription requirement and stock only.
 - **AI assistant** (§59), which the specification marks optional.
-- **Offline coverage.** The service worker caches the shell and read APIs and
-  queues writes, but only the screens listed in its precache list open fully
-  offline. Queued writes require explicit human review before sending.
+- **Shared cache.** Analytics caching is in-process, so a multi-instance
+  deployment would want Redis behind the same `CacheService` interface. Nothing
+  touching stock is ever cached — those reads go to the ledger under a lock.
 
 ## Verifying the compliance-critical behaviour
 

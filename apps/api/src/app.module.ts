@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuditModule } from './common/audit/audit.module';
+import { AppCacheModule } from './common/cache/cache.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
@@ -30,12 +31,14 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { BackupModule } from './modules/backup/backup.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
   imports: [
     // Infrastructure
     PrismaModule,
     AuditModule,
+    AppCacheModule,
     CommonServicesModule,
     NotificationsModule,
     ScheduleModule.forRoot(),
@@ -61,6 +64,7 @@ import { BackupModule } from './modules/backup/backup.module';
     DocumentsModule,
     WorkflowModule,
     BackupModule,
+    IntegrationsModule,
     JobsModule,
   ],
   providers: [

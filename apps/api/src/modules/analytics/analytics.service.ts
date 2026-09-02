@@ -13,12 +13,14 @@ import {
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { ScopeService } from '../../common/guards/scope.service';
+import { CacheService } from '../../common/cache/cache.service';
 
 @Injectable()
 export class AnalyticsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: ScopeService,
+    private readonly cache: CacheService,
   ) {}
 
   private branchWhere(user: AuthenticatedUser, branchId?: string) {
@@ -26,8 +28,23 @@ export class AnalyticsService {
     return this.scope.isUnscoped(user) ? {} : { branchId: { in: user.branchIds } };
   }
 
-  /** Executive dashboard cards and charts (§36). Every figure is live. */
+  /**
+   * Executive dashboard (§36).
+   *
+   * Cached for 60 seconds per user scope: it reads every balance in the branch,
+   * which is far too heavy to recompute on each page load, and a figure a
+   * minute old is fine for a dashboard. Stock DECISIONS never read this — they
+   * go to the ledger under a lock (§48).
+   */
   async dashboard(user: AuthenticatedUser, branchId?: string) {
+    return this.cache.wrap(
+      `dashboard:${branchId ?? (user.branchIds.join(',') || 'all')}`,
+      60,
+      () => this.computeDashboard(user, branchId),
+    );
+  }
+
+  private async computeDashboard(user: AuthenticatedUser, branchId?: string) {
     const where = this.branchWhere(user, branchId);
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -398,8 +415,17 @@ export class AnalyticsService {
     };
   }
 
-  /** ABC / XYZ classification (§37). */
+  /** ABC / XYZ classification (§37). Cached for 10 minutes: a year of
+   * movements is expensive to scan and the classification barely moves. */
   async abcXyz(user: AuthenticatedUser, months = 12) {
+    return this.cache.wrap(
+      `abcxyz:${user.branchIds.join(',') || 'all'}:${months}`,
+      600,
+      () => this.computeAbcXyz(user, months),
+    );
+  }
+
+  private async computeAbcXyz(user: AuthenticatedUser, months = 12) {
     const since = new Date(Date.now() - months * 30 * 86_400_000);
 
     const movements = await this.prisma.inventoryTransaction.findMany({

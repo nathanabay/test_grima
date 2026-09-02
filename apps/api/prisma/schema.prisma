@@ -1928,6 +1928,49 @@ model BackupRecord {
   @@map("backup_records")
 }
 
+/// Outbound integration endpoints (§53). Domain modules never import a
+/// provider; they publish an event and this layer handles delivery.
+model IntegrationEndpoint {
+  id                  String   @id @default(uuid()) @db.Uuid
+  name                String
+  url                 String
+  description         String?
+  events              String[] @default([])
+  /// HMAC signing secret. Returned once at registration, never read back.
+  secret              String
+  headers             Json?
+  isActive            Boolean  @default(true)
+  consecutiveFailures Int      @default(0)
+  lastDeliveryAt      DateTime?
+  createdById         String?  @db.Uuid
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  deliveries IntegrationDelivery[]
+
+  @@map("integration_endpoints")
+}
+
+model IntegrationDelivery {
+  id             String    @id @default(uuid()) @db.Uuid
+  endpointId     String    @db.Uuid
+  event          String
+  payload        Json
+  status         String    @default("PENDING") // PENDING | RETRYING | DELIVERED | FAILED
+  attempts       Int       @default(0)
+  responseStatus Int?
+  lastError      String?
+  nextAttemptAt  DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  endpoint IntegrationEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([endpointId])
+  @@map("integration_deliveries")
+}
+
 model IdempotencyKey {
   key       String   @id
   scope     String
