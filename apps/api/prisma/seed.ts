@@ -286,6 +286,7 @@ async function main(): Promise<void> {
       price_history, product_barcodes, product_units, products,
       product_categories, manufacturers,
       job_runs, integration_deliveries, integration_endpoints,
+      shipment_package_lines, shipment_packages, warehouse_tasks, pick_waves, docks,
       user_scopes, user_roles, sessions, login_attempts, role_permissions, permissions, roles, users,
       departments, warehouse_locations, warehouses, branches, regions, business_units,
       system_settings, organizations, backup_records
@@ -421,7 +422,8 @@ async function main(): Promise<void> {
   const centralWarehouse = warehouses[0];
   const centralColdRoom = warehouses.find((w) => w.code === 'HO-COLD')!;
 
-  // Storage hierarchy for the central warehouse (§18)
+  // Storage hierarchy for the central warehouse (§18), with the capacity,
+  // storage condition and shelf-edge barcodes that put-away and picking need.
   const room = await prisma.warehouseLocation.create({
     data: { warehouseId: centralWarehouse.id, code: 'RM-A', name: 'Main Store Room A', level: 'ROOM' },
   });
@@ -441,9 +443,116 @@ async function main(): Promise<void> {
           code: `C03-0${i}`,
           name: `Bin C03-0${i}`,
           level: 'BIN',
+          // The first two bins are the pick face; the rest are bulk behind them,
+          // which is what makes pick-face replenishment a real workflow.
+          locationType: i <= 2 ? 'PICKING' : 'BULK',
+          isPickFace: i <= 2,
+          // Base units, so a central-warehouse bin holding 100 boxes of 1,000
+          // tablets is 100,000 — not the couple of thousand a retail shelf holds.
+          capacityUnits: new Prisma.Decimal(i <= 2 ? 100_000 : 75_000),
+          maxWeightKg: new Prisma.Decimal(i <= 2 ? 400 : 300),
+          barcode: `LOC-HO-C03-0${i}`,
+          pickSequence: i,
         },
       }),
     );
+  }
+
+  // Functional areas: goods in, dispatch, staging, quarantine, damaged stock,
+  // returns, recall hold and the controlled-drug cabinet (§5: features 214-220).
+  const areaSeeds = [
+    { code: 'GOODS-IN', name: 'Goods receiving area', type: 'RECEIVING', sequence: 0 },
+    { code: 'DISPATCH', name: 'Dispatch area', type: 'DISPATCH', sequence: 90 },
+    { code: 'STAGING', name: 'Shipment staging', type: 'STAGING', sequence: 91 },
+    { code: 'QUARANTINE', name: 'Quarantine hold', type: 'QUARANTINE', sequence: 95 },
+    { code: 'DAMAGED', name: 'Damaged stock area', type: 'DAMAGED', sequence: 96 },
+    { code: 'RETURNS', name: 'Returned goods store', type: 'RETURNS', sequence: 97 },
+    { code: 'RECALL', name: 'Recall holding area', type: 'RECALL_HOLD', sequence: 98 },
+    { code: 'CD-SAFE', name: 'Controlled drug cabinet', type: 'CONTROLLED', sequence: 99 },
+  ];
+  const areas: Record<string, any> = {};
+  for (const area of areaSeeds) {
+    areas[area.type] = await prisma.warehouseLocation.create({
+      data: {
+        warehouseId: centralWarehouse.id,
+        parentId: room.id,
+        code: area.code,
+        name: area.name,
+        level: 'ZONE',
+        locationType: area.type,
+        barcode: `LOC-HO-${area.code}`,
+        pickSequence: area.sequence,
+        capacityUnits: new Prisma.Decimal(50000),
+      },
+    });
+  }
+
+  // Cold-room bins, so a refrigerated product has somewhere valid to go.
+  const coldBins: any[] = [];
+  for (let i = 1; i <= 3; i++) {
+    coldBins.push(
+      await prisma.warehouseLocation.create({
+        data: {
+          warehouseId: centralColdRoom.id,
+          code: `CR-0${i}`,
+          name: `Cold room bin ${i}`,
+          level: 'BIN',
+          locationType: 'PICKING',
+          storageCondition: 'REFRIGERATED',
+          isPickFace: i === 1,
+          capacityUnits: new Prisma.Decimal(3000),
+          barcode: `LOC-HO-CR-0${i}`,
+          pickSequence: i,
+        },
+      }),
+    );
+  }
+
+  // Loading bays (§5: feature 246).
+  await prisma.dock.createMany({
+    data: [
+      { warehouseId: centralWarehouse.id, code: 'DOCK-1', name: 'Inbound bay 1', direction: 'INBOUND' },
+      { warehouseId: centralWarehouse.id, code: 'DOCK-2', name: 'Outbound bay 1', direction: 'OUTBOUND' },
+      { warehouseId: centralWarehouse.id, code: 'DOCK-3', name: 'Shared bay', direction: 'BOTH' },
+    ],
+  });
+
+  // Every branch store gets a pick face and a back store, so branch-level
+  // put-away and replenishment work the same way as at the central warehouse.
+  const branchLocations = new Map<string, { front: string; back: string }>();
+  for (const warehouse of warehouses) {
+    if (warehouse.id === centralWarehouse.id || warehouse.id === centralColdRoom.id) continue;
+    const front = await prisma.warehouseLocation.create({
+      data: {
+        warehouseId: warehouse.id,
+        code: 'FRONT',
+        name: 'Dispensary shelves',
+        level: 'ZONE',
+        locationType: 'PICKING',
+        isPickFace: true,
+        // Sized against the demo's stock levels so occupancy reads as a real
+        // percentage rather than a permanently over-capacity warning.
+        capacityUnits: new Prisma.Decimal(200_000),
+        barcode: `LOC-${warehouse.code}-FRONT`,
+        pickSequence: 1,
+        storageCondition: warehouse.isColdRoom ? 'REFRIGERATED' : 'ROOM_TEMPERATURE',
+      },
+    });
+    const back = await prisma.warehouseLocation.create({
+      data: {
+        warehouseId: warehouse.id,
+        parentId: front.parentId,
+        code: 'BACK',
+        name: 'Back store',
+        level: 'ZONE',
+        locationType: 'BULK',
+        capacityUnits: new Prisma.Decimal(220_000),
+        barcode: `LOC-${warehouse.code}-BACK`,
+        pickSequence: 5,
+        storageCondition: warehouse.isColdRoom ? 'REFRIGERATED' : 'ROOM_TEMPERATURE',
+      },
+    });
+    branchLocations.set(warehouse.id, { front: front.id, back: back.id });
   }
 
   console.log(
@@ -964,7 +1073,12 @@ async function main(): Promise<void> {
 
         // Expired batches hold no stock: they were swept out already.
         if (!isExpired) {
-          const locationId = warehouse.id === centralWarehouse.id ? pick(bins).id : null;
+          // Central stock is binned; branch stock sits on the dispensary
+          // shelves, with the slower-moving surplus in the back store.
+          const locationId =
+            warehouse.id === centralWarehouse.id
+              ? pick(bins).id
+              : (branchLocations.get(warehouse.id)?.[quantity > 2000 ? 'back' : 'front'] ?? null);
           await prisma.inventoryBalance.create({
             data: {
               productId: product.id,

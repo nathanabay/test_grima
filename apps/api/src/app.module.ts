@@ -33,6 +33,7 @@ import { DocumentsModule } from './modules/documents/documents.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { BackupModule } from './modules/backup/backup.module';
 import { PlatformModule } from './modules/platform/platform.module';
+import { WarehouseModule } from './modules/warehouse/warehouse.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
@@ -70,6 +71,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     IntegrationsModule,
     JobsModule,
     PlatformModule,
+    WarehouseModule,
   ],
   providers: [
     // Global: authenticate, then authorize, then rate-limit. Routes opt out of

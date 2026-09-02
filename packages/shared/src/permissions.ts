@@ -61,6 +61,7 @@ export const RESOURCE_CATALOG: ResourceDefinition[] = [
   { module: 'inventory', resource: 'count', label: 'Stock Counts', actions: CRUD_APPROVE },
   { module: 'inventory', resource: 'expiry', label: 'Expiry Management', actions: REPORTING },
   { module: 'inventory', resource: 'fefo_override', label: 'FEFO Batch Override', actions: ['CREATE'] },
+  { module: 'inventory', resource: 'task', label: 'Warehouse Tasks & Picking', actions: [...CRUD, 'CANCEL'] },
 
   { module: 'dispensing', resource: 'prescription', label: 'Prescriptions', actions: CRUD_APPROVE },
   { module: 'dispensing', resource: 'dispensing', label: 'Dispensing', actions: ['CREATE', 'READ', 'PRINT'] },

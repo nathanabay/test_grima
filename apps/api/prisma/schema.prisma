@@ -434,23 +434,191 @@ model Warehouse {
 
 // Self-referencing hierarchy: Room -> Zone -> Rack -> Shelf -> Bin (§18)
 model WarehouseLocation {
-  id          String   @id @default(uuid()) @db.Uuid
-  warehouseId String   @db.Uuid
-  parentId    String?  @db.Uuid
-  code        String
-  name        String
-  level       String // ROOM | ZONE | RACK | SHELF | BIN
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  id               String           @id @default(uuid()) @db.Uuid
+  warehouseId      String           @db.Uuid
+  parentId         String?          @db.Uuid
+  code             String
+  name             String
+  level            String // ROOM | ZONE | RACK | SHELF | BIN
+  /// What the location is for. Put-away and picking both read this, and stock
+  /// in a non-sellable area (QUARANTINE, DAMAGED, RECALL_HOLD) is never a
+  /// picking candidate.
+  /// GENERAL | PICKING | BULK | RECEIVING | DISPATCH | STAGING | DOCK |
+  /// QUARANTINE | DAMAGED | CONTROLLED | RETURNS | RECALL_HOLD | COLD | FROZEN
+  locationType     String           @default("GENERAL")
+  /// Storage environment this location provides, matched against the product's
+  /// requirement before anything is put away here.
+  storageCondition StorageCondition @default(ROOM_TEMPERATURE)
+  /// Capacity in base units and kilograms. Null means unmetered.
+  capacityUnits    Decimal?         @db.Decimal(18, 4)
+  maxWeightKg      Decimal?         @db.Decimal(18, 4)
+  /// Scannable label on the shelf edge (§5: feature 227).
+  barcode          String?          @unique
+  /// Pick sequence within the zone, so a pick list walks the aisle in order.
+  pickSequence     Int              @default(0)
+  isPickFace       Boolean          @default(false)
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   warehouse Warehouse           @relation(fields: [warehouseId], references: [id])
   parent    WarehouseLocation?  @relation("LocationTree", fields: [parentId], references: [id])
   children  WarehouseLocation[] @relation("LocationTree")
   balances  InventoryBalance[]
+  tasksFrom WarehouseTask[]     @relation("TaskFromLocation")
+  tasksTo   WarehouseTask[]     @relation("TaskToLocation")
 
   @@unique([warehouseId, code])
   @@index([parentId])
+  @@index([warehouseId, locationType])
   @@map("warehouse_locations")
+}
+
+/// A unit of warehouse work: put away this pallet, pick these lines, move
+/// stock from bulk to the pick face, replenish this bin (§5: features 225-249).
+///
+/// One table rather than one per workflow, because they share a lifecycle,
+/// an assignee and a productivity measure — and a storekeeper's queue is one
+/// list, not five.
+model WarehouseTask {
+  id          String @id @default(uuid()) @db.Uuid
+  taskNo      String @unique
+  warehouseId String @db.Uuid
+  branchId    String @db.Uuid
+  /// PUTAWAY | PICK | REPLENISH | MOVE | COUNT | PACK | DISPATCH
+  taskType    String
+  /// PENDING | ASSIGNED | IN_PROGRESS | COMPLETED | CANCELLED | SHORT
+  status      String @default("PENDING")
+  priority    Int    @default(50)
+
+  productId           String? @db.Uuid
+  batchId             String? @db.Uuid
+  fromLocationId      String? @db.Uuid
+  toLocationId        String? @db.Uuid
+  /// Where the system recommended the stock should go, kept alongside where it
+  /// actually went so directed put-away can be measured rather than assumed.
+  suggestedLocationId String? @db.Uuid
+
+  quantity     Decimal @default(0) @db.Decimal(18, 4)
+  quantityDone Decimal @default(0) @db.Decimal(18, 4)
+
+  /// The document that caused the work: GOODS_RECEIPT | TRANSFER | SALE |
+  /// PRESCRIPTION | COUNT | REPLENISHMENT
+  referenceType String?
+  referenceId   String? @db.Uuid
+  waveId        String? @db.Uuid
+
+  assignedToId  String?   @db.Uuid
+  assignedAt    DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  completedById String?   @db.Uuid
+  notes         String?
+  shortReason   String?
+
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  fromLocation WarehouseLocation? @relation("TaskFromLocation", fields: [fromLocationId], references: [id])
+  toLocation   WarehouseLocation? @relation("TaskToLocation", fields: [toLocationId], references: [id])
+  wave         PickWave?          @relation(fields: [waveId], references: [id])
+
+  @@index([warehouseId, status])
+  @@index([assignedToId, status])
+  @@index([taskType, status])
+  @@index([waveId])
+  @@index([referenceType, referenceId])
+  @@map("warehouse_tasks")
+}
+
+/// A batch of picking work released to the floor together (§5: features 238-240).
+model PickWave {
+  id          String    @id @default(uuid()) @db.Uuid
+  waveNo      String    @unique
+  warehouseId String    @db.Uuid
+  /// WAVE | ZONE | BATCH — how the lines were grouped.
+  strategy    String    @default("WAVE")
+  /// PLANNED | RELEASED | PICKING | PICKED | PACKED | DISPATCHED | CANCELLED
+  status      String    @default("PLANNED")
+  /// Set for a zone wave.
+  zoneId      String?   @db.Uuid
+  releasedAt  DateTime?
+  completedAt DateTime?
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tasks    WarehouseTask[]
+  packages ShipmentPackage[]
+
+  @@index([warehouseId, status])
+  @@map("pick_waves")
+}
+
+/// A packed carton and its verification (§5: features 242-245).
+model ShipmentPackage {
+  id                String    @id @default(uuid()) @db.Uuid
+  packageNo         String    @unique
+  warehouseId       String    @db.Uuid
+  waveId            String?   @db.Uuid
+  /// TRANSFER | SALE | RETURN
+  referenceType     String?
+  referenceId       String?   @db.Uuid
+  /// PACKING | PACKED | VERIFIED | STAGED | DISPATCHED | CANCELLED
+  status            String    @default("PACKING")
+  weightKg          Decimal?  @db.Decimal(18, 4)
+  sealNumber        String?
+  /// Where the package waits between packing and collection.
+  stagingLocationId String?   @db.Uuid
+  dockId            String?   @db.Uuid
+  packedById        String?   @db.Uuid
+  packedAt          DateTime?
+  verifiedById      String?   @db.Uuid
+  verifiedAt        DateTime?
+  dispatchedAt      DateTime?
+  /// Cold-chain shipments record the temperature the box left at.
+  departureTempC    Decimal?  @db.Decimal(6, 2)
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  wave  PickWave?             @relation(fields: [waveId], references: [id])
+  lines ShipmentPackageLine[]
+
+  @@index([warehouseId, status])
+  @@index([referenceType, referenceId])
+  @@map("shipment_packages")
+}
+
+model ShipmentPackageLine {
+  id               String  @id @default(uuid()) @db.Uuid
+  packageId        String  @db.Uuid
+  productId        String  @db.Uuid
+  batchId          String? @db.Uuid
+  quantity         Decimal @db.Decimal(18, 4)
+  /// Set once the line has been scanned during packing verification.
+  verifiedQuantity Decimal @default(0) @db.Decimal(18, 4)
+
+  package ShipmentPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+  @@map("shipment_package_lines")
+}
+
+/// A loading bay (§5: feature 246).
+model Dock {
+  id          String   @id @default(uuid()) @db.Uuid
+  warehouseId String   @db.Uuid
+  code        String
+  name        String
+  /// INBOUND | OUTBOUND | BOTH
+  direction   String   @default("BOTH")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@unique([warehouseId, code])
+  @@map("docks")
 }
 
 // ============================================================
@@ -1139,6 +1307,14 @@ model StockReservation {
   productId     String    @db.Uuid
   batchId       String    @db.Uuid
   warehouseId   String    @db.Uuid
+  /// The exact inventory_balances row this reservation incremented.
+  ///
+  /// Balances are keyed by product + batch + warehouse + location, so one batch
+  /// in two bins has two rows. Without this, reserving and releasing each
+  /// picked a row with findFirst and could touch different ones, leaving the
+  /// reserved figure drifting. Nullable only for rows written before this
+  /// column existed; those fall back to the old lookup.
+  balanceId     String?   @db.Uuid
   quantity      Decimal   @db.Decimal(18, 4)
   referenceType String
   referenceId   String    @db.Uuid

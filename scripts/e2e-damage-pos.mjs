@@ -21,9 +21,16 @@ const branch = org.branches.find(b => b.id === cashierMe.branchIds[0]);
 const wh = branch.warehouses.find(w => !w.isColdRoom);
 
 console.log('\n===== §31 DAMAGED STOCK =====\n');
-const stock = (await admin(`GET`, `/inventory/balances?warehouseId=${wh.id}&pageSize=50`)).body.data
+// A batch can sit in more than one bin, so "the stock" is the sum of its
+// balance rows in this warehouse, not whichever row happens to come back first.
+const batchTotal = async (batchId) => {
+  const rows = (await admin('GET', `/inventory/balances?warehouseId=${wh.id}&pageSize=200`)).body.data;
+  return rows.filter((b) => b.batch?.id === batchId).reduce((sum, b) => sum + Number(b.onHand), 0);
+};
+
+const stock = (await admin(`GET`, `/inventory/balances?warehouseId=${wh.id}&pageSize=200`)).body.data
   .find(b => b.batch && Number(b.onHand) > 100 && ['AVAILABLE','RELEASED'].includes(b.batch.status));
-const before = Number(stock.onHand);
+const before = await batchTotal(stock.batch.id);
 
 const noReason = await qa('POST','/quality-incidents'.replace('quality-incidents','damage-reports'), {
   productId: stock.productId, batchId: stock.batch.id, warehouseId: wh.id, branchId: branch.id,
@@ -37,8 +44,7 @@ const dmg = await qa('POST','/damage-reports', {
 });
 check('damage reported', dmg.ok, `${dmg.body.reportNo} value ${dmg.body.totalValue}`);
 
-const after = (await admin(`GET`, `/inventory/balances?warehouseId=${wh.id}&pageSize=50`)).body.data
-  .find(b => b.batch?.id === stock.batch.id);
+const after = { onHand: await batchTotal(stock.batch.id) };
 check('damaged units LEFT sellable stock immediately', Number(after.onHand) === before - 25,
   `${before} -> ${Number(after.onHand)}`);
 
@@ -47,8 +53,7 @@ check('rejecting a damage report without a reason is refused', !rejectNoReason.o
 
 const rejected = await qa('POST', `/damage-reports/${dmg.body.id}/verify`, { decision:'REJECT', notes:'Outer carton only; product intact on inspection' });
 check('rejection returns the units to stock', rejected.ok);
-const restored = (await admin(`GET`, `/inventory/balances?warehouseId=${wh.id}&pageSize=50`)).body.data
-  .find(b => b.batch?.id === stock.batch.id);
+const restored = { onHand: await batchTotal(stock.batch.id) };
 check('stock is back where it was', Number(restored.onHand) === before, `${Number(restored.onHand)} of ${before}`);
 
 const dmg2 = await qa('POST','/damage-reports', {

@@ -354,4 +354,39 @@ describe('Audit trail (§42)', () => {
     });
     expect((await audit.verifyChain()).valid).toBe(true);
   });
+
+  it('verifies a payload carrying Decimals, Dates and nested objects', async () => {
+    // A Prisma Decimal is an object in memory and a string in jsonb. Hashing
+    // the in-memory shape produced a chain that could never verify, on rows
+    // nobody had touched -- which would make a real tamper indistinguishable
+    // from a false alarm.
+    await audit.record({
+      module: 'test',
+      action: 'EDIT',
+      entityType: 'Test',
+      entityId: FIXTURE.productId,
+      previousValue: { unitPrice: new Prisma.Decimal('12.3400'), qty: new Prisma.Decimal(5) },
+      newValue: {
+        unitPrice: new Prisma.Decimal('99.9999'),
+        effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+        nested: { deep: { value: new Prisma.Decimal('0.15') } },
+        list: [new Prisma.Decimal(1), new Prisma.Decimal(2)],
+      },
+    });
+
+    const result = await audit.verifyChain();
+    expect(result.valid).toBe(true);
+  });
+
+  it('verifies a payload whose keys were written out of order', async () => {
+    await audit.record({
+      module: 'test',
+      action: 'EDIT',
+      entityType: 'Test',
+      entityId: FIXTURE.productId,
+      newValue: { zebra: 1, alpha: 2, middle: { yankee: 3, bravo: 4 } },
+    });
+
+    expect((await audit.verifyChain()).valid).toBe(true);
+  });
 });

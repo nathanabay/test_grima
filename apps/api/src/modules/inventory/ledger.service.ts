@@ -156,14 +156,68 @@ export class LedgerService {
       }
     }
 
-    const balance = await tx.inventoryBalance.findFirst({
+    // Balances are keyed by product + batch + warehouse + location, so a
+    // caller that names a location gets exactly that row.
+    let resolvedLocationId = input.locationId ?? null;
+    let balance = await tx.inventoryBalance.findFirst({
       where: {
         productId: input.productId,
         batchId: input.batchId ?? null,
         warehouseId: input.warehouseId,
-        locationId: input.locationId ?? null,
+        locationId: resolvedLocationId,
       },
     });
+
+    // A caller that does not care about bins -- damage, adjustment, disposal --
+    // still has to take the stock out of a real one. Stock is often not on the
+    // warehouse-level row at all: it is sitting in a bin. Rather than report
+    // zero available while the shelf is full, resolve the location holding it.
+    //
+    // Ambiguity is refused rather than guessed: taking stock out of whichever
+    // bin happened to sort first would make the ledger disagree with the shelf.
+    const needsResolution =
+      !input.locationId &&
+      input.direction === 'OUT' &&
+      (!balance || balance.onHand.lessThan(quantity));
+
+    if (needsResolution) {
+      const holding = await tx.inventoryBalance.findMany({
+        where: {
+          productId: input.productId,
+          batchId: input.batchId ?? null,
+          warehouseId: input.warehouseId,
+          onHand: { gt: 0 },
+        },
+        include: { location: { select: { code: true } } },
+      });
+
+      const sufficient = holding.filter((h) => h.onHand.greaterThanOrEqualTo(quantity));
+
+      if (sufficient.length === 1) {
+        balance = sufficient[0];
+        resolvedLocationId = sufficient[0].locationId;
+      } else if (sufficient.length > 1) {
+        throw new ConflictException(
+          `${quantity.toString()} unit(s) could come from ${sufficient.length} locations ` +
+            `(${sufficient.map((h) => h.location?.code ?? 'unlocated').join(', ')}). ` +
+            `Name the location this movement is taken from.`,
+        );
+      } else if (holding.length > 1) {
+        const total = holding.reduce((sum, h) => sum.plus(h.onHand), new Prisma.Decimal(0));
+        throw new ConflictException(
+          `No single location holds ${quantity.toString()} unit(s); the stock is split across ` +
+            `${holding.length} location(s) totalling ${total.toString()}. ` +
+            `Move it together or post one movement per location.`,
+        );
+      } else if (holding.length === 1) {
+        // One location, and it simply does not hold enough. Fall through to the
+        // ordinary insufficient-stock path so the caller gets that reason
+        // rather than a confusing note about a split that does not exist -- and
+        // so the negative-stock setting still governs.
+        balance = holding[0];
+        resolvedLocationId = holding[0].locationId;
+      }
+    }
 
     const current = balance?.onHand ?? new Prisma.Decimal(0);
     const delta = input.direction === 'IN' ? quantity : quantity.negated();
@@ -196,7 +250,7 @@ export class LedgerService {
         productId: input.productId,
         batchId: input.batchId ?? null,
         warehouseId: input.warehouseId,
-        locationId: input.locationId ?? null,
+        locationId: resolvedLocationId,
         branchId: input.branchId,
         quantityIn: input.direction === 'IN' ? quantity : new Prisma.Decimal(0),
         quantityOut: input.direction === 'OUT' ? quantity : new Prisma.Decimal(0),
@@ -222,7 +276,7 @@ export class LedgerService {
           productId: input.productId,
           batchId: input.batchId ?? null,
           warehouseId: input.warehouseId,
-          locationId: input.locationId ?? null,
+          locationId: resolvedLocationId,
           branchId: input.branchId,
           onHand: balanceAfter,
           lastMovementAt: new Date(),
@@ -277,6 +331,9 @@ export class LedgerService {
         batchId: input.batchId,
         warehouseId: input.warehouseId,
       },
+      // Deterministic, so two calls never pick different rows for one batch
+      // that is split across bins.
+      orderBy: { id: 'asc' },
     });
     if (!balance) throw new ConflictException('No stock position exists to reserve against');
 
@@ -297,6 +354,8 @@ export class LedgerService {
         productId: input.productId,
         batchId: input.batchId,
         warehouseId: input.warehouseId,
+        // Recorded so the release decrements the same row this incremented.
+        balanceId: balance.id,
         quantity,
         referenceType: input.referenceType,
         referenceId: input.referenceId,
@@ -322,13 +381,18 @@ export class LedgerService {
         reservation.warehouseId,
         reservation.batchId,
       );
-      const balance = await tx.inventoryBalance.findFirst({
-        where: {
-          productId: reservation.productId,
-          batchId: reservation.batchId,
-          warehouseId: reservation.warehouseId,
-        },
-      });
+      // Prefer the row the reservation actually incremented. The lookup below
+      // is only for reservations written before balanceId existed.
+      const balance = reservation.balanceId
+        ? await tx.inventoryBalance.findUnique({ where: { id: reservation.balanceId } })
+        : await tx.inventoryBalance.findFirst({
+            where: {
+              productId: reservation.productId,
+              batchId: reservation.batchId,
+              warehouseId: reservation.warehouseId,
+            },
+            orderBy: { id: 'asc' },
+          });
       if (balance) {
         const next = balance.reserved.minus(reservation.quantity);
         await tx.inventoryBalance.update({

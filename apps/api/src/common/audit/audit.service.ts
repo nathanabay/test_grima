@@ -31,18 +31,31 @@ export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Stable JSON: object keys sorted recursively.
+   * Canonical form of a value: what PostgreSQL will hand back when this row is
+   * read again.
    *
-   * PostgreSQL `jsonb` does not preserve key order, so a value written as
-   * {requestNo, lines} reads back as {lines, requestNo}. Hashing the raw
-   * JSON.stringify output would therefore fail to verify on every row that
-   * carries a JSON payload. Canonicalizing first makes the hash independent of
-   * key order.
+   * The hash has to be computed over the stored shape, not the in-memory one,
+   * or verification fails on rows that were perfectly intact:
+   *
+   * - `jsonb` does not preserve key order, so {requestNo, lines} reads back as
+   *   {lines, requestNo}. Keys are sorted recursively.
+   * - A Prisma `Decimal` is an object in memory but is stored and read back as
+   *   a JSON number, so a payload carrying a price or a quantity would hash
+   *   over the Decimal's internals and never verify. Decimals are reduced to
+   *   the number jsonb will return, which also normalises trailing zeros the
+   *   same way Postgres does (12.3400 and 12.34 hash identically).
+   * - `BigInt` cannot be serialized by JSON.stringify at all and would throw.
+   * - Dates round-trip as ISO strings.
    */
   private canonicalize(value: unknown): unknown {
-    if (value === null || typeof value !== 'object') return value;
-    if (Array.isArray(value)) return value.map((v) => this.canonicalize(v));
+    if (value === null || value === undefined) return value ?? null;
+    if (typeof value === 'bigint') return value.toString();
+    if (typeof value !== 'object') return value;
     if (value instanceof Date) return value.toISOString();
+    if (Prisma.Decimal.isDecimal(value)) return Number(value.toString());
+    if (Array.isArray(value)) return value.map((v) => this.canonicalize(v));
+    if (Buffer.isBuffer(value)) return value.toString('base64');
+
     return Object.keys(value as Record<string, unknown>)
       .sort()
       .reduce<Record<string, unknown>>((acc, key) => {
