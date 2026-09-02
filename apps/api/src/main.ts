@@ -1,4 +1,10 @@
 import 'reflect-metadata';
+import { loadEnv } from './common/config/env';
+
+// Before anything reads process.env: the repository keeps one .env at its root
+// and each workspace package runs from its own directory (§65).
+loadEnv(__dirname);
+
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { daysUntil } from '@pharmacore/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -7,6 +7,7 @@ import { SuppliersService } from '../procurement/suppliers.service';
 import { ProcurementService } from '../procurement/procurement.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { IntegrationsService } from '../integrations/integrations.service';
+import { JobRunnerService } from './job-runner.service';
 
 /**
  * Rule engine and scheduled jobs (§58).
@@ -16,7 +17,7 @@ import { IntegrationsService } from '../integrations/integrations.service';
  * decisions (§12, §29).
  */
 @Injectable()
-export class RulesService {
+export class RulesService implements OnModuleInit {
   private readonly logger = new Logger(RulesService.name);
 
   constructor(
@@ -26,14 +27,63 @@ export class RulesService {
     private readonly procurement: ProcurementService,
     private readonly notifications: NotificationsService,
     private readonly integrations: IntegrationsService,
+    private readonly runner: JobRunnerService,
   ) {}
+
+  /**
+   * Register every rule with the job runner so each execution is recorded and
+   * can be re-run on demand from the administration screen (§64).
+   */
+  onModuleInit(): void {
+    this.runner.register({
+      key: 'webhooks.deliver',
+      label: 'Deliver queued webhooks',
+      description: 'Drains the outbound integration queue and retries failed deliveries.',
+      schedule: 'Every minute',
+      run: () => this.runDeliverWebhooks(),
+    });
+    this.runner.register({
+      key: 'expiry.alerts',
+      label: 'Expiry alerts',
+      description: 'Notifies on stock approaching expiry, escalating as the date nears.',
+      schedule: 'Daily at 01:00',
+      run: () => this.runExpiryAlerts(),
+    });
+    this.runner.register({
+      key: 'expiry.sweep',
+      label: 'Expiry sweep',
+      description: 'Marks expired batches and removes them from available stock.',
+      schedule: 'Daily at 02:00',
+      run: () => this.runExpirySweep(),
+    });
+    this.runner.register({
+      key: 'supplier.scores',
+      label: 'Supplier scoring',
+      description: 'Recomputes supplier KPIs and reports overdue purchase orders.',
+      schedule: 'Daily at 03:00',
+      run: () => this.runSupplierScores(),
+    });
+    this.runner.register({
+      key: 'stock.lowStockAlerts',
+      label: 'Low stock alerts',
+      description: 'Raises replenishment recommendations for stock at or below its reorder point.',
+      schedule: 'Daily at 06:00',
+      run: () => this.runLowStockAlerts(),
+    });
+    this.runner.register({
+      key: 'documents.expiryAlerts',
+      label: 'Licence and document expiry',
+      description: 'Announces supplier licences and stored documents approaching expiry.',
+      schedule: 'Daily at 07:00',
+      run: () => this.runDocumentExpiryAlerts(),
+    });
+  }
 
   /**
    * Drain the webhook queue (§53). Runs often, because a partner waiting on a
    * stock event should not wait an hour for it.
    */
-  @Cron(CronExpression.EVERY_MINUTE)
-  async deliverWebhooks() {
+  async runDeliverWebhooks() {
     const result = await this.integrations.processQueue(100);
     if (result.sent || result.failed) {
       this.logger.log(`Webhooks: ${result.sent} delivered, ${result.failed} failed`);
@@ -42,8 +92,7 @@ export class RulesService {
   }
 
   /** IF expiry < threshold THEN alert the inventory manager. */
-  @Cron(CronExpression.EVERY_DAY_AT_1AM)
-  async expiryAlerts(): Promise<{ alerted: number }> {
+  async runExpiryAlerts(): Promise<{ alerted: number }> {
     const horizon = new Date(Date.now() + 90 * 86_400_000);
     const balances = await this.prisma.inventoryBalance.findMany({
       where: {
@@ -91,8 +140,7 @@ export class RulesService {
   }
 
   /** Move expired stock out of available inventory. */
-  @Cron(CronExpression.EVERY_DAY_AT_2AM)
-  async expirySweep() {
+  async runExpirySweep() {
     const result = await this.batches.processExpiredBatches();
     if (result.batchesExpired > 0) {
       await this.notifications.emit({
@@ -111,8 +159,7 @@ export class RulesService {
   }
 
   /** IF stock <= reorder level THEN create a replenishment recommendation. */
-  @Cron(CronExpression.EVERY_DAY_AT_6AM)
-  async lowStockAlerts() {
+  async runLowStockAlerts() {
     const recommendations = await this.procurement.replenishmentRecommendations();
     if (!recommendations.length) return { alerted: 0 };
 
@@ -137,8 +184,7 @@ export class RulesService {
   }
 
   /** IF supplier delivery late THEN update the supplier performance score. */
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
-  async supplierScores() {
+  async runSupplierScores() {
     const result = await this.suppliers.recomputeAllScores();
 
     const late = await this.prisma.purchaseOrder.findMany({
@@ -169,8 +215,7 @@ export class RulesService {
   }
 
   /** Supplier licence and document expiry alerts (§44). */
-  @Cron(CronExpression.EVERY_DAY_AT_7AM)
-  async documentExpiryAlerts() {
+  async runDocumentExpiryAlerts() {
     const soon = new Date(Date.now() + 60 * 86_400_000);
 
     const [suppliers, documents] = await Promise.all([
@@ -197,5 +242,39 @@ export class RulesService {
     }
 
     return { suppliers: suppliers.length, documents: documents.length };
+  }
+
+  // ---- Scheduled entry points ----
+  // Each records a JobRun, so a job that stopped firing is visible on the
+  // system health screen instead of being assumed healthy (§64).
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async deliverWebhooksCron() {
+    return this.runner.execute('webhooks.deliver');
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async expiryAlertsCron() {
+    return this.runner.execute('expiry.alerts');
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  async expirySweepCron() {
+    return this.runner.execute('expiry.sweep');
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async supplierScoresCron() {
+    return this.runner.execute('supplier.scores');
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_6AM)
+  async lowStockAlertsCron() {
+    return this.runner.execute('stock.lowStockAlerts');
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_7AM)
+  async documentExpiryAlertsCron() {
+    return this.runner.execute('documents.expiryAlerts');
   }
 }

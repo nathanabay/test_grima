@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { PrismaModule } from './common/prisma/prisma.module';
+import { AppConfigModule } from './common/config/config.module';
 import { AuditModule } from './common/audit/audit.module';
 import { AppCacheModule } from './common/cache/cache.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -31,12 +32,14 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { BackupModule } from './modules/backup/backup.module';
+import { PlatformModule } from './modules/platform/platform.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
   imports: [
     // Infrastructure
     PrismaModule,
+    AppConfigModule,
     AuditModule,
     AppCacheModule,
     CommonServicesModule,
@@ -66,6 +69,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     BackupModule,
     IntegrationsModule,
     JobsModule,
+    PlatformModule,
   ],
   providers: [
     // Global: authenticate, then authorize, then rate-limit. Routes opt out of

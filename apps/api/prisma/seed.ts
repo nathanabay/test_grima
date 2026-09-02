@@ -10,6 +10,11 @@
  * so demos and tests are reproducible.
  */
 
+import { loadEnv } from '../src/common/config/env';
+
+// The seed runs from apps/api while .env lives at the repository root (§65).
+loadEnv(__dirname);
+
 import { PrismaClient, Prisma, BatchStatus, PaymentMethod } from '@prisma/client';
 import * as argon2 from 'argon2';
 import {
