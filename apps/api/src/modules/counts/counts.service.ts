@@ -7,10 +7,14 @@ import { ScopeService } from '../../common/guards/scope.service';
 import { LedgerService } from '../inventory/ledger.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
 import { ScanningService } from '../scanning/scanning.service';
+import { ConfigService } from '../../common/config/config.service';
 
 /** Variance above this needs a supervisor to approve the adjustment (§21). */
-const SUPERVISOR_THRESHOLD_UNITS = 10;
-const SUPERVISOR_THRESHOLD_VALUE = 1000;
+/**
+ * These used to be constants here. They are pharmacy policy, not code, so they
+ * are read from the settings catalogue (§65) - count.tolerancePercent and
+ * count.escalationValue on the System configuration screen.
+ */
 
 /**
  * Physical inventory counts and adjustments (§21).
@@ -28,6 +32,7 @@ export class CountsService {
     private readonly docNumbers: DocumentNumberService,
     private readonly scope: ScopeService,
     private readonly scanning: ScanningService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -218,6 +223,11 @@ export class CountsService {
       throw new BadRequestException('This count has already been posted');
     }
 
+    const tolerancePercent = await this.config.getNumber('count.tolerancePercent');
+    const escalationValue = new Prisma.Decimal(
+      await this.config.getNumber('count.escalationValue'),
+    );
+
     await this.prisma.$transaction(async (tx) => {
       for (const line of lines) {
         const item = count.items.find((i) => i.id === line.itemId);
@@ -232,9 +242,15 @@ export class CountsService {
         });
         const varianceValue = variance.times(product.averageCost);
 
-        const requiresApproval =
-          variance.abs().greaterThan(SUPERVISOR_THRESHOLD_UNITS) ||
-          varianceValue.abs().greaterThan(SUPERVISOR_THRESHOLD_VALUE);
+        // Percentage of the system quantity, so a variance of 5 means something
+        // different on a shelf of 20 than on a shelf of 20,000. A system
+        // quantity of zero with anything counted is always outside tolerance:
+        // stock that should not exist has to be looked at.
+        const systemQty = new Prisma.Decimal(item.systemQty);
+        const overPercentage = systemQty.isZero()
+          ? !variance.isZero()
+          : variance.abs().dividedBy(systemQty).times(100).greaterThan(tolerancePercent);
+        const requiresApproval = overPercentage || varianceValue.abs().greaterThan(escalationValue);
 
         await tx.stockCountItem.update({
           where: { id: item.id },
@@ -379,12 +395,24 @@ export class CountsService {
       warehouseId: string;
       branchId: string;
       reason: string;
+      /**
+       * When the correction actually applies, for stock found short on a
+       * Friday and keyed in on the Monday. The ledger enforces how far back
+       * this may reach (inventory.backdateLimitDays) and whether it may reach
+       * forward at all.
+       */
+      occurredAt?: string | Date;
       items: Array<{ productId: string; batchId: string; quantityDelta: number; reason?: string }>;
     },
     user: AuthenticatedUser,
   ) {
     if (!data.reason?.trim()) throw new BadRequestException('An adjustment reason is required');
     if (!data.items?.length) throw new BadRequestException('Nothing to adjust');
+
+    const occurredAt = data.occurredAt ? new Date(data.occurredAt) : undefined;
+    if (occurredAt && Number.isNaN(occurredAt.getTime())) {
+      throw new BadRequestException('The adjustment date is not a valid date');
+    }
 
     const adjustment = await this.prisma.$transaction(async (tx) => {
       const adjustmentNo = await this.docNumbers.next(tx, 'ADJ');
@@ -427,6 +455,7 @@ export class CountsService {
           performedById: user.id,
           allowBlockedStatus: true,
           idempotencyKey: `adj:${created.id}:${item.id}`,
+          occurredAt,
         });
       }
 

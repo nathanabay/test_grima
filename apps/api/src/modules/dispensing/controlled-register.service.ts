@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { ConfigService } from '../../common/config/config.service';
 import { AuthenticatedUser } from '../../common/decorators';
 
 export interface RegisterEntryInput {
@@ -30,6 +31,7 @@ export class ControlledRegisterService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly config: ConfigService,
   ) {}
 
   async record(tx: Prisma.TransactionClient, input: RegisterEntryInput) {
@@ -43,6 +45,19 @@ export class ControlledRegisterService {
     const quantityIn = new Prisma.Decimal(input.quantityIn ?? 0);
     const quantityOut = new Prisma.Decimal(input.quantityOut ?? 0);
     const runningBalance = previous.plus(quantityIn).minus(quantityOut);
+
+    // §65: some jurisdictions require a second person to witness every
+    // controlled movement. Where that is switched on, an entry without a
+    // witness is refused rather than recorded and chased afterwards.
+    if (
+      !input.witnessedById &&
+      (await this.config.getBoolean('controlled.requireDualAuthorization'))
+    ) {
+      throw new BadRequestException(
+        'A controlled register entry needs a second person to witness it ' +
+          '(controlled.requireDualAuthorization is on).',
+      );
+    }
 
     if (runningBalance.lessThan(0)) {
       throw new BadRequestException(
@@ -169,14 +184,26 @@ export class ControlledRegisterService {
     const physicalBalance = physical._sum.onHand ?? new Prisma.Decimal(0);
     const variance = physicalBalance.minus(registerBalance);
 
+    // Most jurisdictions run controlled stock at zero tolerance, which is the
+    // default; the setting exists for those that allow a stated allowance for
+    // measurable forms such as liquids (§65).
+    const tolerance = new Prisma.Decimal(
+      await this.config.getNumber('controlled.varianceTolerance'),
+    );
+    const withinTolerance = variance.abs().lessThanOrEqualTo(tolerance);
+
     return {
       productId,
       branchId,
       registerBalance,
       physicalBalance,
       variance,
+      tolerance,
       reconciled: variance.equals(0),
-      requiresInvestigation: !variance.equals(0),
+      withinTolerance,
+      // A variance inside a stated allowance still gets recorded; it just does
+      // not stop the day. Anything outside it has to be investigated.
+      requiresInvestigation: !withinTolerance,
     };
   }
 }

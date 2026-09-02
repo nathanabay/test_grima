@@ -9,6 +9,7 @@ import { evaluateConditions, readField, ConditionGroup } from '@pharmacore/share
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { ScopeService } from '../../common/guards/scope.service';
+import { ConfigService } from '../../common/config/config.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { REPORT_SOURCES, ReportColumn, SOURCES_BY_KEY } from './report-sources';
 
@@ -43,6 +44,7 @@ export class ReportBuilderService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly scope: ScopeService,
+    private readonly config: ConfigService,
   ) {}
 
   /** The catalogue, filtered to what this user may actually read. */
@@ -100,6 +102,14 @@ export class ReportBuilderService {
   }
 
   async run(definition: ReportDefinition, user: AuthenticatedUser) {
+    // §65: turning the builder off has to stop reports running, not just hide
+    // the screen. The built-in reports are unaffected.
+    if (!(await this.config.isEnabled('feature.reportBuilder'))) {
+      throw new BadRequestException(
+        'The custom report builder is turned off (feature.reportBuilder).',
+      );
+    }
+
     const source = SOURCES_BY_KEY.get(definition.dataSource);
     if (!source) {
       throw new BadRequestException(

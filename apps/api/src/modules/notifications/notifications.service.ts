@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotificationChannel, NotificationSeverity, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { ConfigService } from '../../common/config/config.service';
 
 export interface EmitNotification {
   eventType: string;
@@ -26,7 +27,33 @@ export interface EmitNotification {
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
+
+  /**
+   * The feature flag that governs a channel (§65).
+   *
+   * A flag that does not gate anything is worse than no flag: an administrator
+   * turns a channel off, the screen agrees it is off, and messages keep going
+   * out. IN_APP has no flag because switching off the notification centre would
+   * leave alerts nowhere to land.
+   */
+  private flagFor(channel: NotificationChannel): string | null {
+    switch (channel) {
+      case NotificationChannel.EMAIL:
+        return 'feature.emailNotifications';
+      case NotificationChannel.SMS:
+        return 'feature.smsNotifications';
+      case NotificationChannel.TELEGRAM:
+        return 'feature.telegramNotifications';
+      case NotificationChannel.WHATSAPP:
+        return 'feature.whatsappNotifications';
+      default:
+        return null;
+    }
+  }
 
   /** Resolve which channels a rule wants for this event. */
   private async resolveChannels(
@@ -105,6 +132,17 @@ export class NotificationsService {
     channel: NotificationChannel,
     input: EmitNotification,
   ): Promise<void> {
+    const flag = this.flagFor(channel);
+    if (flag && !(await this.config.isEnabled(flag))) {
+      // Recorded rather than dropped, so a message that was deliberately not
+      // sent is still visible and does not look like a silent failure.
+      await this.recordDelivery(channel, input, {
+        delivered: false,
+        error: `${flag} is turned off, so this channel is disabled`,
+      });
+      return;
+    }
+
     const provider = this.providerFor(channel);
 
     if (!provider.configured) {

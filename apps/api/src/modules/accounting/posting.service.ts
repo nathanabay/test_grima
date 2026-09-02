@@ -369,6 +369,13 @@ export class PostingService {
     const posted = { movements: 0, sales: 0, invoices: 0, payments: 0, skipped: 0, failed: 0 };
     const errors: { type: string; id: string; error: string }[] = [];
 
+    // §65: a pharmacy that keeps its books elsewhere turns this off, and
+    // nothing should then be posted. The documents stay in the unposted queue,
+    // so turning it back on catches up rather than losing the history.
+    if (!(await this.config.isEnabled('feature.accountingJournals'))) {
+      return { ...posted, errors, skippedReason: 'feature.accountingJournals is turned off' };
+    }
+
     // Only what is actually outstanding is fetched.
     //
     // Selecting the oldest `limit` documents and filtering the posted ones out

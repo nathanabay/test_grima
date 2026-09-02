@@ -752,7 +752,11 @@ export class PosService {
     const variance = new Prisma.Decimal(actualCash).minus(expected);
 
     // §46: a material variance must be explained before the shift can close.
-    if (variance.abs().greaterThan(new Prisma.Decimal(50)) && !varianceReason?.trim()) {
+    // What counts as material is pharmacy policy, so it is configured (§65).
+    const varianceTolerance = new Prisma.Decimal(
+      await this.config.getNumber('pos.cashVarianceTolerance'),
+    );
+    if (variance.abs().greaterThan(varianceTolerance) && !varianceReason?.trim()) {
       throw new BadRequestException(
         `Cash variance of ${variance.toFixed(2)} requires an explanation before closing`,
       );

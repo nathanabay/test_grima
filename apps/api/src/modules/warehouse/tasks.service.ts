@@ -12,6 +12,7 @@ import { DocumentNumberService } from '../common-services/document-number.servic
 import { LedgerService } from '../inventory/ledger.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { LocationsService } from './locations.service';
+import { ConfigService } from '../../common/config/config.service';
 
 const OPEN_STATUSES = ['PENDING', 'ASSIGNED', 'IN_PROGRESS'];
 
@@ -32,6 +33,7 @@ export class WarehouseTasksService {
     private readonly docNumbers: DocumentNumberService,
     private readonly ledger: LedgerService,
     private readonly locations: LocationsService,
+    private readonly config: ConfigService,
   ) {}
 
   async list(filter: {
@@ -133,6 +135,14 @@ export class WarehouseTasksService {
    * directed put-away can be measured rather than assumed.
    */
   async generatePutawayTasks(goodsReceiptId: string, user: AuthenticatedUser) {
+    // §65: with directed put-away off, no task is raised and the storekeeper
+    // puts stock away as they see fit. The flag has to decide that.
+    if (!(await this.config.isEnabled('feature.putawayTasks'))) {
+      throw new BadRequestException(
+        'Directed put-away is turned off (feature.putawayTasks), so no put-away tasks are generated.',
+      );
+    }
+
     const receipt = await this.prisma.goodsReceipt.findUnique({
       where: { id: goodsReceiptId },
       include: { items: true },

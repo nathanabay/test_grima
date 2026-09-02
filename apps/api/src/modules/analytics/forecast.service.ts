@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { ScopeService } from '../../common/guards/scope.service';
+import { ConfigService } from '../../common/config/config.service';
 
 export type ForecastMethod =
   | 'MOVING_AVERAGE'
@@ -43,6 +44,7 @@ export class ForecastService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: ScopeService,
+    private readonly config: ConfigService,
   ) {}
 
   /** Monthly outbound quantity, oldest first, with stock-out months marked. */
@@ -169,7 +171,12 @@ export class ForecastService {
 
   async forecast(request: ForecastRequest, user: AuthenticatedUser) {
     const months = Math.min(Math.max(request.months ?? 12, 3), 36);
-    const horizon = Math.min(Math.max(request.horizon ?? 3, 1), 12);
+    // A caller may ask for a specific horizon; otherwise the configured one.
+    const configuredHorizon = Math.max(
+      1,
+      Math.round((await this.config.getNumber('replenishment.forecastHorizonDays')) / 30),
+    );
+    const horizon = Math.min(Math.max(request.horizon ?? configuredHorizon, 1), 12);
 
     const product = await this.prisma.product.findUniqueOrThrow({
       where: { id: request.productId },
@@ -269,7 +276,11 @@ export class ForecastService {
       Number(incoming._sum.orderedQty ?? 0) - Number(incoming._sum.receivedQty ?? 0);
 
     const monthlyForecast = result.forecast;
+    // §65: the service level decides how much safety stock is held, and it is
+    // a commercial choice - a 99% target on everything ties up a lot of cash.
+    const serviceLevel = await this.config.getNumber('replenishment.serviceLevel');
     const replenishment = calculateReplenishment({
+      serviceLevel,
       productId: product.id,
       onHand,
       reserved,

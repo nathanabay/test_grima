@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   BatchStatus,
   ExcursionDisposition,
@@ -10,6 +10,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { DocumentNumberService } from '../common-services/document-number.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ConfigService } from '../../common/config/config.service';
 
 /**
  * Cold chain monitoring (§29, §30).
@@ -28,6 +29,7 @@ export class ColdChainService {
     private readonly audit: AuditService,
     private readonly docNumbers: DocumentNumberService,
     private readonly notifications: NotificationsService,
+    private readonly config: ConfigService,
   ) {}
 
   /** Ingest a sensor reading (IoT integration point, §53). */
@@ -37,6 +39,14 @@ export class ColdChainService {
     humidity?: number;
     recordedAt?: string | Date;
   }) {
+    // §65: an administrator who turns ingestion off must stop readings being
+    // accepted, not merely see a different label on a screen.
+    if (!(await this.config.isEnabled('feature.iotIngestion'))) {
+      throw new BadRequestException(
+        'Sensor ingestion is turned off (feature.iotIngestion). Readings are not being accepted.',
+      );
+    }
+
     const sensor = await this.prisma.temperatureSensor.findUniqueOrThrow({
       where: { code: input.sensorCode },
     });
@@ -81,11 +91,26 @@ export class ColdChainService {
         },
       });
 
-      if (
-        durationMinutes >= sensor.maxExcursionMinutes &&
-        updated.affectedBatchIds.length === 0
-      ) {
-        await this.quarantineAffectedStock(updated.id, sensor.id, sensor.warehouseId);
+      // The sensor's own tolerance wins where it is set, because a vaccine
+      // fridge is not a cool room; the organisation setting is the fallback for
+      // a sensor that does not state one (§65).
+      const tolerance =
+        sensor.maxExcursionMinutes ??
+        (await this.config.getNumber('coldchain.excursionToleranceMinutes'));
+      const autoQuarantine = await this.config.getBoolean('coldchain.autoQuarantineOnExcursion');
+
+      if (durationMinutes >= tolerance && updated.affectedBatchIds.length === 0) {
+        if (autoQuarantine) {
+          await this.quarantineAffectedStock(updated.id, sensor.id, sensor.warehouseId);
+        } else {
+          // Turning automatic quarantine off does not make the breach go away:
+          // it means a person decides, so the excursion is still raised and
+          // still sits PENDING for QA.
+          this.logger.warn(
+            `Excursion ${updated.excursionNo} passed ${tolerance} minutes but ` +
+              'coldchain.autoQuarantineOnExcursion is off, so stock was left for QA to decide.',
+          );
+        }
       }
       return updated;
     }

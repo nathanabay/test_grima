@@ -3,10 +3,12 @@ import { Prisma } from '@prisma/client';
 import {
   FefoCandidate,
   FefoResult,
+  FefoTieBreak,
   allocateFefo,
   recommendBatch,
 } from '@pharmacore/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { ConfigService } from '../../common/config/config.service';
 
 export interface FefoRequest {
   productId: string;
@@ -25,7 +27,24 @@ export interface FefoRequest {
  */
 @Injectable()
 export class FefoService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
+
+  /**
+   * How to order two batches that FEFO cannot separate (§8, §65).
+   *
+   * Expiry order itself is never configurable - that is the patient-safety
+   * rule. This decides only the tie, from the existing inventory.pickStrategy
+   * setting, so an administrator has one place to look rather than two keys
+   * that mean nearly the same thing.
+   */
+  private async tieBreak(): Promise<FefoTieBreak> {
+    return (await this.config.getString('inventory.pickStrategy')) === 'LIFO'
+      ? 'LIFO'
+      : 'FIFO';
+  }
 
   /** Load every stock position for a product in a warehouse as FEFO candidates. */
   async loadCandidates(
@@ -50,6 +69,8 @@ export class FefoService {
         warehouseId: b.warehouseId,
         locationId: b.locationId,
         unitCost: Number(b.batch!.purchaseCost),
+        // Only used to break a tie between equal expiry dates.
+        receivedDate: b.batch!.receivedDate,
       }));
   }
 
@@ -67,6 +88,7 @@ export class FefoService {
       now: request.now,
       minRemainingDays: request.minRemainingDays,
       warehouseId: request.warehouseId,
+      tieBreak: await this.tieBreak(),
     });
   }
 
@@ -77,7 +99,11 @@ export class FefoService {
     options: { minRemainingDays?: number; now?: Date } = {},
   ): Promise<FefoCandidate | null> {
     const candidates = await this.loadCandidates(productId, warehouseId);
-    return recommendBatch(candidates, { ...options, warehouseId });
+    return recommendBatch(candidates, {
+      ...options,
+      warehouseId,
+      tieBreak: await this.tieBreak(),
+    });
   }
 
   /**

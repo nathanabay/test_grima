@@ -8,6 +8,7 @@ import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { CacheService } from '../../common/cache/cache.service';
+import { ConfigService } from '../../common/config/config.service';
 
 export type MovementDirection = 'IN' | 'OUT';
 
@@ -31,6 +32,12 @@ export interface MovementInput {
   idempotencyKey?: string;
   /** Set by recall/disposal flows that must move otherwise-blocked stock. */
   allowBlockedStatus?: boolean;
+  /**
+   * When the movement actually happened, for a delivery keyed in the next
+   * morning. Defaults to now. How far back this may reach, and whether it may
+   * reach forward at all, are administrator settings (§65).
+   */
+  occurredAt?: Date;
 }
 
 /**
@@ -74,7 +81,45 @@ export class LedgerService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly cache: CacheService,
+    private readonly config: ConfigService,
   ) {}
+
+  /**
+   * Validate the date a movement claims to have happened on (§19).
+   *
+   * A stock ledger that can only ever be stamped "now" cannot record a delivery
+   * entered the next morning, and one that accepts any date at all lets a
+   * mistake or a cover-up be dated wherever it is least likely to be noticed.
+   * Both limits are configured rather than assumed.
+   */
+  private async resolveOccurredAt(requested?: Date): Promise<Date> {
+    const now = new Date();
+    if (!requested) return now;
+    if (Number.isNaN(requested.getTime())) {
+      throw new BadRequestException('The movement date is not a valid date');
+    }
+
+    if (requested.getTime() > now.getTime()) {
+      if (!(await this.config.getBoolean('inventory.allowFutureDating'))) {
+        throw new BadRequestException(
+          'A movement cannot be dated in the future: it has not happened yet. ' +
+            'An administrator can allow this with inventory.allowFutureDating.',
+        );
+      }
+      return requested;
+    }
+
+    const limitDays = await this.config.getNumber('inventory.backdateLimitDays');
+    const ageDays = (now.getTime() - requested.getTime()) / 86_400_000;
+    if (ageDays > limitDays) {
+      throw new BadRequestException(
+        limitDays === 0
+          ? 'Backdating is turned off (inventory.backdateLimitDays is 0), so a movement is recorded as of now.'
+          : `A movement may be backdated at most ${limitDays} day(s); this one is ${Math.floor(ageDays)} days old.`,
+      );
+    }
+    return requested;
+  }
 
   private toDecimal(value: number | Prisma.Decimal): Prisma.Decimal {
     return value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value);
@@ -244,8 +289,11 @@ export class LedgerService {
       );
     }
 
+    const occurredAt = await this.resolveOccurredAt(input.occurredAt);
+
     const transaction = await tx.inventoryTransaction.create({
       data: {
+        occurredAt,
         type: input.type,
         productId: input.productId,
         batchId: input.batchId ?? null,

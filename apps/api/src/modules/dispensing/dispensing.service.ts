@@ -10,6 +10,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { ScopeService } from '../../common/guards/scope.service';
+import { ConfigService } from '../../common/config/config.service';
 import { LedgerService } from '../inventory/ledger.service';
 import { FefoService } from '../inventory/fefo.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
@@ -54,12 +55,19 @@ export class DispensingService {
     private readonly docNumbers: DocumentNumberService,
     private readonly controlled: ControlledRegisterService,
     private readonly scope: ScopeService,
+    private readonly config: ConfigService,
   ) {}
 
   async dispense(input: DispenseInput, user: AuthenticatedUser) {
     if (!input.lines?.length) {
       throw new BadRequestException('Nothing to dispense');
     }
+
+    // §65: a pharmacy may refuse to hand out stock that is about to expire,
+    // because a course of treatment has to outlive the pack it comes in. Zero
+    // means "any unexpired stock", which is the default.
+    const blockWithinDays = await this.config.getNumber('expiry.blockDispensingWithinDays');
+    const minRemainingDays = blockWithinDays > 0 ? blockWithinDays : undefined;
 
     // §4: a branch-scoped user may only dispense within their own branch.
     this.scope.assertBranch(user, input.branchId);
@@ -189,7 +197,13 @@ export class DispensingService {
             input.warehouseId,
             tx,
           );
-          const recommended = recommendBatch(candidates, { warehouseId: input.warehouseId });
+          // The same shelf-life filter as the allocation below, so the batch
+          // named as "what FEFO recommended" is one that could actually be
+          // dispensed.
+          const recommended = recommendBatch(candidates, {
+            warehouseId: input.warehouseId,
+            minRemainingDays,
+          });
 
           let allocations;
           let overrideReason: string | null = null;
@@ -203,7 +217,10 @@ export class DispensingService {
                 `Selected batch holds no stock for ${product.genericName} in this warehouse`,
               );
             }
-            const check = allocateFefo(quantity, [chosen], { warehouseId: input.warehouseId });
+            const check = allocateFefo(quantity, [chosen], {
+              warehouseId: input.warehouseId,
+              minRemainingDays,
+            });
             if (!check.fullyAllocated) {
               throw new ConflictException(
                 `Selected batch cannot supply ${quantity}: ${
@@ -226,7 +243,10 @@ export class DispensingService {
             }
             allocations = check.allocations;
           } else {
-            const result = allocateFefo(quantity, candidates, { warehouseId: input.warehouseId });
+            const result = allocateFefo(quantity, candidates, {
+              warehouseId: input.warehouseId,
+              minRemainingDays,
+            });
             if (!result.fullyAllocated) {
               const detail = result.excluded.length
                 ? ` Excluded: ${result.excluded.map((e) => `${e.batchNumber} (${e.reason})`).join('; ')}`

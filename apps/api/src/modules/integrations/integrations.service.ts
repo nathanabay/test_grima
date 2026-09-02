@@ -3,6 +3,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { ConfigService } from '../../common/config/config.service';
 import { AuthenticatedUser } from '../../common/decorators';
 
 /**
@@ -55,6 +56,7 @@ export class IntegrationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly config: ConfigService,
   ) {}
 
   // ---- Endpoint registration ----
@@ -176,6 +178,10 @@ export class IntegrationsService {
    */
   async publish(event: IntegrationEvent, payload: Record<string, unknown>): Promise<void> {
     try {
+      // §65: turning outbound webhooks off has to stop data leaving. A flag
+      // that only changes what a screen says is not a control.
+      if (!(await this.config.isEnabled('feature.webhooks'))) return;
+
       const endpoints = await this.prisma.integrationEndpoint.findMany({
         where: { isActive: true, events: { has: event } },
       });
@@ -197,6 +203,10 @@ export class IntegrationsService {
 
   /** Send everything due. Called by the scheduler and by the manual retry. */
   async processQueue(limit = 50): Promise<{ sent: number; failed: number }> {
+    // The queue drains only while the feature is on, so anything already
+    // queued waits rather than going out behind the administrator's back.
+    if (!(await this.config.isEnabled('feature.webhooks'))) return { sent: 0, failed: 0 };
+
     const due = await this.prisma.integrationDelivery.findMany({
       where: { status: { in: ['PENDING', 'RETRYING'] }, nextAttemptAt: { lte: new Date() } },
       include: { endpoint: true },

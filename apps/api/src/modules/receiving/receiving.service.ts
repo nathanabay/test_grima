@@ -12,6 +12,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { ScopeService } from '../../common/guards/scope.service';
 import { ValuationService } from '../accounting/valuation.service';
+import { ConfigService } from '../../common/config/config.service';
 import { LedgerService } from '../inventory/ledger.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -64,6 +65,7 @@ export class ReceivingService {
     private readonly notifications: NotificationsService,
     private readonly scope: ScopeService,
     private readonly valuation: ValuationService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -85,14 +87,21 @@ export class ReceivingService {
       return { flags: ['UNKNOWN_PRODUCT'] };
     }
 
+    // A product that states its own minimum keeps it; anything left at the
+    // schema default falls back to the organisation setting.
+    const orgMinimum = await this.config.getNumber('expiry.minShelfLifeOnReceiptDays');
+    const requiredShelfLife = Math.max(product.minShelfLifeDaysOnReceipt, orgMinimum);
+
     const expiry = new Date(line.expiryDate);
     if (Number.isNaN(expiry.getTime())) flags.push('INVALID_EXPIRY');
     else {
       const remaining = daysUntil(expiry);
       if (remaining < 0) flags.push('EXPIRED_ON_ARRIVAL');
-      else if (remaining < product.minShelfLifeDaysOnReceipt) {
+      // The product's own rule wins where it is set; the organisation setting
+      // is the floor for everything else (§65).
+      else if (remaining < requiredShelfLife) {
         flags.push(
-          `SHORT_SHELF_LIFE:${remaining}d_of_${product.minShelfLifeDaysOnReceipt}d_required`,
+          `SHORT_SHELF_LIFE:${remaining}d_of_${requiredShelfLife}d_required`,
         );
       }
     }

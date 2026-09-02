@@ -6,15 +6,6 @@ import { useApi } from '@/lib/useApi';
 import { money, qty, shortDate } from '@/lib/api';
 import { Card, Empty, ErrorBox, ExpiryPill, Loading, Pill, Table } from '@/components/ui';
 
-const BUCKETS = [
-  { label: 'Expired', key: 'EXPIRED' },
-  { label: '0-30 days', key: 'DAYS_0_30' },
-  { label: '31-60 days', key: 'DAYS_31_60' },
-  { label: '61-90 days', key: 'DAYS_61_90' },
-  { label: '91-180 days', key: 'DAYS_91_180' },
-  { label: '181-365 days', key: 'DAYS_181_365' },
-];
-
 export default function ExpiryPage() {
   const [maxDays, setMaxDays] = useState(90);
   const { data, error, loading } = useApi<any>(`/inventory/expiry?maxDays=${maxDays}`, [maxDays]);
@@ -45,8 +36,10 @@ export default function ExpiryPage() {
 
       {data && (
         <div className="space-y-4">
+          {/* The ladder comes back with the data, so the cards follow the
+              configured horizons instead of a copy kept here. */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {BUCKETS.map((b) => {
+            {(data.buckets ?? []).map((b: any) => {
               const s = data.summary[b.key];
               return (
                 <div key={b.key} className="card p-3">

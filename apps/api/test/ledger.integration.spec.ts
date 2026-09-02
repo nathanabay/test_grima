@@ -12,11 +12,13 @@ import { AuditService } from '../src/common/audit/audit.service';
 import { LedgerService } from '../src/modules/inventory/ledger.service';
 import { CacheService } from '../src/common/cache/cache.service';
 import { FefoService } from '../src/modules/inventory/fefo.service';
+import { ConfigService } from '../src/common/config/config.service';
 
 const prisma = new PrismaService();
 const audit = new AuditService(prisma);
-const ledger = new LedgerService(prisma, audit, new CacheService());
-const fefo = new FefoService(prisma);
+const config = new ConfigService(prisma);
+const ledger = new LedgerService(prisma, audit, new CacheService(), config);
+const fefo = new FefoService(prisma, config);
 
 // Fixture ids, so the tests never touch seeded demo data.
 const FIXTURE = {

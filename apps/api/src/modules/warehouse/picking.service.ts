@@ -12,6 +12,7 @@ import { ScopeService } from '../../common/guards/scope.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
 import { FefoService } from '../inventory/fefo.service';
 import { LedgerService } from '../inventory/ledger.service';
+import { ConfigService } from '../../common/config/config.service';
 import { AuthenticatedUser } from '../../common/decorators';
 
 export interface WaveLineInput {
@@ -41,6 +42,7 @@ export class PickingService {
     private readonly docNumbers: DocumentNumberService,
     private readonly fefo: FefoService,
     private readonly ledger: LedgerService,
+    private readonly config: ConfigService,
   ) {}
 
   async listWaves(warehouseId: string, status?: string) {
@@ -121,6 +123,10 @@ export class PickingService {
     },
     user: AuthenticatedUser,
   ) {
+    // §65: wave picking off means no wave is created, not a hidden button.
+    if (!(await this.config.isEnabled('feature.wavePicking'))) {
+      throw new BadRequestException('Wave picking is turned off (feature.wavePicking).');
+    }
     await this.scope.assertWarehouse(user, input.warehouseId);
     if (!input.lines?.length) throw new BadRequestException('A wave needs at least one line');
 

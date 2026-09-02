@@ -21,6 +21,71 @@ export const EXPIRY_BUCKET_LABELS: Record<ExpiryBucket, string> = {
   OVER_365: 'More than 365 days',
 };
 
+/** One horizon in a configured bucket ladder, with the label to show for it. */
+export interface ExpiryBucketDefinition {
+  key: string;
+  label: string;
+  /** Inclusive upper bound in days; null for the final open-ended bucket. */
+  upToDays: number | null;
+}
+
+/**
+ * Turn a configured list of day horizons into an ordered ladder of buckets.
+ *
+ * The horizons are administrator-configured (`expiry.alertBuckets`), so the
+ * ladder cannot be a fixed set of labels: a pharmacy that watches 7 and 14 days
+ * must see 7- and 14-day buckets, and one that only cares about quarters must
+ * not be shown empty weekly ones. Duplicates and non-positive values are
+ * dropped rather than producing a bucket that can never match.
+ */
+export function expiryBuckets(
+  horizons: readonly number[] = DEFAULT_EXPIRY_BUCKETS,
+): ExpiryBucketDefinition[] {
+  const sorted = [...new Set(horizons.filter((d) => Number.isFinite(d) && d > 0))].sort(
+    (a, b) => a - b,
+  );
+  const ladder: ExpiryBucketDefinition[] = [
+    { key: 'EXPIRED', label: 'Expired', upToDays: -1 },
+  ];
+
+  let lower = 0;
+  for (const upper of sorted) {
+    ladder.push({
+      key: `DAYS_${lower}_${upper}`,
+      label: `${lower}-${upper} days`,
+      upToDays: upper,
+    });
+    lower = upper + 1;
+  }
+  ladder.push({
+    key: sorted.length ? `OVER_${sorted[sorted.length - 1]}` : 'ALL',
+    label: sorted.length ? `More than ${sorted[sorted.length - 1]} days` : 'All stock',
+    upToDays: null,
+  });
+
+  return ladder;
+}
+
+/**
+ * Which configured bucket a batch falls into.
+ *
+ * Returns the bucket definition rather than a bare key so a caller can render
+ * the label without keeping its own copy of the ladder, which is how the two
+ * would drift apart when an administrator changes the horizons.
+ */
+export function bucketFor(
+  expiry: Date,
+  ladder: ExpiryBucketDefinition[],
+  now: Date = new Date(),
+): ExpiryBucketDefinition {
+  const days = daysUntil(expiry, now);
+  if (days < 0) return ladder[0];
+  for (const bucket of ladder.slice(1)) {
+    if (bucket.upToDays === null || days <= bucket.upToDays) return bucket;
+  }
+  return ladder[ladder.length - 1];
+}
+
 export function daysUntil(expiry: Date, now: Date = new Date()): number {
   return Math.floor((expiry.getTime() - now.getTime()) / 86400000);
 }

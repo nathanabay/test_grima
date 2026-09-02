@@ -30,6 +30,16 @@ export interface SettingDefinition {
   options?: string[];
   /** Settings a non-finance user must not read (they expose commercial terms). */
   sensitive?: boolean;
+  /**
+   * Set on a setting that is declared but not yet read by any code path.
+   *
+   * A setting that changes nothing is worse than a missing one: the screen
+   * agrees with the administrator and the system ignores them. Rather than
+   * quietly leave such a key in the list, it is marked here and the
+   * configuration screen says so, with the note explaining what would have to
+   * be built for it to bite.
+   */
+  notEnforced?: string;
 }
 
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
@@ -107,6 +117,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 90,
     min: 7,
     max: 730,
+    notEnforced:
+      'The forecast derives consumption from a monthly series over the available history rather than a fixed day window.',
   },
   {
     key: 'replenishment.forecastHorizonDays',
@@ -140,6 +152,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 50000,
     min: 0,
     sensitive: true,
+    notEnforced:
+      'As above: purchase-order approval steps carry their own amounts on the workflow definition.',
   },
   {
     key: 'approval.purchaseOrder.directorThreshold',
@@ -150,6 +164,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 250000,
     min: 0,
     sensitive: true,
+    notEnforced:
+      'As above: purchase-order approval steps carry their own amounts on the workflow definition.',
   },
   {
     key: 'approval.adjustment.approvalThreshold',
@@ -160,6 +176,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 5000,
     min: 0,
     sensitive: true,
+    notEnforced:
+      'The approval engine reads its thresholds from each WorkflowDefinition step (minAmount/maxAmount), which is per document type and already in use. This key would need the engine to consult it as a default.',
   },
   {
     key: 'approval.requireDistinctApprovers',
@@ -201,6 +219,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 10,
     min: 0,
     max: 100,
+    notEnforced:
+      'A count line can be re-recorded before posting, but there is no formal recount round for this to trigger.',
   },
 
   // ---- Cold chain (§29) ----
@@ -261,6 +281,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     description: 'Controlled access outside working hours raises a security alert.',
     type: 'string',
     default: '20:00',
+    notEnforced:
+      'After-hours access alerting is not implemented, so the window is recorded but never compared against.',
   },
   {
     key: 'controlled.afterHoursEnd',
@@ -269,6 +291,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     description: 'End of the after-hours window.',
     type: 'string',
     default: '06:00',
+    notEnforced:
+      'After-hours access alerting is not implemented, so the window is recorded but never compared against.',
   },
 
   // ---- Sales / POS (§25) ----
@@ -300,6 +324,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       'Off by default. Enabling it lets the ledger go negative and should only be used for a controlled migration.',
     type: 'boolean',
     default: false,
+    notEnforced:
+      'The ledger refuses to take a balance below zero unconditionally, which is a safety rule the till cannot waive. Enforcing this key would mean relaxing that.',
   },
 
   // ---- Security (§4, §54) ----
@@ -346,6 +372,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 0,
     min: 0,
     max: 3650,
+    notEnforced:
+      'Passwords do not expire; nothing checks passwordChangedAt against this.',
   },
   {
     key: 'security.maxLoginAttempts',
@@ -376,6 +404,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 480,
     min: 5,
     max: 43200,
+    notEnforced:
+      'Sessions expire on their own absolute lifetime (JWT_REFRESH_TTL); idle time is recorded as lastSeenAt but not enforced.',
   },
   {
     key: 'security.requireMfaForRoles',
@@ -384,6 +414,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     description: 'Users holding any of these role codes are required to complete MFA enrolment.',
     type: 'string[]',
     default: ['SUPER_ADMIN', 'PHARMACY_ADMIN', 'FINANCE_OFFICER'],
+    notEnforced:
+      'MFA can be enrolled per user but is not required by role.',
   },
 
   // ---- Notifications (§35) ----
@@ -397,6 +429,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 120,
     min: 0,
     max: 10080,
+    notEnforced:
+      'Deduplication is done by the automation cooldown per rule and subject, not by a global window over notifications.',
   },
   {
     key: 'notifications.maxPerUserPerHour',
@@ -407,6 +441,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 60,
     min: 1,
     max: 1000,
+    notEnforced:
+      'No per-user rate limit is applied to notifications.',
   },
   {
     key: 'notifications.escalationHours',
@@ -417,6 +453,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 4,
     min: 1,
     max: 168,
+    notEnforced:
+      'Escalation timing comes from each automation rule\'s own ladder (afterHours per step), which is per rule rather than global.',
   },
 
   // ---- Inventory (§19, §48) ----
@@ -441,9 +479,10 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   {
     key: 'inventory.pickStrategy',
     group: 'Inventory',
-    label: 'Allocation strategy for products without an expiry date',
+    label: 'Allocation order where expiry cannot decide',
     description:
-      'FEFO always governs expiring stock. This chooses the fallback for non-expiring items.',
+      'FEFO always governs which batch leaves the shelf. This chooses the order between ' +
+      'batches that expire on the same day: FIFO takes the oldest receipt first, LIFO the newest.',
     type: 'string',
     default: 'FIFO',
     options: ['FIFO', 'LIFO'],
@@ -458,6 +497,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     type: 'string',
     default: 'en',
     options: ['en', 'am', 'om'],
+    notEnforced:
+      'The interface resolves its locale in the browser from the language picker. The server does not impose one.',
   },
   {
     key: 'locale.enabled',
@@ -466,6 +507,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     description: 'Locales offered in the language switcher.',
     type: 'string[]',
     default: ['en', 'am', 'om'],
+    notEnforced:
+      'The three shipped locales are compiled into the interface; this list does not restrict them.',
   },
   {
     key: 'locale.useEthiopianCalendar',
@@ -475,6 +518,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       'Displays the Ethiopian date alongside the Gregorian one. Storage and expiry maths stay Gregorian.',
     type: 'boolean',
     default: false,
+    notEnforced:
+      'No Ethiopian calendar renderer exists. Turning this on would otherwise imply a conversion that is not performed.',
   },
 
   // ---- Finance (§32) ----
@@ -528,6 +573,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       'Selects which configurable rule set applies. The system does not encode any jurisdiction’s law; this only groups the settings an administrator maintains.',
     type: 'string',
     default: 'ET',
+    notEnforced:
+      'Nothing yet varies by jurisdiction. Setting it records the intent but changes no rule.',
   },
   {
     key: 'compliance.controlledSchedules',
@@ -536,6 +583,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     description: 'Schedule labels available on the product record and controlled register.',
     type: 'string[]',
     default: ['I', 'II', 'III', 'IV', 'V'],
+    notEnforced:
+      'Schedules are recorded per product (Product.controlledSchedule). Nothing validates a product against this list.',
   },
   {
     key: 'compliance.licenceReminderDays',
@@ -557,6 +606,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 5,
     min: 1,
     max: 50,
+    notEnforced:
+      'No retention or purge job exists. Nothing is deleted on any schedule, so this figure is not acted on.',
   },
 ];
 
@@ -570,6 +621,16 @@ export interface FeatureFlagDefinition {
   default: boolean;
   /** Set when the flag cannot be turned on without external configuration. */
   requires?: string;
+  /**
+   * Set on a setting that is declared but not yet read by any code path.
+   *
+   * A setting that changes nothing is worse than a missing one: the screen
+   * agrees with the administrator and the system ignores them. Rather than
+   * quietly leave such a key in the list, it is marked here and the
+   * configuration screen says so, with the note explaining what would have to
+   * be built for it to bite.
+   */
+  notEnforced?: string;
 }
 
 export const FEATURE_FLAGS: FeatureFlagDefinition[] = [
@@ -622,6 +683,8 @@ export const FEATURE_FLAGS: FeatureFlagDefinition[] = [
     description: 'Routes POS card and mobile-money payments through the configured gateway.',
     default: false,
     requires: 'PAYMENT_PROVIDER_URL',
+    notEnforced:
+      'No payment adapter is written. Card and mobile-money payments are captured from the terminal reference instead, so this flag gates nothing yet.',
   },
   {
     key: 'feature.iotIngestion',
@@ -651,12 +714,6 @@ export const FEATURE_FLAGS: FeatureFlagDefinition[] = [
     key: 'feature.accountingJournals',
     label: 'Accounting journals',
     description: 'Posts inventory and sales movements to the general ledger.',
-    default: true,
-  },
-  {
-    key: 'feature.loyalty',
-    label: 'Customer loyalty',
-    description: 'Accrues and redeems loyalty points at the point of sale.',
     default: true,
   },
 ];

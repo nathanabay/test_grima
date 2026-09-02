@@ -17,6 +17,8 @@ export interface ReplenishmentInput {
   reorderLevel: number;
   maximumStock: number;
   serviceLevelZ?: number; // 1.65 = 95%
+  /** Target service level as a fraction, e.g. 0.95. Converted to a z-score. */
+  serviceLevel?: number;
   seasonalFactor?: number; // 1.0 = no seasonality
 }
 
@@ -31,6 +33,49 @@ export interface ReplenishmentResult {
   suggestedQuantity: number;
   cappedByMaximumStock: boolean;
   explanation: string;
+}
+
+/**
+ * The z-score for a target service level.
+ *
+ * A service level is a probability of not stocking out during the lead time,
+ * and safety stock needs the corresponding point on the standard normal
+ * distribution. Rather than approximate the inverse normal CDF, this
+ * interpolates a table of the values actually used in inventory planning:
+ * every entry is a published figure, and a level between two of them is
+ * interpolated linearly, which is accurate to about 0.01 across the range that
+ * matters. Anything at or above 99.9% is capped, because chasing the last
+ * fraction of a percent buys an unbounded amount of stock.
+ */
+const SERVICE_LEVEL_Z: ReadonlyArray<readonly [level: number, z: number]> = [
+  [0.5, 0],
+  [0.75, 0.674],
+  [0.8, 0.842],
+  [0.85, 1.036],
+  [0.9, 1.282],
+  [0.95, 1.645],
+  [0.96, 1.751],
+  [0.97, 1.881],
+  [0.98, 2.054],
+  [0.99, 2.326],
+  [0.995, 2.576],
+  [0.999, 3.09],
+];
+
+export function serviceLevelToZ(serviceLevel: number): number {
+  if (!Number.isFinite(serviceLevel) || serviceLevel <= 0.5) return 0;
+  if (serviceLevel >= 0.999) return 3.09;
+
+  for (let i = 1; i < SERVICE_LEVEL_Z.length; i += 1) {
+    const [upperLevel, upperZ] = SERVICE_LEVEL_Z[i];
+    if (serviceLevel <= upperLevel) {
+      const [lowerLevel, lowerZ] = SERVICE_LEVEL_Z[i - 1];
+      const span = upperLevel - lowerLevel;
+      const ratio = span === 0 ? 0 : (serviceLevel - lowerLevel) / span;
+      return lowerZ + ratio * (upperZ - lowerZ);
+    }
+  }
+  return 3.09;
 }
 
 /**
@@ -56,7 +101,14 @@ export function calculateReplenishment(input: ReplenishmentInput): Replenishment
 
   const safetyStock =
     input.safetyStock ??
-    calculateSafetyStock(input.demandStdDev, input.leadTimeDays, input.serviceLevelZ);
+    calculateSafetyStock(
+      input.demandStdDev,
+      input.leadTimeDays,
+      // A caller may pass the z-score directly, or the service level it came
+      // from, which is what an administrator actually configures.
+      input.serviceLevelZ ??
+        (input.serviceLevel !== undefined ? serviceLevelToZ(input.serviceLevel) : undefined),
+    );
 
   // Reorder point from demand, but never below the manually configured floor.
   const reorderPoint = Math.max(

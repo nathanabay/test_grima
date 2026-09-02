@@ -50,6 +50,22 @@ A flag may declare a `requires` environment variable. **A flag whose dependency
 is missing stays off however it is set**, and the screen says which variable is
 missing instead of pretending the feature can be turned on.
 
+### Settings that are not enforced yet
+
+A setting that changes nothing is worse than a missing one: the screen agrees
+with the administrator and the system ignores them. So each definition can carry
+a `notEnforced` note, the configuration screen shows **Not enforced** beside it
+with the reason, and a test (`apps/api/test/settings-enforced.spec.ts`) fails if
+a key is declared with no call site and no such note — or if a marked key is
+later wired without clearing the marker.
+
+At the time of writing 21 of 64 keys carry that note, mostly because they
+duplicate a mechanism that already works elsewhere (approval amounts live on
+each workflow step; escalation timing lives on each automation rule's ladder) or
+because they configure something not yet built (password expiry, session idle
+timeout, MFA by role, retention, the Ethiopian calendar renderer). The screen
+names each one.
+
 ### The rule behind the catalogue
 
 If a number decides something a pharmacy might reasonably want to change — an

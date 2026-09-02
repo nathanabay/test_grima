@@ -13,8 +13,14 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ConfigService } from '../../common/config/config.service';
 import { LoginDto } from './dto';
 
+/**
+ * Fallbacks only. The live values come from the settings catalogue, which
+ * resolves database override -> environment -> default (§65), so an
+ * administrator can tighten the lockout without a deployment.
+ */
 const MAX_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS ?? 5);
 const LOCKOUT_MINUTES = Number(process.env.LOCKOUT_MINUTES ?? 15);
 
@@ -33,7 +39,44 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly config: ConfigService,
   ) {}
+
+  /**
+   * Enforce the configured password policy (§65).
+   *
+   * One place, called by every path that sets a password, because a rule that
+   * is enforced on the change screen and not on the reset link is not a rule.
+   * Every requirement that fails is reported at once: telling somebody their
+   * password is too short, then that it needs a digit, then that it needs a
+   * symbol, is how people end up with "Password1!" everywhere.
+   */
+  private async assertPasswordPolicy(password: string): Promise<void> {
+    const [minLength, mixedCase, needsNumber, needsSymbol] = await Promise.all([
+      this.config.getNumber('security.passwordMinLength'),
+      this.config.getBoolean('security.passwordRequireMixedCase'),
+      this.config.getBoolean('security.passwordRequireNumber'),
+      this.config.getBoolean('security.passwordRequireSymbol'),
+    ]);
+
+    const failures: string[] = [];
+    if (password.length < minLength) {
+      failures.push(`be at least ${minLength} characters long`);
+    }
+    if (mixedCase && !(/[a-z]/.test(password) && /[A-Z]/.test(password))) {
+      failures.push('contain both upper and lower case letters');
+    }
+    if (needsNumber && !/[0-9]/.test(password)) {
+      failures.push('contain a number');
+    }
+    if (needsSymbol && !/[^A-Za-z0-9]/.test(password)) {
+      failures.push('contain a symbol');
+    }
+
+    if (failures.length) {
+      throw new BadRequestException(`The password must ${failures.join(', ')}.`);
+    }
+  }
 
   static async hashPassword(plain: string): Promise<string> {
     return argon2.hash(plain, { type: argon2.argon2id });
@@ -148,14 +191,18 @@ export class AuthService {
 
     const passwordOk = await argon2.verify(user!.passwordHash, dto.password).catch(() => false);
     if (!passwordOk) {
+      const [maxAttempts, lockoutMinutes] = await Promise.all([
+        this.config.getNumber('security.maxLoginAttempts').catch(() => MAX_ATTEMPTS),
+        this.config.getNumber('security.lockoutMinutes').catch(() => LOCKOUT_MINUTES),
+      ]);
       const attempts = user!.failedAttempts + 1;
-      const shouldLock = attempts >= MAX_ATTEMPTS;
+      const shouldLock = attempts >= maxAttempts;
       await this.prisma.user.update({
         where: { id: user!.id },
         data: {
           failedAttempts: attempts,
           lockedUntil: shouldLock
-            ? new Date(Date.now() + LOCKOUT_MINUTES * 60_000)
+            ? new Date(Date.now() + lockoutMinutes * 60_000)
             : null,
           status: shouldLock ? 'LOCKED' : user!.status,
         },
@@ -314,6 +361,8 @@ export class AuthService {
     const ok = await argon2.verify(user.passwordHash, currentPassword).catch(() => false);
     if (!ok) throw new UnauthorizedException('Current password is incorrect');
 
+    await this.assertPasswordPolicy(newPassword);
+
     await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -401,6 +450,10 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('This reset link is invalid or has expired');
     }
+
+    // The same policy as the change-password path: a rule enforced on one and
+    // not the other is not a rule.
+    await this.assertPasswordPolicy(newPassword);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({

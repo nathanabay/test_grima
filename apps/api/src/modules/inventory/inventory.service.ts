@@ -1,9 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { classifyExpiry, daysUntil, expiryRiskScore } from '@pharmacore/shared';
+import {
+  bucketFor,
+  classifyExpiry,
+  daysUntil,
+  expiryBuckets,
+  expiryRiskScore,
+} from '@pharmacore/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { ScopeService } from '../../common/guards/scope.service';
+import { ConfigService } from '../../common/config/config.service';
 
 export interface StockQuery {
   productId?: string;
@@ -21,6 +28,7 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: ScopeService,
+    private readonly config: ConfigService,
   ) {}
 
   /** Paginated stock balances, always scoped to what the user may see. */
@@ -201,6 +209,11 @@ export class InventoryService {
     });
 
     const now = new Date();
+    // §65: the horizons are administrator-configured, so the ladder is built
+    // from the setting rather than from constants in this file. Before this,
+    // expiry.alertBuckets could be changed and nothing happened.
+    const ladder = expiryBuckets(await this.config.getNumberArray('expiry.alertBuckets'));
+
     const rows = balances
       .filter((b) => b.batch)
       .map((b) => {
@@ -216,7 +229,7 @@ export class InventoryService {
           batchStatus: b.batch!.status,
           expiryDate: b.batch!.expiryDate,
           daysRemaining: days,
-          bucket: classifyExpiry(b.batch!.expiryDate, now),
+          bucket: bucketFor(b.batch!.expiryDate, ladder, now).key,
           quantity: available,
           unit: b.product.baseUnit,
           warehouseId: b.warehouseId,
@@ -243,6 +256,10 @@ export class InventoryService {
 
     return {
       rows,
+      // The ladder travels with the data so a screen renders the configured
+      // labels instead of keeping its own copy, which is exactly how the two
+      // drift apart when an administrator changes the horizons.
+      buckets: ladder,
       summary,
       totalValueAtRisk: rows.reduce((sum, r) => sum + Number(r.potentialLoss), 0),
     };

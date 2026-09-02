@@ -19,6 +19,8 @@ interface SettingRow {
   min?: number;
   max?: number;
   options?: string[];
+  /** Set when the value is declared but nothing reads it yet. */
+  notEnforced?: string | null;
 }
 
 interface FlagRow {
@@ -30,6 +32,7 @@ interface FlagRow {
   isOverridden: boolean;
   requires?: string;
   unavailableReason: string | null;
+  notEnforced?: string | null;
 }
 
 /** Render a stored value the way it will be typed back in. */
@@ -176,8 +179,16 @@ export default function SettingsPage() {
                         {blocked ? 'Unavailable' : on ? 'On' : 'Off'}
                       </Pill>
                       {flag.isOverridden && <Pill tone="info">Overridden</Pill>}
+                      {flag.notEnforced && <Pill tone="warn">Not enforced</Pill>}
                       <code className="text-[11px] text-ink-subtle">{flag.key}</code>
                     </div>
+                    {flag.notEnforced && (
+                      // A flag that gates nothing says so, rather than letting
+                      // the toggle imply a control that does not exist.
+                      <p className="mt-2 text-xs text-warn">
+                        Turning this on or off changes nothing yet. {flag.notEnforced}
+                      </p>
+                    )}
                     {blocked && (
                       // §35: a flag whose dependency is missing stays off however
                       // it is set, and says so instead of pretending to work.
@@ -224,7 +235,13 @@ export default function SettingsPage() {
                             {row.max !== undefined && <span>&middot; max {row.max}</span>}
                             <span>&middot; default {asText(row.default) || 'empty'}</span>
                             {row.isOverridden && <Pill tone="info">Overridden</Pill>}
+                            {row.notEnforced && <Pill tone="warn">Not enforced</Pill>}
                           </div>
+                          {row.notEnforced && (
+                            <p className="mt-1 text-xs text-warn">
+                              Changing this has no effect yet. {row.notEnforced}
+                            </p>
+                          )}
                         </div>
 
                         <div className="flex w-full items-center gap-2 sm:w-72">

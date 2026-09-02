@@ -31,6 +31,11 @@ export interface FefoCandidate {
   warehouseId: string;
   locationId?: string | null;
   unitCost?: number;
+  /**
+   * When the batch was received. Used only to break a tie between batches that
+   * expire on the same day; it never overrides expiry order.
+   */
+  receivedDate?: Date;
 }
 
 export interface FefoAllocationLine {
@@ -54,8 +59,29 @@ export interface FefoResult {
   excluded: Array<{ batchId: string; batchNumber: string; reason: string }>;
 }
 
+/**
+ * How to order batches that FEFO cannot separate.
+ *
+ * FEFO decides the order by expiry, and nothing here can change that. This
+ * decides only what happens when two batches expire on the same day, which is
+ * common for one production run received in several deliveries.
+ *
+ *  - FIFO  the batch received first goes first, so stock does not sit and age
+ *          behind newer stock of the same expiry. This is what a pharmacy
+ *          usually means by "first expiry, first out, then oldest first".
+ *  - LIFO  the most recently received goes first. Chosen by operations that
+ *          keep a deliberate aged reserve.
+ *
+ * A batch with no received date cannot be placed in the queue by age either
+ * way, so it falls back to the smaller remaining quantity, which empties
+ * part-used positions and frees the bin.
+ */
+export type FefoTieBreak = 'FIFO' | 'LIFO';
+
 export interface FefoOptions {
   now?: Date;
+  /** Tie-break for equal expiry dates. Defaults to FIFO. */
+  tieBreak?: FefoTieBreak;
   /**
    * Refuse batches whose remaining shelf life is below this. Used when
    * dispensing a course of treatment that must outlive the pack.
@@ -91,13 +117,29 @@ function exclusionReason(
 }
 
 /**
- * Order candidates by nearest valid expiry. Ties break on smaller remaining
- * quantity so partially-drawn batches are emptied and closed out first.
+ * Order candidates by nearest valid expiry, breaking ties as configured.
  */
-export function sortFefo(candidates: FefoCandidate[]): FefoCandidate[] {
+export function sortFefo(
+  candidates: FefoCandidate[],
+  tieBreak: FefoTieBreak = 'FIFO',
+): FefoCandidate[] {
   return [...candidates].sort((a, b) => {
+    // Expiry always wins. The tie-break only decides between batches that
+    // expire on the very same day, so no setting can put a longer-dated pack
+    // in front of a shorter-dated one.
     const byExpiry = a.expiryDate.getTime() - b.expiryDate.getTime();
     if (byExpiry !== 0) return byExpiry;
+
+    const aReceived = a.receivedDate?.getTime();
+    const bReceived = b.receivedDate?.getTime();
+    if (aReceived !== undefined && bReceived !== undefined && aReceived !== bReceived) {
+      return tieBreak === 'LIFO' ? bReceived - aReceived : aReceived - bReceived;
+    }
+    // A batch with no received date cannot be placed in the queue by age, so it
+    // sorts after one that can rather than being guessed at.
+    if (aReceived !== undefined && bReceived === undefined) return -1;
+    if (aReceived === undefined && bReceived !== undefined) return 1;
+
     return a.availableQuantity - b.availableQuantity;
   });
 }
@@ -132,7 +174,7 @@ export function allocateFefo(
   const allocations: FefoAllocationLine[] = [];
   let remaining = requestedQuantity;
 
-  for (const candidate of sortFefo(eligible)) {
+  for (const candidate of sortFefo(eligible, options.tieBreak ?? 'FIFO')) {
     if (remaining <= 0) break;
     const take = Math.min(candidate.availableQuantity, remaining);
     if (take <= 0) continue;
@@ -168,5 +210,5 @@ export function recommendBatch(
     if (options.warehouseId && c.warehouseId !== options.warehouseId) return false;
     return exclusionReason(c, now, options.minRemainingDays) === null;
   });
-  return sortFefo(eligible)[0] ?? null;
+  return sortFefo(eligible, options.tieBreak ?? 'FIFO')[0] ?? null;
 }

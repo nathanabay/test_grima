@@ -10,6 +10,7 @@ import { IntegrationsService } from '../integrations/integrations.service';
 import { JobRunnerService } from './job-runner.service';
 import { PostingService } from '../accounting/posting.service';
 import { AutomationService } from '../automation/automation.service';
+import { ConfigService } from '../../common/config/config.service';
 
 /**
  * Rule engine and scheduled jobs (§58).
@@ -32,6 +33,7 @@ export class RulesService implements OnModuleInit {
     private readonly runner: JobRunnerService,
     private readonly posting: PostingService,
     private readonly automation: AutomationService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -236,7 +238,10 @@ export class RulesService implements OnModuleInit {
 
   /** Supplier licence and document expiry alerts (§44). */
   async runDocumentExpiryAlerts() {
-    const soon = new Date(Date.now() + 60 * 86_400_000);
+    // §65: how far ahead a licence or document expiry is announced is
+    // configured, not sixty days because sixty was typed here first.
+    const reminderDays = await this.config.getNumber('compliance.licenceReminderDays');
+    const soon = new Date(Date.now() + reminderDays * 86_400_000);
 
     const [suppliers, documents] = await Promise.all([
       this.prisma.supplier.findMany({

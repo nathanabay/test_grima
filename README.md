@@ -124,13 +124,22 @@ Reconciliation reports variances rather than fixing them.
 
 ### Configuration, not constants (§65)
 
-Every operational threshold — expiry horizons, approval limits, discount
-ceilings, temperature tolerances, count variance limits — is declared in
-`settings.catalog.ts` with a type, a default, bounds and an explanation, and is
-edited at **Administration → System configuration**. Resolution is database
-override → environment → default; a value outside its bounds is refused with the
-reason rather than clamped. A feature flag whose environment dependency is
-missing stays off however it is set, and says which variable is missing.
+Every operational threshold — expiry horizons, discount ceilings, temperature
+tolerances, count variance limits, the password policy, how far a movement may
+be backdated — is declared in `settings.catalog.ts` with a type, a default,
+bounds and an explanation, and is edited at **Administration → System
+configuration**. Resolution is database override → environment → default; a
+value outside its bounds is refused with the reason rather than clamped.
+
+A feature flag both gates its feature and reports its dependencies: turning
+webhooks off stops events leaving, turning the report builder off stops reports
+running, and a flag whose environment variable is missing stays off however it
+is set and says which variable is missing.
+
+Where a key is declared but nothing reads it yet, it says so — the screen shows
+**Not enforced** with the reason, and a test fails if a new key is added with
+neither a call site nor that note. A setting that silently changes nothing is
+worse than a missing one.
 
 ### Accounting independent of picking (§32)
 

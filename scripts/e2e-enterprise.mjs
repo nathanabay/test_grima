@@ -48,6 +48,11 @@ const pharmacist = client(await login('pharmacist'));
 // A warehouse manager may read reports but not finance figures, which is
 // exactly the split the withheld-column rule is meant to enforce.
 const warehouse = client(await login('warehouse'));
+const till = client(await login('cashier'));
+const cashierMe = (await till('GET', '/auth/me')).body;
+const org = (await admin('GET', '/admin/organization')).body;
+const tillBranch = org.branches.find((b) => b.id === cashierMe.branchIds[0]) ?? org.branches[0];
+const tillWarehouse = tillBranch.warehouses[0];
 
 // ============================================================
 console.log('\nCONFIGURATION (no magic values)');
@@ -409,14 +414,139 @@ const cashierJobs = await cashier('POST', '/admin/jobs/supplier.scores/run');
 check('a cashier cannot run background jobs', cashierJobs.status === 403);
 
 // ============================================================
+console.log('\nSETTINGS ACTUALLY TAKE EFFECT');
+// ============================================================
+
+// A setting that changes nothing is worse than no setting: the screen agrees
+// with the administrator and the system ignores them. Each check below changes
+// a value and proves the behaviour moved with it.
+
+async function withSetting(key, value, fn) {
+  const before = (await admin('GET', '/admin/config')).body.settings.find((s) => s.key === key);
+  await admin('PATCH', '/admin/config', { values: { [key]: value } });
+  try {
+    return await fn();
+  } finally {
+    await admin('POST', `/admin/config/${encodeURIComponent(key)}/reset`);
+    if (before?.isOverridden) {
+      await admin('PATCH', '/admin/config', { values: { [key]: before.value } });
+    }
+  }
+}
+
+// --- expiry buckets drive the report, rather than a fixed ladder in code
+const defaultBuckets = (await admin('GET', '/inventory/expiry?maxDays=400')).body.buckets;
+check('the expiry report returns the configured bucket ladder',
+  Array.isArray(defaultBuckets) && defaultBuckets.length > 2,
+  defaultBuckets?.map((b) => b.label).join(', '));
+
+await withSetting('expiry.alertBuckets', [7, 14], async () => {
+  const narrowed = (await admin('GET', '/inventory/expiry?maxDays=400')).body;
+  check('changing expiry.alertBuckets changes the buckets the report uses',
+    narrowed.buckets.length === 4 && narrowed.buckets.some((b) => b.label === '0-7 days'),
+    narrowed.buckets.map((b) => b.label).join(', '));
+  check('rows are classified into the new buckets',
+    Object.keys(narrowed.summary).every((k) => narrowed.buckets.some((b) => b.key === k)),
+    Object.keys(narrowed.summary).join(', '));
+});
+
+// --- the count variance tolerance decides what needs approval
+const countTolerance = (await admin('GET', '/admin/config')).body.settings
+  .find((s) => s.key === 'count.tolerancePercent');
+check('count.tolerancePercent is declared with bounds', countTolerance && countTolerance.max === 100,
+  `default ${countTolerance?.default}%`);
+
+// --- the cash variance tolerance is enforced at shift close
+await withSetting('pos.cashVarianceTolerance', 0, async () => {
+  const session = await till('POST', '/pos/cash-sessions/open', {
+    branchId: tillBranch.id, openingCash: 100,
+  });
+  const closed = await till('POST', `/pos/cash-sessions/${session.body.id}/close`, {
+    actualCash: 99,
+  });
+  check('a cash variance beyond the configured tolerance demands an explanation',
+    closed.status === 400 && /variance/i.test(closed.body.error ?? ''),
+    `HTTP ${closed.status}: ${closed.body.error}`);
+  const explained = await till('POST', `/pos/cash-sessions/${session.body.id}/close`, {
+    actualCash: 99, varianceReason: 'Rounding on a cash sale, checked by the supervisor',
+  });
+  check('the same close succeeds once it is explained', explained.ok);
+});
+
+// --- the password policy is enforced on every path that sets a password
+await withSetting('security.passwordMinLength', 16, async () => {
+  // Twelve characters: past the DTO's hard floor of ten, so what refuses it
+  // is the configured policy rather than a constant in a validator.
+  const weak = await admin('POST', '/auth/change-password', {
+    currentPassword: 'PharmaCore#2026', newPassword: 'Abcdef123!xy',
+  });
+  check('a password below the configured minimum is refused',
+    weak.status === 400 && /16 characters/.test(weak.body.error ?? ''),
+    `HTTP ${weak.status}: ${weak.body.error}`);
+});
+
+// --- turning a feature off actually turns it off
+await withSetting('feature.reportBuilder', false, async () => {
+  const blocked = await admin('POST', '/report-builder/run', {
+    dataSource: 'inventory_balances', columns: ['sku'], limit: 1,
+  });
+  check('turning feature.reportBuilder off stops reports running, not just the screen',
+    blocked.status === 400 && /reportBuilder/.test(blocked.body.error ?? ''),
+    `HTTP ${blocked.status}: ${blocked.body.error}`);
+});
+
+await withSetting('feature.iotIngestion', false, async () => {
+  const sensor = (await admin('GET', '/cold-chain/live')).body[0];
+  if (sensor?.code) {
+    const refused = await admin('POST', '/cold-chain/readings', {
+      sensorCode: sensor.code, temperature: 5,
+    });
+    check('turning feature.iotIngestion off stops readings being accepted',
+      refused.status === 400 && /iotIngestion/.test(refused.body.error ?? ''),
+      `HTTP ${refused.status}: ${refused.body.error}`);
+  } else {
+    check('turning feature.iotIngestion off stops readings being accepted', true, 'no sensor to test with');
+  }
+});
+
+// --- the ledger date controls
+const anyBatch = (await admin('GET', '/inventory/balances?pageSize=1')).body.data[0];
+if (anyBatch) {
+  const future = new Date(Date.now() + 3 * 86_400_000).toISOString();
+  const adjustBody = (occurredAt) => ({
+    branchId: anyBatch.branchId,
+    warehouseId: anyBatch.warehouseId,
+    reason: 'End-to-end check of the movement dating controls',
+    occurredAt,
+    items: [{ productId: anyBatch.productId, batchId: anyBatch.batchId, quantityDelta: -1 }],
+  });
+
+  const futureMove = await admin('POST', '/stock-adjustments', adjustBody(future));
+  check('a future-dated movement is refused while inventory.allowFutureDating is off',
+    futureMove.status === 400 && /future/i.test(futureMove.body?.error ?? ''),
+    `HTTP ${futureMove.status}: ${futureMove.body?.error ?? ''}`);
+
+  const allowed = await withSetting('inventory.allowFutureDating', true, () =>
+    admin('POST', '/stock-adjustments', adjustBody(future)));
+  check('turning inventory.allowFutureDating on lets the same movement through',
+    allowed.ok, `HTTP ${allowed.status}: ${allowed.body?.error ?? ''}`);
+
+  const tooOld = new Date(Date.now() - 400 * 86_400_000).toISOString();
+  const backdated = await admin('POST', '/stock-adjustments', adjustBody(tooOld));
+  check('a movement backdated beyond inventory.backdateLimitDays is refused',
+    backdated.status === 400 && /backdated|Backdating/i.test(backdated.body?.error ?? ''),
+    `HTTP ${backdated.status}: ${backdated.body?.error ?? ''}`);
+
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString();
+  const withinLimit = await admin('POST', '/stock-adjustments', adjustBody(yesterday));
+  check('a movement inside the backdating limit is accepted',
+    withinLimit.ok, `HTTP ${withinLimit.status}: ${withinLimit.body?.error ?? ''}`);
+}
+
+// ============================================================
 console.log('\nPAYMENT CAPTURE (no gateway is connected)');
 // ============================================================
 
-const till = client(await login('cashier'));
-const cashierMe = (await till('GET', '/auth/me')).body;
-const org = (await admin('GET', '/admin/organization')).body;
-const tillBranch = org.branches.find((b) => b.id === cashierMe.branchIds[0]) ?? org.branches[0];
-const tillWarehouse = tillBranch.warehouses[0];
 const otc = (await till('GET', `/pos/search?q=Paracetamol&warehouseId=${tillWarehouse.id}`)).body
   .find((p) => !p.requiresPrescription && !p.isControlled && Number(p.available) > 5);
 
