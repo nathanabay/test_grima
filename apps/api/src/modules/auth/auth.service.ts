@@ -12,6 +12,7 @@ import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
+import { NotificationsService } from '../notifications/notifications.service';
 import { LoginDto } from './dto';
 
 const MAX_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS ?? 5);
@@ -31,6 +32,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   static async hashPassword(plain: string): Promise<string> {
@@ -332,6 +334,107 @@ export class AuthService {
       entityType: 'User',
       entityId: userId,
     });
+    return { success: true };
+  }
+
+  /**
+   * Begin a password reset (§4).
+   *
+   * Always reports success: telling a caller that an address is unknown would
+   * turn this into an account-enumeration oracle. The token is returned only to
+   * the notification channel, never in the HTTP response.
+   */
+  async requestPasswordReset(
+    email: string,
+    context: { ipAddress?: string | null } = {},
+  ): Promise<{ success: true }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
+
+    if (user && user.status === 'ACTIVE') {
+      const token = randomBytes(32).toString('hex');
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          resetTokenHash: this.hashToken(token),
+          resetTokenExpires: new Date(Date.now() + 30 * 60_000),
+        },
+      });
+
+      await this.audit.record({
+        userId: user.id,
+        userLabel: user.fullName,
+        module: 'auth',
+        action: 'PASSWORD_RESET_REQUESTED',
+        entityType: 'User',
+        entityId: user.id,
+        ipAddress: context.ipAddress ?? null,
+      });
+
+      // The token travels by notification, never in the HTTP response.
+      await this.notifications.emit({
+        eventType: 'PASSWORD_RESET',
+        severity: 'WARNING',
+        userId: user.id,
+        title: 'Password reset requested',
+        body:
+          `A password reset was requested for your PharmaCore account.\n\n` +
+          `Reset token: ${token}\n\n` +
+          `It expires in 30 minutes and can be used once. ` +
+          `If you did not request this, tell your administrator — your password has not changed.`,
+      });
+
+      this.logger.log(`Password reset token issued for ${user.email}`);
+    }
+
+    return { success: true };
+  }
+
+  async confirmPasswordReset(token: string, newPassword: string): Promise<{ success: true }> {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        resetTokenHash: this.hashToken(token),
+        resetTokenExpires: { gt: new Date() },
+      },
+    });
+    if (!user) {
+      throw new UnauthorizedException('This reset link is invalid or has expired');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: await AuthService.hashPassword(newPassword),
+          passwordChangedAt: new Date(),
+          mustChangePassword: false,
+          // Single use: clear the token, and lift any lockout the failed
+          // attempts caused, since the holder has proven control of the inbox.
+          resetTokenHash: null,
+          resetTokenExpires: null,
+          failedAttempts: 0,
+          lockedUntil: null,
+          status: user.status === 'LOCKED' ? 'ACTIVE' : user.status,
+        },
+      });
+      // Every existing session is invalidated: a reset may follow a compromise.
+      await tx.session.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    });
+
+    await this.audit.record({
+      userId: user.id,
+      userLabel: user.fullName,
+      module: 'auth',
+      action: 'PASSWORD_RESET_COMPLETED',
+      entityType: 'User',
+      entityId: user.id,
+      reason: 'All sessions revoked',
+    });
+
     return { success: true };
   }
 

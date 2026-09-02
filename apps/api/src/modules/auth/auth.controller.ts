@@ -4,9 +4,11 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import {
   ChangePasswordDto,
+  ConfirmPasswordResetDto,
   EnableMfaDto,
   LoginDto,
   RefreshDto,
+  RequestPasswordResetDto,
 } from './dto';
 import { AuthenticatedUser, CurrentUser, Public } from '../../common/decorators';
 
@@ -32,6 +34,24 @@ export class AuthController {
   @ApiOperation({ summary: 'Exchange a refresh token for a new access token (rotates the refresh token)' })
   refresh(@Body() dto: RefreshDto) {
     return this.auth.refresh(dto.refreshToken);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 300_000 } })
+  @Post('password-reset/request')
+  @ApiOperation({
+    summary: 'Request a password reset token. Always reports success, so it cannot be used to discover accounts.',
+  })
+  requestPasswordReset(@Body() dto: RequestPasswordResetDto, @Req() req: any) {
+    return this.auth.requestPasswordReset(dto.email, { ipAddress: req.ip });
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
+  @Post('password-reset/confirm')
+  @ApiOperation({ summary: 'Complete a password reset; revokes every existing session' })
+  confirmPasswordReset(@Body() dto: ConfirmPasswordResetDto) {
+    return this.auth.confirmPasswordReset(dto.token, dto.newPassword);
   }
 
   @Post('logout')
