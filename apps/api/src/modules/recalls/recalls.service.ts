@@ -369,7 +369,7 @@ export class RecallsService {
 
   /** Every location currently holding a recalled batch (§27 item 6). */
   async traceBatch(batchId: string) {
-    const [balances, movements, dispensings] = await Promise.all([
+    const [balances, movements, dispensings, sales] = await Promise.all([
       this.prisma.inventoryBalance.findMany({
         where: { batchId, onHand: { gt: 0 } },
         include: {
@@ -389,7 +389,51 @@ export class RecallsService {
           },
         },
       }),
+      // Over-the-counter sales reach patients too. A trace that only looked at
+      // dispensing would under-report who is holding the medicine, which is the
+      // one number a recall must not get wrong (§27).
+      this.prisma.saleItem.findMany({
+        where: { batchId, sale: { status: { not: 'VOIDED' } } },
+        include: {
+          sale: {
+            select: {
+              saleNo: true,
+              patientId: true,
+              soldAt: true,
+              branchId: true,
+              status: true,
+              patient: { select: { fullName: true, phone: true } },
+            },
+          },
+        },
+      }),
     ]);
+
+    const dispensedTo = dispensings.map((d) => ({
+      dispensingNo: d.dispensing.dispensingNo,
+      patientId: d.dispensing.patientId,
+      quantity: d.quantity,
+      dispensedAt: d.dispensing.dispensedAt,
+      branchId: d.dispensing.branchId,
+    }));
+
+    const soldTo = sales.map((s) => ({
+      saleNo: s.sale.saleNo,
+      patientId: s.sale.patientId,
+      // A walk-in sale has no patient record; the recall then has to be
+      // handled by public notice rather than by contacting an individual.
+      patientName: s.sale.patient?.fullName ?? null,
+      patientPhone: s.sale.patient?.phone ?? null,
+      quantity: s.quantity,
+      soldAt: s.sale.soldAt,
+      branchId: s.sale.branchId,
+    }));
+
+    const contactable = [
+      ...dispensedTo.filter((d) => d.patientId),
+      ...soldTo.filter((s) => s.patientId),
+    ].length;
+    const anonymousSales = soldTo.filter((s) => !s.patientId).length;
 
     return {
       currentLocations: balances.map((b) => ({
@@ -400,13 +444,18 @@ export class RecallsService {
       })),
       movementCount: movements.length,
       movements,
-      dispensedTo: dispensings.map((d) => ({
-        dispensingNo: d.dispensing.dispensingNo,
-        patientId: d.dispensing.patientId,
-        quantity: d.quantity,
-        dispensedAt: d.dispensing.dispensedAt,
-        branchId: d.dispensing.branchId,
-      })),
+      dispensedTo,
+      soldTo,
+      recipientSummary: {
+        dispensings: dispensedTo.length,
+        sales: soldTo.length,
+        contactable,
+        anonymousSales,
+        // Stated plainly rather than left for someone to infer from the arrays.
+        note: anonymousSales
+          ? `${anonymousSales} sale(s) went to walk-in customers with no patient record and cannot be contacted individually.`
+          : null,
+      },
     };
   }
 }

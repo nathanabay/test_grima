@@ -190,6 +190,19 @@ const DRUGS: DrugSeed[] = [
   { generic: 'Chlorpromazine', brand: 'Largactil', ingredient: 'Chlorpromazine hydrochloride', strength: '100 mg', form: 'Tablet', atc: 'N05AA01', category: 'CNS', therapeutic: 'Typical antipsychotic', rx: true, cost: 1.1, price: 2.7, baseUnit: 'TABLET' },
   { generic: 'Risperidone', brand: 'Risperdal', ingredient: 'Risperidone', strength: '2 mg', form: 'Tablet', atc: 'N05AX08', category: 'CNS', therapeutic: 'Atypical antipsychotic', rx: true, cost: 3.4, price: 6.8, baseUnit: 'TABLET' },
   { generic: 'Allopurinol', brand: 'Zyloric', ingredient: 'Allopurinol', strength: '100 mg', form: 'Tablet', atc: 'M04AA01', category: 'MUSCULOSKELETAL', therapeutic: 'Xanthine oxidase inhibitor', rx: true, cost: 0.9, price: 2.2, baseUnit: 'TABLET' },
+  // Alternative brands of molecules already stocked. Multiple brands of one
+  // generic is the normal state of a pharmacy shelf, and it is what makes
+  // generic-equivalent and alternative-brand relationships meaningful.
+  { generic: 'Amoxicillin', brand: 'Ospamox', ingredient: 'Amoxicillin trihydrate', strength: '500 mg', form: 'Capsule', atc: 'J01CA04', category: 'ANTIBIOTIC', therapeutic: 'Penicillin antibacterial', rx: true, cost: 2.15, price: 4.1, baseUnit: 'CAPSULE' },
+  { generic: 'Amoxicillin', brand: 'Moxilin', ingredient: 'Amoxicillin trihydrate', strength: '500 mg', form: 'Capsule', atc: 'J01CA04', category: 'ANTIBIOTIC', therapeutic: 'Penicillin antibacterial', rx: true, cost: 1.95, price: 3.8, baseUnit: 'CAPSULE' },
+  { generic: 'Paracetamol', brand: 'Calpol', ingredient: 'Paracetamol', strength: '500 mg', form: 'Tablet', atc: 'N02BE01', category: 'ANALGESIC', therapeutic: 'Non-opioid analgesic', rx: false, cost: 0.32, price: 0.75, baseUnit: 'TABLET' },
+  { generic: 'Paracetamol', brand: 'Adol', ingredient: 'Paracetamol', strength: '500 mg', form: 'Tablet', atc: 'N02BE01', category: 'ANALGESIC', therapeutic: 'Non-opioid analgesic', rx: false, cost: 0.28, price: 0.7, baseUnit: 'TABLET' },
+  { generic: 'Metformin', brand: 'Glucophage XR', ingredient: 'Metformin hydrochloride', strength: '500 mg', form: 'Tablet', atc: 'A10BA02', category: 'ANTIDIABETIC', therapeutic: 'Biguanide', rx: true, cost: 1.1, price: 2.3, baseUnit: 'TABLET' },
+  { generic: 'Omeprazole', brand: 'Omez', ingredient: 'Omeprazole', strength: '20 mg', form: 'Capsule', atc: 'A02BC01', category: 'GASTROINTESTINAL', therapeutic: 'Proton pump inhibitor', rx: false, cost: 1.4, price: 3.1, baseUnit: 'CAPSULE' },
+  { generic: 'Atorvastatin', brand: 'Atorlip', ingredient: 'Atorvastatin calcium', strength: '20 mg', form: 'Tablet', atc: 'C10AA05', category: 'CARDIOVASCULAR', therapeutic: 'HMG-CoA reductase inhibitor', rx: true, cost: 2.2, price: 4.6, baseUnit: 'TABLET' },
+  { generic: 'Amlodipine', brand: 'Amlogard', ingredient: 'Amlodipine besylate', strength: '5 mg', form: 'Tablet', atc: 'C08CA01', category: 'CARDIOVASCULAR', therapeutic: 'Calcium channel blocker', rx: true, cost: 0.85, price: 1.9, baseUnit: 'TABLET' },
+  { generic: 'Ciprofloxacin', brand: 'Ciplox', ingredient: 'Ciprofloxacin hydrochloride', strength: '500 mg', form: 'Tablet', atc: 'J01MA02', category: 'ANTIBIOTIC', therapeutic: 'Fluoroquinolone', rx: true, cost: 3.3, price: 6.2, baseUnit: 'TABLET' },
+  { generic: 'Ibuprofen', brand: 'Brufen', ingredient: 'Ibuprofen', strength: '400 mg', form: 'Tablet', atc: 'M01AE01', category: 'ANALGESIC', therapeutic: 'NSAID', rx: false, cost: 0.55, price: 1.25, baseUnit: 'TABLET' },
 ];
 
 const SUPPLIER_NAMES = [
@@ -268,10 +281,14 @@ async function main(): Promise<void> {
       stock_reservations, inventory_transactions, inventory_balances,
       serial_numbers, batches,
       supplier_products, suppliers,
+      price_list_items, price_lists, patient_consents, customer_groups,
+      product_relations, product_attributes, attribute_definitions, product_ingredients,
       price_history, product_barcodes, product_units, products,
       product_categories, manufacturers,
+      job_runs, integration_deliveries, integration_endpoints,
       user_scopes, user_roles, sessions, login_attempts, role_permissions, permissions, roles, users,
-      warehouse_locations, warehouses, branches, system_settings, organizations, backup_records
+      departments, warehouse_locations, warehouses, branches, regions, business_units,
+      system_settings, organizations, backup_records
     RESTART IDENTITY CASCADE
   `);
 
@@ -293,12 +310,37 @@ async function main(): Promise<void> {
     },
   });
 
+  // ---- Business units and regions (§33) ----
+  const retailUnit = await prisma.businessUnit.create({
+    data: {
+      organizationId: org.id,
+      code: 'RETAIL',
+      name: 'Retail Pharmacy',
+      description: 'Community pharmacies serving walk-in and prescription customers.',
+    },
+  });
+  const wholesaleUnit = await prisma.businessUnit.create({
+    data: {
+      organizationId: org.id,
+      code: 'WHOLESALE',
+      name: 'Wholesale & Institutional Supply',
+      description: 'Central warehouse supplying institutions and the branch network.',
+    },
+  });
+
+  const addisRegion = await prisma.region.create({
+    data: { organizationId: org.id, businessUnitId: retailUnit.id, code: 'ADDIS', name: 'Addis Ababa' },
+  });
+  const regionsOutside = await prisma.region.create({
+    data: { organizationId: org.id, businessUnitId: retailUnit.id, code: 'REGIONS', name: 'Regional Cities' },
+  });
+
   const branchSeeds = [
-    { code: 'HO', name: 'Head Office & Central Warehouse', isHeadOffice: true, city: 'Addis Ababa', lat: 9.0192, lng: 38.7525 },
-    { code: 'ADD01', name: 'Addis Pharmacy 01 - Bole', isHeadOffice: false, city: 'Addis Ababa', lat: 8.9806, lng: 38.7578 },
-    { code: 'ADD02', name: 'Addis Pharmacy 02 - Piassa', isHeadOffice: false, city: 'Addis Ababa', lat: 9.0347, lng: 38.7508 },
-    { code: 'ADA01', name: 'Adama Pharmacy', isHeadOffice: false, city: 'Adama', lat: 8.5400, lng: 39.2694 },
-    { code: 'HAW01', name: 'Hawassa Pharmacy', isHeadOffice: false, city: 'Hawassa', lat: 7.0621, lng: 38.4764 },
+    { code: 'HO', name: 'Head Office & Central Warehouse', isHeadOffice: true, city: 'Addis Ababa', lat: 9.0192, lng: 38.7525, branchType: 'DISTRIBUTION_CENTRE', unit: wholesaleUnit.id, region: null as string | null },
+    { code: 'ADD01', name: 'Addis Pharmacy 01 - Bole', isHeadOffice: false, city: 'Addis Ababa', lat: 8.9806, lng: 38.7578, branchType: 'PHARMACY', unit: retailUnit.id, region: addisRegion.id },
+    { code: 'ADD02', name: 'Addis Pharmacy 02 - Piassa', isHeadOffice: false, city: 'Addis Ababa', lat: 9.0347, lng: 38.7508, branchType: 'PHARMACY', unit: retailUnit.id, region: addisRegion.id },
+    { code: 'ADA01', name: 'Adama Pharmacy', isHeadOffice: false, city: 'Adama', lat: 8.5400, lng: 39.2694, branchType: 'PHARMACY', unit: retailUnit.id, region: regionsOutside.id },
+    { code: 'HAW01', name: 'Hawassa Pharmacy', isHeadOffice: false, city: 'Hawassa', lat: 7.0621, lng: 38.4764, branchType: 'PHARMACY', unit: retailUnit.id, region: regionsOutside.id },
   ];
 
   const branches: any[] = [];
@@ -307,17 +349,44 @@ async function main(): Promise<void> {
       await prisma.branch.create({
         data: {
           organizationId: org.id,
+          businessUnitId: b.unit,
+          regionId: b.region,
+          branchType: b.branchType,
           code: b.code,
           name: b.name,
           isHeadOffice: b.isHeadOffice,
           city: b.city,
           latitude: b.lat,
           longitude: b.lng,
+          timezone: 'Africa/Addis_Ababa',
+          costCentre: `CC-${b.code}`,
           licenseNumber: `EFDA-${b.code}-2024`,
           phone: '+251 11 5' + randomInt(100000, 999999),
         },
       }),
     );
+  }
+
+  // Departments give consumption a cost centre to attribute to (§33).
+  let departmentCount = 0;
+  for (const branch of branches) {
+    const departmentSeeds = branch.isHeadOffice
+      ? [
+          { code: 'PROC', name: 'Procurement' },
+          { code: 'QA', name: 'Quality Assurance' },
+          { code: 'WH', name: 'Warehouse Operations' },
+        ]
+      : [
+          { code: 'DISP', name: 'Dispensary' },
+          { code: 'OTC', name: 'Over the counter' },
+          { code: 'STORE', name: 'Back store' },
+        ];
+    for (const d of departmentSeeds) {
+      await prisma.department.create({
+        data: { branchId: branch.id, code: d.code, name: d.name, costCentre: `${branch.code}-${d.code}` },
+      });
+      departmentCount += 1;
+    }
   }
 
   const warehouses: any[] = [];
@@ -377,7 +446,10 @@ async function main(): Promise<void> {
     );
   }
 
-  console.log(`  Created ${branches.length} branches, ${warehouses.length} warehouses`);
+  console.log(
+    `  Created 2 business units, 2 regions, ${branches.length} branches, ` +
+      `${departmentCount} departments, ${warehouses.length} warehouses`,
+  );
 
   // ---- Permissions and roles (§4) ----
   const permissionRows = RESOURCE_CATALOG.flatMap((r) =>
@@ -566,6 +638,207 @@ async function main(): Promise<void> {
   }
   console.log(`  Created ${products.length} products with unit ladders and barcodes`);
 
+  // ---- Active ingredients (§1: features 4-7) ----
+  // A combination product gets one row per ingredient, which is what makes
+  // ingredient search and duplicate-therapy detection work at all.
+  let ingredientRows = 0;
+  for (const [index, drug] of DRUGS.entries()) {
+    const product = products[index];
+    // Combination products are written either "A + B" or "A/B"; both split
+    // into one row per ingredient so the formula is queryable.
+    const names = drug.ingredient.split(/\s*[+/]\s*/).map((n: string) => n.trim());
+    const strengths = String(drug.strength).split(/\s*[+/]\s*/).map((v: string) => v.trim());
+
+    const rows = names.map((name: string, i: number) => {
+      const raw = strengths[i] ?? '';
+      const match = /^([\d.]+)\s*([a-zA-Z%/]+)?/.exec(raw);
+      return {
+        productId: product.id,
+        name,
+        strengthValue: match ? new Prisma.Decimal(match[1]) : null,
+        strengthUnit: match?.[2] ?? null,
+        role: 'ACTIVE',
+        sequence: i,
+      };
+    });
+
+    await prisma.productIngredient.createMany({ data: rows, skipDuplicates: true });
+    ingredientRows += rows.length;
+  }
+  console.log(`  Created ${ingredientRows} active-ingredient records`);
+
+  // ---- Product relationships (§1: features 30-34) ----
+  //
+  // A shared 5-level ATC code means the same chemical substance. Combined with
+  // the same dosage form and strength, that is a genuine generic equivalent —
+  // not a guess. Both directions are written, so a substitution lookup returns
+  // the same set whichever product the pharmacist started from.
+  const byMolecule = new Map<string, any[]>();
+  for (const [index, drug] of DRUGS.entries()) {
+    const key = `${drug.atc}|${drug.form}|${drug.strength}`;
+    if (!byMolecule.has(key)) byMolecule.set(key, []);
+    byMolecule.get(key)!.push({ product: products[index], drug });
+  }
+
+  let relationRows = 0;
+  for (const group of byMolecule.values()) {
+    if (group.length < 2) continue;
+    for (let i = 0; i < group.length; i++) {
+      for (let j = 0; j < group.length; j++) {
+        if (i === j) continue;
+        // Different brand of the same molecule is both an equivalent and an
+        // alternative brand; they answer different questions at the counter.
+        const relationType =
+          group[i].drug.brand === group[j].drug.brand ? 'VARIANT' : 'GENERIC_EQUIVALENT';
+        await prisma.productRelation.create({
+          data: {
+            productId: group[i].product.id,
+            relatedProductId: group[j].product.id,
+            relationType,
+            notes: `Same ATC ${group[i].drug.atc}, ${group[i].drug.form}, ${group[i].drug.strength}`,
+          },
+        });
+        relationRows += 1;
+
+        if (relationType === 'GENERIC_EQUIVALENT') {
+          await prisma.productRelation.create({
+            data: {
+              productId: group[i].product.id,
+              relatedProductId: group[j].product.id,
+              relationType: 'ALTERNATIVE_BRAND',
+              notes: `${group[j].drug.brand} is an alternative brand of ${group[i].drug.generic}`,
+            },
+          });
+          relationRows += 1;
+        }
+      }
+    }
+  }
+  console.log(`  Created ${relationRows} product relationships`);
+
+  // ---- Administrator-defined product attributes (§1: feature 49) ----
+  const attributeDefs = await Promise.all(
+    [
+      { code: 'SHELF_LOCATION', label: 'Default shelf location', dataType: 'TEXT', group: 'Storage', sequence: 1 },
+      { code: 'EFDA_CATEGORY', label: 'EFDA registration category', dataType: 'SELECT', options: ['Essential', 'Non-essential', 'Programme'], group: 'Regulatory', sequence: 2 },
+      { code: 'REQUIRES_FRIDGE_BAG', label: 'Needs a cold bag for delivery', dataType: 'BOOLEAN', group: 'Storage', sequence: 3 },
+      { code: 'FORMULARY_RANK', label: 'Formulary rank', dataType: 'NUMBER', group: 'Clinical', sequence: 4 },
+    ].map((d) => prisma.attributeDefinition.create({ data: d as any })),
+  );
+
+  const efdaDef = attributeDefs.find((d) => d.code === 'EFDA_CATEGORY')!;
+  const fridgeDef = attributeDefs.find((d) => d.code === 'REQUIRES_FRIDGE_BAG')!;
+  for (const [index, drug] of DRUGS.entries()) {
+    await prisma.productAttribute.create({
+      data: {
+        productId: products[index].id,
+        definitionId: efdaDef.id,
+        value: drug.price === 0 ? 'Programme' : drug.rx ? 'Essential' : 'Non-essential',
+      },
+    });
+    if (drug.coldChain) {
+      await prisma.productAttribute.create({
+        data: { productId: products[index].id, definitionId: fridgeDef.id, value: 'true' },
+      });
+    }
+  }
+  console.log(`  Created ${attributeDefs.length} attribute definitions with values`);
+
+  // ---- Customer groups and price lists (§2: features 91-100) ----
+  const customerGroups = await Promise.all(
+    [
+      { code: 'RETAIL', name: 'Walk-in retail', discountPercent: new Prisma.Decimal(0) },
+      { code: 'STAFF', name: 'Staff and family', discountPercent: new Prisma.Decimal(0.15) },
+      { code: 'INSURED', name: 'Insured patients', discountPercent: new Prisma.Decimal(0) },
+      { code: 'CORPORATE', name: 'Corporate accounts', discountPercent: new Prisma.Decimal(0.05) },
+      { code: 'NGO', name: 'NGO and institutional', discountPercent: new Prisma.Decimal(0.1) },
+    ].map((g) => prisma.customerGroup.create({ data: g })),
+  );
+
+  const insuredGroup = customerGroups.find((g) => g.code === 'INSURED')!;
+  const corporateGroup = customerGroups.find((g) => g.code === 'CORPORATE')!;
+
+  const insuranceList = await prisma.priceList.create({
+    data: {
+      code: 'PL-INSURANCE',
+      name: 'Insurance schedule 2026',
+      listType: 'INSURANCE',
+      customerGroupId: insuredGroup.id,
+      priority: 50,
+      notes: 'Reimbursement prices agreed with the insurer for the 2026 year.',
+    },
+  });
+
+  const wholesaleList = await prisma.priceList.create({
+    data: {
+      code: 'PL-WHOLESALE',
+      name: 'Wholesale and institutional',
+      listType: 'WHOLESALE',
+      customerGroupId: corporateGroup.id,
+      priority: 40,
+    },
+  });
+
+  // A promotional list that expires, so the effective-window logic has
+  // something real to exercise.
+  const promoList = await prisma.priceList.create({
+    data: {
+      code: 'PL-PROMO-Q3',
+      name: 'Q3 OTC promotion',
+      listType: 'PROMOTIONAL',
+      priority: 90,
+      effectiveFrom: new Date(Date.now() - 14 * 86_400_000),
+      effectiveTo: new Date(Date.now() + 30 * 86_400_000),
+      notes: 'Time-limited promotion; outranks the standing lists while it runs.',
+    },
+  });
+
+  let priceRows = 0;
+  for (const [index, drug] of DRUGS.entries()) {
+    if (drug.price === 0) continue;
+    const product = products[index];
+
+    await prisma.priceListItem.create({
+      data: {
+        priceListId: insuranceList.id,
+        productId: product.id,
+        unitPrice: new Prisma.Decimal((drug.price * 0.9).toFixed(4)),
+      },
+    });
+    priceRows += 1;
+
+    // Wholesale carries a quantity break, so the break logic is covered.
+    await prisma.priceListItem.createMany({
+      data: [
+        {
+          priceListId: wholesaleList.id,
+          productId: product.id,
+          unitPrice: new Prisma.Decimal((drug.price * 0.85).toFixed(4)),
+          minQuantity: new Prisma.Decimal(0),
+        },
+        {
+          priceListId: wholesaleList.id,
+          productId: product.id,
+          unitPrice: new Prisma.Decimal((drug.price * 0.78).toFixed(4)),
+          minQuantity: new Prisma.Decimal(500),
+        },
+      ],
+    });
+    priceRows += 2;
+
+    if (!drug.rx && index % 7 === 0) {
+      await prisma.priceListItem.create({
+        data: {
+          priceListId: promoList.id,
+          productId: product.id,
+          unitPrice: new Prisma.Decimal((drug.price * 0.8).toFixed(4)),
+        },
+      });
+      priceRows += 1;
+    }
+  }
+  console.log(`  Created ${customerGroups.length} customer groups and ${priceRows} price-list lines`);
+
   // ---- Suppliers (§13) ----
   const suppliers: any[] = [];
   for (const [index, name] of SUPPLIER_NAMES.entries()) {
@@ -734,23 +1007,75 @@ async function main(): Promise<void> {
   }
   console.log(`  Created ${batchCount} batches and ${transactionCount} opening stock movements`);
 
-  // ---- Patients (§25) ----
+  // ---- Patients (§25) and their CRM records (§14) ----
   const patients: any[] = [];
+  let consentCount = 0;
   for (const [index, name] of PATIENT_NAMES.entries()) {
-    patients.push(
-      await prisma.patient.create({
+    // A quarter of patients are insured, a few are corporate accounts; the rest
+    // are ordinary walk-ins. This gives the pricing engine real segments to
+    // resolve against rather than one uniform group.
+    const group =
+      index % 4 === 0
+        ? customerGroups.find((g) => g.code === 'INSURED')!
+        : index % 9 === 0
+          ? customerGroups.find((g) => g.code === 'CORPORATE')!
+          : customerGroups.find((g) => g.code === 'RETAIL')!;
+
+    const insured = group.code === 'INSURED';
+    const loyaltyPoints = randomInt(0, 2400);
+
+    const patient = await prisma.patient.create({
+      data: {
+        patientCode: `PT-${String(index + 1).padStart(6, '0')}`,
+        fullName: name,
+        dateOfBirth: new Date(1955 + randomInt(0, 55), randomInt(0, 11), randomInt(1, 28)),
+        sex: index % 2 === 0 ? 'M' : 'F',
+        phone: '+251 9' + randomInt(10000000, 99999999),
+        city: pick(['Addis Ababa', 'Adama', 'Hawassa']),
+        allergies: random() < 0.2 ? pick(['Penicillin', 'Sulfa drugs', 'Aspirin', 'Iodine']) : null,
+        customerGroupId: group.id,
+        patientType: group.code === 'CORPORATE' ? 'CORPORATE' : 'INDIVIDUAL',
+        organizationName: group.code === 'CORPORATE' ? pick(['Ethio Telecom', 'Awash Bank', 'Ethiopian Airlines']) : null,
+        preferredLanguage: pick(['en', 'am', 'om']),
+        communicationPrefs: { sms: random() < 0.7, email: random() < 0.3, whatsapp: false },
+        insuranceProvider: insured ? pick(['Nyala Insurance', 'Awash Insurance', 'CBHI']) : null,
+        insuranceMemberNo: insured ? `INS-${randomInt(100000, 999999)}` : null,
+        creditLimit: group.code === 'CORPORATE' ? new Prisma.Decimal(50000) : new Prisma.Decimal(0),
+        loyaltyPoints,
+        loyaltyTier: loyaltyPoints > 2000 ? 'GOLD' : loyaltyPoints > 1000 ? 'SILVER' : loyaltyPoints > 300 ? 'BRONZE' : 'NONE',
+      },
+    });
+    patients.push(patient);
+
+    // Consent is versioned and never edited in place (§14).
+    await prisma.patientConsent.create({
+      data: {
+        patientId: patient.id,
+        consentType: 'DATA_PROCESSING',
+        version: '2026.1',
+        granted: true,
+        method: 'IN_PERSON',
+      },
+    });
+    consentCount += 1;
+
+    if (random() < 0.6) {
+      const marketingGranted = random() < 0.7;
+      await prisma.patientConsent.create({
         data: {
-          patientCode: `PT-${String(index + 1).padStart(6, '0')}`,
-          fullName: name,
-          dateOfBirth: new Date(1955 + randomInt(0, 55), randomInt(0, 11), randomInt(1, 28)),
-          sex: index % 2 === 0 ? 'M' : 'F',
-          phone: '+251 9' + randomInt(10000000, 99999999),
-          city: pick(['Addis Ababa', 'Adama', 'Hawassa']),
-          allergies: random() < 0.2 ? pick(['Penicillin', 'Sulfa drugs', 'Aspirin', 'Iodine']) : null,
+          patientId: patient.id,
+          consentType: 'SMS',
+          version: '2026.1',
+          granted: marketingGranted,
+          method: 'IN_PERSON',
+          // A withdrawal is recorded on the row, not by deleting it.
+          withdrawnAt: marketingGranted ? null : new Date(Date.now() - randomInt(1, 200) * 86_400_000),
         },
-      }),
-    );
+      });
+      consentCount += 1;
+    }
   }
+  console.log(`  Created ${patients.length} patients with ${consentCount} consent records`);
 
   // ---- Prescriptions, dispensing and sales history ----
   const rxProducts = products.filter((p) => p.requiresPrescription && !p.isControlled);

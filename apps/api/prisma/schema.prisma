@@ -621,19 +621,25 @@ model ProductCategory {
 }
 
 model Product {
-  id                  String  @id @default(uuid()) @db.Uuid
-  sku                 String  @unique
-  gtin                String? @unique
+  id                  String    @id @default(uuid()) @db.Uuid
+  sku                 String    @unique
+  gtin                String?   @unique
   genericName         String
   brandName           String?
   activeIngredient    String
   strength            String
   dosageForm          String
   routeOfAdmin        String?
-  manufacturerId      String? @db.Uuid
+  manufacturerId      String?   @db.Uuid
   marketingAuthHolder String?
   countryOfOrigin     String?
-  categoryId          String? @db.Uuid
+  /// Regulatory registration (§1: features 15-16). Expiry is tracked so a
+  /// product whose licence has lapsed can be reported before it is ordered.
+  registrationNumber  String?
+  registrationExpiry  DateTime?
+  launchDate          DateTime?
+  discontinuedDate    DateTime?
+  categoryId          String?   @db.Uuid
   therapeuticClass    String?
   atcCode             String?
 
@@ -647,6 +653,24 @@ model Product {
   requiresPrescription      Boolean          @default(false)
   isControlled              Boolean          @default(false)
   controlledSchedule        String?
+  isNarcotic                Boolean          @default(false)
+  isCytotoxic               Boolean          @default(false)
+  isFrozen                  Boolean          @default(false)
+  isFragile                 Boolean          @default(false)
+  isFlammable               Boolean          @default(false)
+  isLookAlikeSoundAlike     Boolean          @default(false)
+  isVeterinary              Boolean          @default(false)
+  isPediatric               Boolean          @default(false)
+  /// POM | OTC | PHARMACY_ONLY | HOSPITAL_ONLY
+  saleClassification        String           @default("OTC")
+  /// Free text from the approved product information. Never generated.
+  pregnancyInfo             String?
+  lactationInfo             String?
+  minHumidityPercent        Decimal?         @db.Decimal(5, 2)
+  maxHumidityPercent        Decimal?         @db.Decimal(5, 2)
+  /// How long this product may sit outside its storage range before the
+  /// excursion needs a QA disposition.
+  maxExcursionMinutes       Int?
   isColdChain               Boolean          @default(false)
   isRefrigerated            Boolean          @default(false)
   isHazardous               Boolean          @default(false)
@@ -659,11 +683,22 @@ model Product {
   minShelfLifeDaysOnReceipt Int              @default(180)
 
   // Planning (§12)
-  reorderLevel        Decimal @default(0) @db.Decimal(18, 4)
-  safetyStock         Decimal @default(0) @db.Decimal(18, 4)
-  maximumStock        Decimal @default(0) @db.Decimal(18, 4)
-  leadTimeDays        Int     @default(14)
-  preferredSupplierId String? @db.Uuid
+  reorderLevel          Decimal @default(0) @db.Decimal(18, 4)
+  safetyStock           Decimal @default(0) @db.Decimal(18, 4)
+  maximumStock          Decimal @default(0) @db.Decimal(18, 4)
+  leadTimeDays          Int     @default(14)
+  preferredSupplierId   String? @db.Uuid
+  secondarySupplierId   String? @db.Uuid
+  economicOrderQty      Decimal @default(0) @db.Decimal(18, 4)
+  minPurchaseQty        Decimal @default(0) @db.Decimal(18, 4)
+  /// Orders are rounded up to a multiple of this. 0 disables the rule.
+  purchaseMultiple      Decimal @default(0) @db.Decimal(18, 4)
+  minSaleQty            Decimal @default(0) @db.Decimal(18, 4)
+  maxDispenseQty        Decimal @default(0) @db.Decimal(18, 4)
+  /// Procurement is blocked outside the emergency workflow when set.
+  procurementRestricted Boolean @default(false)
+  /// Per-month demand multipliers, e.g. {"1":0.8,"7":1.6}. Used by forecasting.
+  seasonalProfile       Json?
 
   // Pricing (§32)
   purchaseCost     Decimal  @default(0) @db.Decimal(18, 4)
@@ -673,6 +708,8 @@ model Product {
   wholesalePrice   Decimal  @default(0) @db.Decimal(18, 4)
   insurancePrice   Decimal? @db.Decimal(18, 4)
   taxRate          Decimal  @default(0) @db.Decimal(6, 4)
+  /// Target gross margin, used to flag under-priced lines. Advisory only.
+  targetMarginPct  Decimal  @default(0) @db.Decimal(6, 4)
 
   imageUrl       String?
   patientInfoUrl String?
@@ -682,17 +719,25 @@ model Product {
   updatedAt      DateTime @updatedAt
   createdById    String?  @db.Uuid
 
-  manufacturer  Manufacturer?          @relation(fields: [manufacturerId], references: [id])
-  category      ProductCategory?       @relation(fields: [categoryId], references: [id])
-  units         ProductUnit[]
-  barcodes      ProductBarcode[]
-  batches       Batch[]
-  balances      InventoryBalance[]
-  transactions  InventoryTransaction[]
-  priceHistory  PriceHistory[]
-  supplierLinks SupplierProduct[]
+  manufacturer   Manufacturer?          @relation(fields: [manufacturerId], references: [id])
+  category       ProductCategory?       @relation(fields: [categoryId], references: [id])
+  units          ProductUnit[]
+  barcodes       ProductBarcode[]
+  batches        Batch[]
+  balances       InventoryBalance[]
+  transactions   InventoryTransaction[]
+  priceHistory   PriceHistory[]
+  supplierLinks  SupplierProduct[]
+  ingredients    ProductIngredient[]
+  attributes     ProductAttribute[]
+  relations      ProductRelation[]      @relation("ProductRelationSource")
+  relatedTo      ProductRelation[]      @relation("ProductRelationTarget")
+  priceListItems PriceListItem[]
 
   @@index([genericName])
+  @@index([atcCode])
+  @@index([categoryId])
+  @@index([registrationExpiry])
   @@index([brandName])
   @@index([isControlled])
   @@index([isActive])
@@ -729,6 +774,153 @@ model ProductBarcode {
   @@unique([barcode, symbology])
   @@index([productId])
   @@map("product_barcodes")
+}
+
+/// Active ingredients (§1: features 4-7). A combination product has one row
+/// per ingredient, which is what makes ingredient search and duplicate-therapy
+/// checks possible — a single `activeIngredient` string cannot express
+/// "amoxicillin 500mg + clavulanic acid 125mg".
+model ProductIngredient {
+  id            String   @id @default(uuid()) @db.Uuid
+  productId     String   @db.Uuid
+  name          String
+  /// Numeric strength, kept separate from its unit so it can be compared.
+  strengthValue Decimal? @db.Decimal(18, 6)
+  strengthUnit  String?
+  /// ACTIVE | EXCIPIENT
+  role          String   @default("ACTIVE")
+  sequence      Int      @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, name, role])
+  @@index([name])
+  @@map("product_ingredients")
+}
+
+/// Administrator-defined extra fields on a product (§1: feature 49).
+model AttributeDefinition {
+  id         String   @id @default(uuid()) @db.Uuid
+  code       String   @unique
+  label      String
+  /// TEXT | NUMBER | BOOLEAN | DATE | SELECT
+  dataType   String   @default("TEXT")
+  options    String[] @default([])
+  isRequired Boolean  @default(false)
+  group      String?
+  sequence   Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  values ProductAttribute[]
+
+  @@map("attribute_definitions")
+}
+
+model ProductAttribute {
+  id           String   @id @default(uuid()) @db.Uuid
+  productId    String   @db.Uuid
+  definitionId String   @db.Uuid
+  value        String
+  updatedAt    DateTime @updatedAt
+
+  product    Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  definition AttributeDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, definitionId])
+  @@map("product_attributes")
+}
+
+/// Relationships between products (§1: features 30-34).
+///
+/// Stored one-directionally with an explicit inverse written by the service,
+/// so "is a generic equivalent of" reads correctly from both ends and a
+/// substitution suggestion never depends on which product you started from.
+model ProductRelation {
+  id               String   @id @default(uuid()) @db.Uuid
+  productId        String   @db.Uuid
+  relatedProductId String   @db.Uuid
+  /// FAMILY | VARIANT | ALTERNATIVE_BRAND | GENERIC_EQUIVALENT | SUBSTITUTE
+  relationType     String
+  notes            String?
+  createdById      String?  @db.Uuid
+  createdAt        DateTime @default(now())
+
+  product        Product @relation("ProductRelationSource", fields: [productId], references: [id], onDelete: Cascade)
+  relatedProduct Product @relation("ProductRelationTarget", fields: [relatedProductId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, relatedProductId, relationType])
+  @@index([relatedProductId])
+  @@map("product_relations")
+}
+
+/// Customer segmentation used for pricing and reporting (§2: feature 92).
+model CustomerGroup {
+  id              String   @id @default(uuid()) @db.Uuid
+  code            String   @unique
+  name            String
+  description     String?
+  /// Applied when no price-list line matches. Expressed as a fraction.
+  discountPercent Decimal  @default(0) @db.Decimal(6, 4)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  priceLists PriceList[]
+  patients   Patient[]
+
+  @@map("customer_groups")
+}
+
+/// A set of prices that applies under stated conditions (§2: features 91-99).
+///
+/// Retail, wholesale, insurance, contract and promotional pricing are the same
+/// mechanism with different scope and priority, rather than five columns on the
+/// product that cannot express an effective date.
+model PriceList {
+  id              String    @id @default(uuid()) @db.Uuid
+  code            String    @unique
+  name            String
+  /// RETAIL | WHOLESALE | INSURANCE | CONTRACT | PROMOTIONAL
+  listType        String    @default("RETAIL")
+  currency        String    @default("ETB")
+  branchId        String?   @db.Uuid
+  customerGroupId String?   @db.Uuid
+  /// Higher wins when several lists match the same sale.
+  priority        Int       @default(0)
+  effectiveFrom   DateTime  @default(now())
+  effectiveTo     DateTime?
+  isActive        Boolean   @default(true)
+  notes           String?
+  createdById     String?   @db.Uuid
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  customerGroup CustomerGroup?  @relation(fields: [customerGroupId], references: [id])
+  items         PriceListItem[]
+
+  @@index([listType, isActive])
+  @@index([branchId])
+  @@map("price_lists")
+}
+
+model PriceListItem {
+  id            String    @id @default(uuid()) @db.Uuid
+  priceListId   String    @db.Uuid
+  productId     String    @db.Uuid
+  unitPrice     Decimal   @db.Decimal(18, 4)
+  /// Quantity break: the line applies from this quantity upward.
+  minQuantity   Decimal   @default(0) @db.Decimal(18, 4)
+  /// Overrides the list window for one product.
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([priceListId, productId, minQuantity])
+  @@index([productId])
+  @@map("price_list_items")
 }
 
 model PriceHistory {
@@ -1392,16 +1584,71 @@ model Patient {
   emergencyContactPhone String?
   allergies             String?
   notes                 String?
-  isActive              Boolean   @default(true)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+
+  // ---- CRM (§14) ----
+  /// INDIVIDUAL | CORPORATE | INSTITUTIONAL
+  patientType        String    @default("INDIVIDUAL")
+  organizationName   String?
+  customerGroupId    String?   @db.Uuid
+  preferredLanguage  String?
+  /// {"sms":true,"email":false,"whatsapp":false} — respected before any send.
+  communicationPrefs Json?
+  email              String?
+  insuranceProvider  String?
+  insuranceMemberNo  String?
+  employerName       String?
+  creditLimit        Decimal   @default(0) @db.Decimal(18, 4)
+  creditBalance      Decimal   @default(0) @db.Decimal(18, 4)
+  loyaltyPoints      Int       @default(0)
+  /// NONE | BRONZE | SILVER | GOLD
+  loyaltyTier        String    @default("NONE")
+  /// Set by the anonymization workflow. The row is kept so historical
+  /// dispensing stays auditable; the identifying fields are cleared (§14).
+  isAnonymized       Boolean   @default(false)
+  anonymizedAt       DateTime?
+  /// Points at the surviving record after a duplicate merge.
+  mergedIntoId       String?   @db.Uuid
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   prescriptions Prescription[]
   sales         Sale[]
+  consents      PatientConsent[]
+  customerGroup CustomerGroup?   @relation(fields: [customerGroupId], references: [id])
 
   @@index([fullName])
   @@index([phone])
+  @@index([customerGroupId])
+  @@index([mergedIntoId])
   @@map("patients")
+}
+
+/// Consent records with versioning and withdrawal (§14: features 660-662).
+///
+/// Consent is never edited: withdrawing writes withdrawnAt on the row and a new
+/// row is created if it is granted again, so the history of what was agreed and
+/// when stays intact.
+model PatientConsent {
+  id           String    @id @default(uuid()) @db.Uuid
+  patientId    String    @db.Uuid
+  /// DATA_PROCESSING | MARKETING | SMS | EMAIL | DATA_SHARING | RESEARCH
+  consentType  String
+  /// Version of the consent text that was agreed to.
+  version      String
+  granted      Boolean   @default(true)
+  grantedAt    DateTime  @default(now())
+  withdrawnAt  DateTime?
+  /// How consent was captured: IN_PERSON | PHONE | ONLINE | PAPER
+  method       String    @default("IN_PERSON")
+  recordedById String?   @db.Uuid
+  notes        String?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, consentType])
+  @@map("patient_consents")
 }
 
 model Prescription {

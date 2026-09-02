@@ -375,9 +375,14 @@ check('the dispensing appears in the ledger with a running balance',
 // ---------------------------------------------------------------
 console.log('\nSTEP 13  Recall: blocks stock, traces history, creates tasks');
 // ---------------------------------------------------------------
+// Recall the batch FEFO actually dispensed from. Recalling an arbitrary batch
+// would leave "trace lists who the batch was dispensed to" asserting nothing,
+// and would silently start passing or failing with the demo data.
+const recalledBatchId = chosenBatchId ?? newBatch.id;
+
 const recall = await qa('POST', '/recalls', {
   productId: amox.id,
-  batchIds: [newBatch.id],
+  batchIds: [recalledBatchId],
   severity: 'CLASS_II',
   reason: 'Out-of-specification dissolution result reported by the manufacturer',
   regulatoryReference: `EFDA/REC/2026/${stamp % 10000}`,
@@ -390,28 +395,32 @@ check('recall dashboard reports stock at activation',
 check('recall generated recovery tasks', recall.body.tasks.total > 0,
   `${recall.body.tasks.total} tasks: ${JSON.stringify(recall.body.tasks.byType)}`);
 
-const batchAfterRecall = await qa('GET', `/inventory/batches/${newBatch.id}`);
+const batchAfterRecall = await qa('GET', `/inventory/batches/${recalledBatchId}`);
 check('batch is now RECALLED', batchAfterRecall.body.status === 'RECALLED');
 
 const dispenseAfterRecall = await hoPharmacist('POST', '/dispensing', {
   prescriptionId: rx.body.id,
   branchId: headOffice.id,
   warehouseId: centralWh.id,
-  lines: [{ productId: amox.id, quantity: 1, batchId: newBatch.id }],
+  lines: [{ productId: amox.id, quantity: 1, batchId: recalledBatchId }],
 });
 check('DISPENSING RECALLED STOCK IS BLOCKED', !dispenseAfterRecall.ok,
   String(dispenseAfterRecall.body.error).slice(0, 90));
 
-const saleAfterRecall = await cashier('POST', '/pos/checkout', {
+// This medicine is prescription-only, so the POS refuses it at the Rx gate
+// before the batch status is ever consulted. That is the correct behaviour, but
+// it means this call cannot prove recall blocking -- STEP 17 does that with an
+// OTC product, where the recall check is the only thing that can refuse.
+const saleAfterRecall = await hoPharmacist('POST', '/pos/checkout', {
   branchId: headOffice.id,
   warehouseId: centralWh.id,
-  lines: [{ productId: amox.id, quantity: 1, batchId: newBatch.id }],
+  lines: [{ productId: amox.id, quantity: 1, batchId: recalledBatchId }],
   payments: [{ method: 'CASH', amount: 100 }],
 });
-check('SELLING RECALLED STOCK IS BLOCKED', !saleAfterRecall.ok,
+check('a prescription-only medicine cannot be sold at the till at all', !saleAfterRecall.ok,
   String(saleAfterRecall.body.error).slice(0, 90));
 
-const trace = await qa('GET', `/recalls/batches/${newBatch.id}/trace`);
+const trace = await qa('GET', `/recalls/batches/${recalledBatchId}/trace`);
 check('trace lists current holding locations', trace.body.currentLocations.length > 0);
 check('trace lists who the batch was dispensed to', trace.body.dispensedTo.length > 0,
   `${trace.body.dispensedTo.length} dispensing record(s)`);
@@ -495,6 +504,38 @@ if (otc && otc.available > 0) {
     payments: [{ method: 'CASH', amount: 1000 }],
   });
   check('OTC sale completed', sale.ok, `${sale.body?.saleNo} total ${sale.body?.grandTotal}`);
+
+  // The §27 requirement that a recall stops new sales, proven on the one path
+  // that can reach the batch-status check at the till.
+  const soldBatchId = sale.body?.items?.[0]?.batchId;
+  if (soldBatchId) {
+    const otcRecall = await qa('POST', '/recalls', {
+      productId: otc.id,
+      batchIds: [soldBatchId],
+      severity: 'CLASS_II',
+      reason: 'Packaging defect reported at the point of sale',
+      regulatoryReference: `EFDA/REC/2026/OTC${stamp % 10000}`,
+      instructions: 'Withdraw the affected batch from sale immediately.',
+    });
+    check('recall raised on the batch just sold', otcRecall.ok, otcRecall.body?.recall?.recallNo);
+
+    const saleOfRecalled = await cashier('POST', '/pos/checkout', {
+      branchId: cashierBranch.id,
+      warehouseId: cashierWh.id,
+      lines: [{ productId: otc.id, quantity: 1, batchId: soldBatchId }],
+      payments: [{ method: 'CASH', amount: 1000 }],
+    });
+    check('SELLING RECALLED STOCK IS BLOCKED', !saleOfRecalled.ok,
+      String(saleOfRecalled.body.error).slice(0, 90));
+    check('the till refused it because of the batch status',
+      /recall|status|allocat/i.test(String(saleOfRecalled.body.error)),
+      String(saleOfRecalled.body.error).slice(0, 90));
+
+    const otcTrace = await qa('GET', `/recalls/batches/${soldBatchId}/trace`);
+    check('the recall trace finds the sale that already went out',
+      otcTrace.body.soldTo?.length > 0 || otcTrace.body.sales?.length > 0,
+      `sold to ${(otcTrace.body.soldTo ?? otcTrace.body.sales ?? []).length} customer(s)`);
+  }
 } else {
   check('OTC product available for sale', false, 'no stock in central warehouse');
 }

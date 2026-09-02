@@ -44,6 +44,7 @@ export const RESOURCE_CATALOG: ResourceDefinition[] = [
   { module: 'catalog', resource: 'product', label: 'Drug Master', actions: [...CRUD, 'IMPORT', 'EXPORT'] },
   { module: 'catalog', resource: 'price', label: 'Pricing', actions: ['READ', 'EDIT', 'APPROVE'] },
   { module: 'catalog', resource: 'manufacturer', label: 'Manufacturers', actions: CRUD },
+  { module: 'catalog', resource: 'attribute', label: 'Product Attributes', actions: CRUD },
 
   { module: 'procurement', resource: 'supplier', label: 'Suppliers', actions: [...CRUD, 'APPROVE'] },
   { module: 'procurement', resource: 'purchase_request', label: 'Purchase Requests', actions: CRUD_APPROVE },

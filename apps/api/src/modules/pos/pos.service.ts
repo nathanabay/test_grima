@@ -10,6 +10,8 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { ScopeService } from '../../common/guards/scope.service';
+import { PricingService } from '../catalog/pricing.service';
+import { ConfigService } from '../../common/config/config.service';
 import { LedgerService } from '../inventory/ledger.service';
 import { FefoService } from '../inventory/fefo.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
@@ -49,6 +51,8 @@ export class PosService {
     private readonly audit: AuditService,
     private readonly docNumbers: DocumentNumberService,
     private readonly scope: ScopeService,
+    private readonly pricing: PricingService,
+    private readonly config: ConfigService,
   ) {}
 
   /** Fast product lookup for the POS search box, with live availability. */
@@ -179,6 +183,35 @@ export class PosService {
           const quantity = line.quantity * (unit ? Number(unit.factorToBase) : 1);
           if (quantity <= 0) throw new BadRequestException('Quantity must be greater than zero');
 
+          // §32: price comes from the pricing engine, never from
+          // product.retailPrice directly, so branch, contract, promotional and
+          // customer-group pricing all apply at the till.
+          const priced = await this.pricing.resolve({
+            productId: line.productId,
+            quantity,
+            branchId: input.branchId,
+            patientId: input.patientId ?? null,
+            channel: 'RETAIL',
+          });
+          const unitPrice = new Prisma.Decimal(priced.unitPrice);
+
+          // §65: the discount ceiling is configured, not hardcoded.
+          const discountPct = new Prisma.Decimal(line.discountPct ?? 0);
+          if (discountPct.greaterThan(0)) {
+            const maxDiscount = new Prisma.Decimal(
+              await this.config.getNumber('pos.maxDiscountPercent'),
+            ).dividedBy(100);
+            if (discountPct.greaterThan(maxDiscount)) {
+              if (!user.permissions.includes('sales.sale.APPROVE')) {
+                throw new ForbiddenException(
+                  `A discount of ${discountPct.times(100).toFixed(1)}% exceeds the ${maxDiscount
+                    .times(100)
+                    .toFixed(1)}% ceiling and needs supervisor approval`,
+                );
+              }
+            }
+          }
+
           const candidates = await this.fefo.loadCandidates(line.productId, input.warehouseId, tx);
           const recommended = recommendBatch(candidates, { warehouseId: input.warehouseId });
 
@@ -235,8 +268,8 @@ export class PosService {
             });
 
             const qty = new Prisma.Decimal(allocation.quantity);
-            const gross = qty.times(product.retailPrice);
-            const discount = gross.times(new Prisma.Decimal(line.discountPct ?? 0));
+            const gross = qty.times(unitPrice);
+            const discount = gross.times(discountPct);
             const net = gross.minus(discount);
             const tax = net.times(product.taxRate);
             const cost = qty.times(allocation.unitCost);
@@ -252,9 +285,9 @@ export class PosService {
                 productId: line.productId,
                 batchId: allocation.batchId,
                 quantity: qty,
-                unitPrice: product.retailPrice,
+                unitPrice,
                 unitCost: new Prisma.Decimal(allocation.unitCost),
-                discountPct: new Prisma.Decimal(line.discountPct ?? 0),
+                discountPct,
                 taxRate: product.taxRate,
                 lineTotal: net.plus(tax),
                 fefoRecommendedBatchId: recommended?.batchId ?? null,
@@ -366,6 +399,14 @@ export class PosService {
           where: { id: line.productId },
           select: { retailPrice: true, taxRate: true, averageCost: true },
         });
+        const priced = await this.pricing.resolve({
+          productId: line.productId,
+          quantity: line.quantity,
+          branchId: input.branchId,
+          patientId: input.patientId ?? null,
+          channel: 'RETAIL',
+        });
+        const unitPrice = new Prisma.Decimal(priced.unitPrice);
 
         const candidates = await this.fefo.loadCandidates(line.productId, input.warehouseId, tx);
         const allocation = allocateFefo(line.quantity, candidates, {
@@ -395,10 +436,10 @@ export class PosService {
               productId: line.productId,
               batchId: part.batchId,
               quantity: new Prisma.Decimal(part.quantity),
-              unitPrice: product.retailPrice,
+              unitPrice,
               unitCost: new Prisma.Decimal(part.unitCost),
               taxRate: product.taxRate,
-              lineTotal: new Prisma.Decimal(part.quantity).times(product.retailPrice),
+              lineTotal: new Prisma.Decimal(part.quantity).times(unitPrice),
             },
           });
         }
