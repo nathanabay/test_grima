@@ -28,6 +28,8 @@ import { JobsModule } from './modules/jobs/jobs.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { WorkflowModule } from './modules/workflow/workflow.module';
+import { BackupModule } from './modules/backup/backup.module';
 
 @Module({
   imports: [
@@ -57,6 +59,8 @@ import { DocumentsModule } from './modules/documents/documents.module';
     AnalyticsModule,
     ReportsModule,
     DocumentsModule,
+    WorkflowModule,
+    BackupModule,
     JobsModule,
   ],
   providers: [

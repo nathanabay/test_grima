@@ -1,9 +1,11 @@
 import {
+  Body,
   Controller,
   ForbiddenException,
   Get,
   Header,
   Param,
+  Post,
   Query,
   Res,
 } from '@nestjs/common';
@@ -12,6 +14,7 @@ import type { Response } from 'express';
 import { ReportsService, ReportFilters } from './reports.service';
 import { ExportService } from './export.service';
 import { DocumentsService, DocumentKind } from './documents.service';
+import { LabelsService, LabelRequest } from './labels.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser, CurrentUser, RequirePermissions } from '../../common/decorators';
@@ -25,6 +28,7 @@ export class ReportsController {
     private readonly reports: ReportsService,
     private readonly exporter: ExportService,
     private readonly documents: DocumentsService,
+    private readonly labelsService: LabelsService,
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
   ) {}
@@ -124,6 +128,28 @@ export class ReportsController {
       default:
         res.json(result);
     }
+  }
+
+  @Post('labels')
+  @RequirePermissions('inventory.batch.READ')
+  @ApiOperation({
+    summary:
+      'Print-ready label sheet. kind: product | shelf | bin | batch | transfer. ' +
+      'Batch labels carry GS1 Application Identifiers via GS1-128.',
+  })
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  labels(@Body() body: LabelRequest, @CurrentUser() user: AuthenticatedUser) {
+    return this.labelsService.render(body).then(async (html) => {
+      await this.audit.record({
+        userId: user.id,
+        userLabel: user.fullName,
+        module: 'inventory',
+        action: 'PRINT',
+        entityType: `${body.kind}_label`,
+        newValue: { count: body.ids.length, copies: body.copies ?? 1 },
+      });
+      return html;
+    });
   }
 
   @Get('documents/:kind/:id')

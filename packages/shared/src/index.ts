@@ -4,4 +4,5 @@ export * from './units';
 export * from './fefo';
 export * from './replenishment';
 export * from './analytics';
+export * from './barcode';
 export * from './permissions';

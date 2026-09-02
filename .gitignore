@@ -10,3 +10,4 @@ coverage/
 backups/
 uploads/
 uploads/
+.next-build/

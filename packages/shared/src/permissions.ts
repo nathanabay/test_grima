@@ -244,7 +244,10 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     description: 'Invoices, payments, expenses and financial reports.',
     permissions: [
       ...moduleCodes('finance'),
-      ...resourceCodes('procurement', 'purchase_order', ['READ', 'APPROVE', 'REJECT']),
+      // Finance reviews the money, not the order. Holding the procurement
+      // approval too would let one officer clear both steps of a tiered chain,
+      // which is exactly the segregation the workflow engine exists to enforce.
+      ...resourceCodes('procurement', 'purchase_order', ['READ']),
       ...resourceCodes('sales', 'cash_session', ['READ', 'APPROVE']),
       ...resourceCodes('catalog', 'price'),
       ...moduleCodes('analytics'),
