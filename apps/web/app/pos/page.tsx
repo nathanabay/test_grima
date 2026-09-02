@@ -25,6 +25,8 @@ export default function PosPage() {
   const [method, setMethod] = useState('CASH');
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<any | null>(null);
+  const [session, setSession] = useState<any | null>(null);
+  const [held, setHeld] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
 
@@ -45,6 +47,13 @@ export default function PosPage() {
       })
       .catch((e) => setError(e.message));
   }, []);
+
+  // §46: a till should show whose shift is open before anything is sold.
+  useEffect(() => {
+    if (!branchId) return;
+    api(`/pos/cash-sessions/current?branchId=${branchId}`).then(setSession).catch(() => setSession(null));
+    api(`/pos/held?branchId=${branchId}`).then(setHeld).catch(() => setHeld([]));
+  }, [branchId, receipt]);
 
   useEffect(() => {
     if (!term || !warehouseId) {
@@ -109,6 +118,7 @@ export default function PosPage() {
         body: {
           branchId,
           warehouseId,
+          cashSessionId: session?.id,
           lines: cart.map((l) => ({ productId: l.productId, quantity: l.quantity })),
           payments: [{ method, amount: Number(total.toFixed(2)) }],
           // Repeat-safe: a double click cannot create two sales.
@@ -159,8 +169,110 @@ export default function PosPage() {
             <span className="text-lg font-semibold num">{money(receipt.grandTotal)}</span>
             <span className="text-ink-muted">{receipt.items.length} line(s)</span>
             <button className="btn-ghost" onClick={() => window.print()}>Print receipt</button>
+            <button className="btn-ghost" onClick={async () => {
+              const item = receipt.items[0];
+              const max = Number(item.quantity);
+              const q = window.prompt(`Quantity to refund (max ${max}):`, String(max));
+              if (!q) return;
+              const reason = window.prompt('Refund reason (required):');
+              if (!reason) return;
+              try {
+                const refunded = await api(`/pos/sales/${receipt.id}/refund`, { method: 'POST', body: {
+                  lines: [{ saleItemId: item.id, quantity: Number(q) }], reason,
+                }});
+                setReceipt(refunded);
+                setError(null);
+              } catch (e: any) { setError(e.message); }
+            }}>Refund</button>
             <button className="btn-ghost" onClick={() => setReceipt(null)}>New sale</button>
           </div>
+        </Card>
+      )}
+
+      <Card className="mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          {session ? (
+            <>
+              <span>
+                <strong>Shift {session.sessionNo}</strong> open ·{' '}
+                <span className="text-ink-muted">
+                  opened with {money(session.openingCash)} · cash sales {money(session.cashSales)}
+                </span>
+              </span>
+              <button className="btn-ghost" onClick={async () => {
+                const counted = window.prompt('Counted cash in the drawer:');
+                if (!counted) return;
+                const expected = Number(session.openingCash) + Number(session.cashSales) - Number(session.refunds) - Number(session.cashExpenses);
+                const variance = Number(counted) - expected;
+                let varianceReason: string | undefined;
+                if (Math.abs(variance) > 50) {
+                  varianceReason = window.prompt(`Variance of ${variance.toFixed(2)} needs an explanation:`) ?? undefined;
+                  if (!varianceReason) return;
+                }
+                try {
+                  const closed = await api(`/pos/cash-sessions/${session.id}/close`, { method: 'POST', body: { actualCash: Number(counted), varianceReason } });
+                  setSession(null);
+                  setError(null);
+                  window.alert(`Shift closed. Expected ${Number(closed.expectedCash).toFixed(2)}, counted ${Number(closed.actualCash).toFixed(2)}, variance ${Number(closed.variance).toFixed(2)}.`);
+                } catch (e: any) { setError(e.message); }
+              }}>Close shift</button>
+            </>
+          ) : (
+            <>
+              <span className="text-warn">No cash shift is open. Cash sales will not be reconciled to a drawer.</span>
+              <button className="btn-primary" onClick={async () => {
+                const opening = window.prompt('Opening cash float:', '0');
+                if (opening === null) return;
+                try { setSession(await api('/pos/cash-sessions/open', { method: 'POST', body: { branchId, openingCash: Number(opening) } })); }
+                catch (e: any) { setError(e.message); }
+              }}>Open shift</button>
+            </>
+          )}
+        </div>
+      </Card>
+
+      {held.length > 0 && (
+        <Card className="mb-4" title={`${held.length} held cart(s)`}>
+          <Table head={['Sale', 'Customer', 'Lines', '']}>
+            {held.map((h) => (
+              <tr key={h.id}>
+                <td className="td font-medium">{h.saleNo}</td>
+                <td className="td text-xs text-ink-muted">{h.patient?.fullName ?? 'Walk-in'}</td>
+                <td className="td num">{h.items.length}</td>
+                <td className="td">
+                  <div className="flex gap-1">
+                    <button className="btn-ghost text-xs" onClick={async () => {
+                      try {
+                        const resumed = await api(`/pos/held/${h.id}/resume`, { method: 'POST' });
+                        // Reload the parked lines into the live cart.
+                        const restored: CartLine[] = [];
+                        for (const line of resumed.lines) {
+                          const found = (await api<any[]>(`/pos/search?q=${encodeURIComponent('')}&warehouseId=${warehouseId}`).catch(() => []))
+                            .find((p: any) => p.id === line.productId);
+                          restored.push({
+                            productId: line.productId,
+                            name: found ? `${found.genericName} ${found.strength}` : line.productId.slice(0, 8),
+                            unitPrice: line.unitPrice,
+                            taxRate: found ? Number(found.taxRate) : 0,
+                            quantity: line.quantity,
+                            available: found?.available ?? line.quantity,
+                            baseUnit: found?.baseUnit ?? '',
+                          });
+                        }
+                        setCart(restored);
+                        setHeld((p) => p.filter((x) => x.id !== h.id));
+                      } catch (e: any) { setError(e.message); }
+                    }}>Resume</button>
+                    <button className="btn-ghost text-xs" onClick={async () => {
+                      if (!window.confirm(`Abandon ${h.saleNo}? Its reserved stock is released.`)) return;
+                      try { await api(`/pos/held/${h.id}/abandon`, { method: 'POST' }); setHeld((p) => p.filter((x) => x.id !== h.id)); }
+                      catch (e: any) { setError(e.message); }
+                    }}>Abandon</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </Table>
         </Card>
       )}
 
@@ -262,6 +374,18 @@ export default function PosPage() {
                 <button className="btn-primary flex-1" disabled={busy} onClick={checkout}>
                   {busy ? 'Processing...' : `Take payment ${money(total)}`}
                 </button>
+                <button className="btn-ghost" disabled={busy} onClick={async () => {
+                  try {
+                    await api('/pos/hold', { method: 'POST', body: {
+                      branchId, warehouseId, cashSessionId: session?.id,
+                      lines: cart.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+                      payments: [],
+                    }});
+                    setCart([]);
+                    const list = await api<any[]>(`/pos/held?branchId=${branchId}`);
+                    setHeld(list);
+                  } catch (e: any) { setError(e.message); }
+                }}>Hold cart</button>
                 <button className="btn-ghost" onClick={() => setCart([])}>Clear</button>
               </div>
             </>

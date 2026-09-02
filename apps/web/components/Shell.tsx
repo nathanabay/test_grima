@@ -46,6 +46,7 @@ const NAV: Array<{ groupKey: string; items: NavItem[] }> = [
     items: [
       { href: '/pos', labelKey: 'nav.pos', permission: 'sales.sale.CREATE' },
       { href: '/dispensing', labelKey: 'nav.dispensing', permission: 'dispensing.prescription.READ' },
+      { href: '/patients', labelKey: 'nav.patients', permission: 'sales.patient.READ' },
       { href: '/procurement', labelKey: 'nav.procurement', permission: 'procurement.purchase_order.READ' },
       { href: '/receiving', labelKey: 'nav.receiving', permission: 'inventory.goods_receipt.CREATE' },
       { href: '/invoices', labelKey: 'nav.invoices', permission: 'finance.invoice.READ' },
@@ -59,6 +60,7 @@ const NAV: Array<{ groupKey: string; items: NavItem[] }> = [
       { href: '/cold-chain', labelKey: 'nav.coldChain', permission: 'quality.cold_chain.READ' },
       { href: '/returns', labelKey: 'nav.returns', permission: 'quality.return.READ' },
       { href: '/quality', labelKey: 'nav.quality', permission: 'quality.incident.READ' },
+      { href: '/damage', labelKey: 'nav.damage', permission: 'quality.disposal.READ' },
       { href: '/disposal', labelKey: 'nav.disposal', permission: 'quality.disposal.READ' },
     ],
   },

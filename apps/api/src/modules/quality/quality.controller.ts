@@ -4,6 +4,7 @@ import { ExcursionDisposition, ReturnDisposition, ReturnType } from '@prisma/cli
 import { ReturnsService } from './returns.service';
 import { DisposalService } from './disposal.service';
 import { ColdChainService } from '../coldchain/coldchain.service';
+import { DamageService, ReportDamageInput } from './damage.service';
 import { AuthenticatedUser, CurrentUser, Public, RequirePermissions } from '../../common/decorators';
 
 @ApiTags('Quality, Returns & Cold Chain')
@@ -13,6 +14,7 @@ export class QualityController {
     private readonly returns: ReturnsService,
     private readonly disposals: DisposalService,
     private readonly coldChain: ColdChainService,
+    private readonly damage: DamageService,
   ) {}
 
   // ---- Returns ----
@@ -84,6 +86,52 @@ export class QualityController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.disposals.execute(id, body, user);
+  }
+
+  // ---- Damaged stock (§31) ----
+
+  @Get('damage-reports')
+  @RequirePermissions('quality.disposal.READ')
+  listDamage(@Query() query: any) {
+    return this.damage.findAll({
+      status: query.status,
+      warehouseId: query.warehouseId,
+      page: query.page ? Number(query.page) : 1,
+      pageSize: query.pageSize ? Number(query.pageSize) : 25,
+    });
+  }
+
+  @Get('damage-reports/summary')
+  @RequirePermissions('quality.disposal.READ')
+  @ApiOperation({ summary: 'Damage write-off totals by cause, for the loss KPIs' })
+  damageSummary(@Query('days') days?: string) {
+    return this.damage.summary(days ? Number(days) : 90);
+  }
+
+  @Get('damage-reports/:id')
+  @RequirePermissions('quality.disposal.READ')
+  getDamage(@Param('id') id: string) {
+    return this.damage.findOne(id);
+  }
+
+  @Post('damage-reports')
+  @RequirePermissions('quality.disposal.CREATE')
+  @ApiOperation({
+    summary: 'Report damaged stock. The units leave sellable inventory immediately (§31).',
+  })
+  reportDamage(@Body() body: ReportDamageInput, @CurrentUser() user: AuthenticatedUser) {
+    return this.damage.report(body, user);
+  }
+
+  @Post('damage-reports/:id/verify')
+  @RequirePermissions('quality.disposal.APPROVE')
+  @ApiOperation({ summary: 'Verify or reject a damage report; rejecting returns the stock' })
+  verifyDamage(
+    @Param('id') id: string,
+    @Body() body: { decision: 'VERIFY' | 'REJECT'; notes?: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.damage.verify(id, body.decision, user, body.notes);
   }
 
   // ---- Cold chain ----

@@ -265,6 +265,13 @@ enum ValuationMethod {
   WEIGHTED_AVERAGE
 }
 
+enum DamageStatus {
+  REPORTED
+  VERIFIED
+  REJECTED
+  DISPOSED
+}
+
 enum DisposalMethod {
   INCINERATION
   RETURN_TO_SUPPLIER
@@ -1076,6 +1083,36 @@ model GoodsReceiptItem {
   goodsReceipt GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
 
   @@map("goods_receipt_items")
+}
+
+/// Damaged stock (§31). Damaged units are moved out of sellable inventory the
+/// moment they are reported, then verified and disposed of under certificate.
+model DamageReport {
+  id          String       @id @default(uuid()) @db.Uuid
+  reportNo    String       @unique
+  productId   String       @db.Uuid
+  batchId     String       @db.Uuid
+  warehouseId String       @db.Uuid
+  branchId    String       @db.Uuid
+  quantity    Decimal      @db.Decimal(18, 4)
+  unitCost    Decimal      @default(0) @db.Decimal(18, 4)
+  totalValue  Decimal      @default(0) @db.Decimal(18, 4)
+  reason      String
+  damageType  String // BREAKAGE | CONTAMINATION | PACKAGING | HANDLING | TEMPERATURE | PEST | OTHER
+  status      DamageStatus @default(REPORTED)
+  discoveredAt DateTime    @default(now())
+  reportedById String?     @db.Uuid
+  verifiedById String?     @db.Uuid
+  verifiedAt   DateTime?
+  verificationNotes String?
+  rejectionReason   String?
+  disposalId   String?     @db.Uuid
+  incidentId   String?     @db.Uuid
+  createdAt    DateTime    @default(now())
+
+  @@index([status])
+  @@index([batchId])
+  @@map("damage_reports")
 }
 
 /// Accounts payable (§11 final steps, §45).

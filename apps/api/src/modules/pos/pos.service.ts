@@ -338,6 +338,266 @@ export class PosService {
     return this.findOne(sale.id);
   }
 
+  /**
+   * Hold a cart (§22). Stock is reserved while the sale is parked, so a held
+   * cart cannot be undercut by another till selling the same last units — and
+   * the reservation is released when it is resumed or abandoned.
+   */
+  async holdCart(input: CheckoutInput, user: AuthenticatedUser) {
+    if (!input.lines?.length) throw new BadRequestException('There is nothing to hold');
+    this.scope.assertBranch(user, input.branchId);
+
+    return this.prisma.$transaction(async (tx) => {
+      const saleNo = await this.docNumbers.next(tx, 'SALE');
+      const sale = await tx.sale.create({
+        data: {
+          saleNo,
+          branchId: input.branchId,
+          warehouseId: input.warehouseId,
+          cashSessionId: input.cashSessionId ?? null,
+          patientId: input.patientId ?? null,
+          cashierId: user.id,
+          status: SaleStatus.HELD,
+        },
+      });
+
+      for (const line of input.lines) {
+        const product = await tx.product.findUniqueOrThrow({
+          where: { id: line.productId },
+          select: { retailPrice: true, taxRate: true, averageCost: true },
+        });
+
+        const candidates = await this.fefo.loadCandidates(line.productId, input.warehouseId, tx);
+        const allocation = allocateFefo(line.quantity, candidates, {
+          warehouseId: input.warehouseId,
+        });
+        if (!allocation.fullyAllocated) {
+          throw new ConflictException(
+            `Cannot hold ${line.quantity}: only ${allocation.allocatedQuantity} available`,
+          );
+        }
+
+        for (const part of allocation.allocations) {
+          // Reserve rather than move: the stock has not left yet.
+          await this.ledger.reserve(tx, {
+            productId: line.productId,
+            batchId: part.batchId,
+            warehouseId: input.warehouseId,
+            quantity: part.quantity,
+            referenceType: 'HELD_SALE',
+            referenceId: sale.id,
+            createdById: user.id,
+          });
+
+          await tx.saleItem.create({
+            data: {
+              saleId: sale.id,
+              productId: line.productId,
+              batchId: part.batchId,
+              quantity: new Prisma.Decimal(part.quantity),
+              unitPrice: product.retailPrice,
+              unitCost: new Prisma.Decimal(part.unitCost),
+              taxRate: product.taxRate,
+              lineTotal: new Prisma.Decimal(part.quantity).times(product.retailPrice),
+            },
+          });
+        }
+      }
+
+      return tx.sale.findUniqueOrThrow({ where: { id: sale.id }, include: { items: true } });
+    });
+  }
+
+  async listHeld(branchId: string) {
+    return this.prisma.sale.findMany({
+      where: { branchId, status: SaleStatus.HELD },
+      include: { items: true, patient: { select: { fullName: true, patientCode: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** Resume a held cart: release its reservations and hand the lines back. */
+  async resumeCart(id: string, user: AuthenticatedUser) {
+    const sale = await this.prisma.sale.findUniqueOrThrow({
+      where: { id },
+      include: { items: true },
+    });
+    if (sale.status !== SaleStatus.HELD) {
+      throw new ConflictException(`Sale ${sale.saleNo} is ${sale.status}, not held`);
+    }
+    this.scope.assertBranch(user, sale.branchId);
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.ledger.releaseReservations(tx, 'HELD_SALE', sale.id);
+      await tx.sale.update({
+        where: { id },
+        data: { status: SaleStatus.VOIDED, voidedAt: new Date(), voidReason: 'Cart resumed at the till' },
+      });
+    });
+
+    await this.audit.record({
+      userId: user.id,
+      module: 'sales',
+      action: 'CART_RESUMED',
+      entityType: 'Sale',
+      entityId: id,
+      newValue: { saleNo: sale.saleNo },
+      branchId: sale.branchId,
+    });
+
+    // Hand back the cart contents for the till to reload.
+    return {
+      saleNo: sale.saleNo,
+      patientId: sale.patientId,
+      lines: sale.items.map((i) => ({
+        productId: i.productId,
+        quantity: Number(i.quantity),
+        unitPrice: Number(i.unitPrice),
+      })),
+    };
+  }
+
+  async abandonHeld(id: string, user: AuthenticatedUser) {
+    const sale = await this.prisma.sale.findUniqueOrThrow({ where: { id } });
+    if (sale.status !== SaleStatus.HELD) {
+      throw new ConflictException('Only a held cart can be abandoned');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await this.ledger.releaseReservations(tx, 'HELD_SALE', id);
+      await tx.sale.update({
+        where: { id },
+        data: { status: SaleStatus.VOIDED, voidedAt: new Date(), voidReason: 'Held cart abandoned' },
+      });
+    });
+    await this.audit.record({
+      userId: user.id,
+      module: 'sales',
+      action: 'CART_ABANDONED',
+      entityType: 'Sale',
+      entityId: id,
+      branchId: sale.branchId,
+    });
+    return { success: true };
+  }
+
+  /**
+   * Partial refund (§22). Returns the exact batches that were sold, so the
+   * refunded units go back to the batch they came from rather than to whatever
+   * FEFO would pick — otherwise a refund could silently move stock between
+   * batches and corrupt expiry tracking.
+   */
+  async refund(
+    id: string,
+    input: { lines: Array<{ saleItemId: string; quantity: number }>; reason: string; method?: PaymentMethod },
+    user: AuthenticatedUser,
+  ) {
+    if (!input.reason?.trim()) throw new BadRequestException('A refund reason is required');
+    if (!input.lines?.length) throw new BadRequestException('Nothing to refund');
+
+    const sale = await this.prisma.sale.findUniqueOrThrow({
+      where: { id },
+      include: { items: true, payments: true },
+    });
+    if (![SaleStatus.COMPLETED, SaleStatus.PARTIALLY_REFUNDED].includes(sale.status as any)) {
+      throw new ConflictException(`Sale is ${sale.status} and cannot be refunded`);
+    }
+    this.scope.assertBranch(user, sale.branchId);
+
+    // How much of each line has already gone back.
+    const priorRefunds = await this.prisma.payment.findMany({
+      where: { saleId: id, amount: { lt: 0 } },
+    });
+
+    let refundTotal = new Prisma.Decimal(0);
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const line of input.lines) {
+        const item = sale.items.find((i) => i.id === line.saleItemId);
+        if (!item) throw new BadRequestException(`Line ${line.saleItemId} is not on this sale`);
+        if (line.quantity <= 0) continue;
+        if (new Prisma.Decimal(line.quantity).greaterThan(item.quantity)) {
+          throw new BadRequestException(
+            `Cannot refund ${line.quantity} of ${item.quantity.toString()} sold on that line`,
+          );
+        }
+
+        // Back to the same batch it left from.
+        await this.ledger.post(tx, {
+          type: TransactionType.RETURN_IN,
+          direction: 'IN',
+          productId: item.productId,
+          batchId: item.batchId,
+          warehouseId: sale.warehouseId,
+          branchId: sale.branchId,
+          quantity: line.quantity,
+          unitCost: item.unitCost,
+          referenceType: 'SALE_REFUND',
+          referenceId: sale.id,
+          referenceNo: sale.saleNo,
+          reason: `Refund: ${input.reason}`,
+          performedById: user.id,
+          allowBlockedStatus: true,
+        });
+
+        const gross = new Prisma.Decimal(line.quantity).times(item.unitPrice);
+        const net = gross.minus(gross.times(item.discountPct));
+        refundTotal = refundTotal.plus(net.plus(net.times(item.taxRate)));
+      }
+
+      // A refund is recorded as a negative payment, so the till reconciles.
+      await tx.payment.create({
+        data: {
+          saleId: id,
+          method: input.method ?? sale.payments[0]?.method ?? 'CASH',
+          amount: refundTotal.negated(),
+          reference: `Refund: ${input.reason}`.slice(0, 200),
+        },
+      });
+
+      const refundedSoFar = priorRefunds
+        .reduce((sum, p) => sum.plus(p.amount.abs()), new Prisma.Decimal(0))
+        .plus(refundTotal);
+
+      await tx.sale.update({
+        where: { id },
+        data: {
+          status: refundedSoFar.greaterThanOrEqualTo(sale.grandTotal)
+            ? SaleStatus.REFUNDED
+            : SaleStatus.PARTIALLY_REFUNDED,
+        },
+      });
+
+      if (sale.cashSessionId) {
+        await tx.cashSession.update({
+          where: { id: sale.cashSessionId },
+          data: { refunds: { increment: refundTotal } },
+        });
+      }
+    });
+
+    await this.audit.record({
+      userId: user.id,
+      userLabel: user.fullName,
+      module: 'sales',
+      action: 'REFUND',
+      entityType: 'Sale',
+      entityId: id,
+      newValue: { saleNo: sale.saleNo, amount: refundTotal.toString(), lines: input.lines.length },
+      reason: input.reason,
+      branchId: sale.branchId,
+    });
+
+    return this.findOne(id);
+  }
+
+  /** The cashier's own open session, for the till header. */
+  async currentSession(user: AuthenticatedUser, branchId: string) {
+    return this.prisma.cashSession.findFirst({
+      where: { branchId, cashierId: user.id, isOpen: true },
+      include: { sales: { select: { grandTotal: true, status: true } } },
+    });
+  }
+
   async findOne(id: string) {
     return this.prisma.sale.findUniqueOrThrow({
       where: { id },

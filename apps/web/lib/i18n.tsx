@@ -71,6 +71,8 @@ const en: Catalogue = {
   'nav.admin': 'Administration',
   'nav.backups': 'Backups',
   'nav.import': 'Data Import',
+  'nav.patients': 'Patients',
+  'nav.damage': 'Damaged Stock',
 
   'auth.signIn': 'Sign in',
   'auth.signingIn': 'Signing in...',
@@ -142,6 +144,8 @@ const am: Catalogue = {
   'nav.admin': 'አስተዳደር',
   'nav.backups': 'ምትኬዎች',
   'nav.import': 'ውሂብ ማስመጣት',
+  'nav.patients': 'ታካሚዎች',
+  'nav.damage': 'የተበላሸ ክምችት',
 
   'auth.signIn': 'ግባ',
   'auth.signingIn': 'በመግባት ላይ...',
@@ -204,6 +208,8 @@ const om: Catalogue = {
   'nav.admin': 'Bulchiinsa',
   'nav.backups': 'Kuusaa Deebii',
   'nav.import': 'Daataa Galchuu',
+  'nav.patients': 'Dhukkubsattoota',
+  'nav.damage': 'Kuusaa Miidhame',
 
   'auth.signIn': 'Seeni',
   'auth.signingIn': 'Seenaa jira...',

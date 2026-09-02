@@ -42,6 +42,49 @@ export class PosController {
     return this.pos.voidSale(id, body.reason, user);
   }
 
+  @Post('hold')
+  @RequirePermissions('sales.sale.CREATE')
+  @ApiOperation({ summary: 'Park a cart, reserving its stock so another till cannot sell it' })
+  hold(@Body() body: CheckoutInput, @CurrentUser() user: AuthenticatedUser) {
+    return this.pos.holdCart(body, user);
+  }
+
+  @Get('held')
+  @RequirePermissions('sales.sale.READ')
+  held(@Query('branchId') branchId: string) {
+    return this.pos.listHeld(branchId);
+  }
+
+  @Post('held/:id/resume')
+  @RequirePermissions('sales.sale.CREATE')
+  @ApiOperation({ summary: 'Resume a held cart; releases its reservations and returns the lines' })
+  resume(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.pos.resumeCart(id, user);
+  }
+
+  @Post('held/:id/abandon')
+  @RequirePermissions('sales.sale.CANCEL')
+  abandon(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.pos.abandonHeld(id, user);
+  }
+
+  @Post('sales/:id/refund')
+  @RequirePermissions('sales.sale.CANCEL')
+  @ApiOperation({ summary: 'Refund whole or part of a sale, returning stock to its original batches' })
+  refund(
+    @Param('id') id: string,
+    @Body() body: { lines: Array<{ saleItemId: string; quantity: number }>; reason: string; method?: any },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.pos.refund(id, body, user);
+  }
+
+  @Get('cash-sessions/current')
+  @RequirePermissions('sales.cash_session.READ')
+  currentSession(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId: string) {
+    return this.pos.currentSession(user, branchId);
+  }
+
   @Post('cash-sessions/open')
   @RequirePermissions('sales.cash_session.CREATE')
   openSession(@Body() body: { branchId: string; openingCash: number }, @CurrentUser() user: AuthenticatedUser) {
