@@ -409,13 +409,32 @@ export class RecallsService {
       }),
     ]);
 
-    const dispensedTo = dispensings.map((d) => ({
-      dispensingNo: d.dispensing.dispensingNo,
-      patientId: d.dispensing.patientId,
-      quantity: d.quantity,
-      dispensedAt: d.dispensing.dispensedAt,
-      branchId: d.dispensing.branchId,
-    }));
+    // A recall has to reach the person, and an id reaches nobody. Dispensing
+    // carries patientId without a Prisma relation, so the names are resolved in
+    // one extra query rather than a join on every row.
+    const dispensingPatientIds = [
+      ...new Set(dispensings.map((d) => d.dispensing.patientId).filter((id): id is string => !!id)),
+    ];
+    const dispensingPatients = dispensingPatientIds.length
+      ? await this.prisma.patient.findMany({
+          where: { id: { in: dispensingPatientIds } },
+          select: { id: true, fullName: true, phone: true },
+        })
+      : [];
+    const patientById = new Map(dispensingPatients.map((p) => [p.id, p]));
+
+    const dispensedTo = dispensings.map((d) => {
+      const patient = d.dispensing.patientId ? patientById.get(d.dispensing.patientId) : null;
+      return {
+        dispensingNo: d.dispensing.dispensingNo,
+        patientId: d.dispensing.patientId,
+        patientName: patient?.fullName ?? null,
+        patientPhone: patient?.phone ?? null,
+        quantity: d.quantity,
+        dispensedAt: d.dispensing.dispensedAt,
+        branchId: d.dispensing.branchId,
+      };
+    });
 
     const soldTo = sales.map((s) => ({
       saleNo: s.sale.saleNo,

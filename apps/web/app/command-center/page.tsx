@@ -1,163 +1,268 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Shell, PageHeader } from '@/components/Shell';
+import { Shell } from '@/components/Shell';
+import { PageHeader, Card, Stat, ErrorState, Loading, EmptyState } from '@/components/primitives';
 import { useApi } from '@/lib/useApi';
-import { money, qty } from '@/lib/api';
-import { Card, ErrorBox, Empty, Loading, Severity, Table } from '@/components/ui';
+import { money, qty, shortDate } from '@/lib/api';
+import { useScope } from '@/lib/scope';
+import { SeverityBadge, StatusBadge } from '@/components/status';
+import { DataTable } from '@/components/DataTable';
+
+/**
+ * Pharmacy command centre (§24).
+ *
+ * One operational picture, ranked by severity rather than by module, because a
+ * cold-chain excursion and a critical stockout compete for the same person's
+ * next ten minutes. Every row states the recommended action and links to the
+ * screen where it can be taken — a list of problems with no way to act on them
+ * is a worry generator.
+ */
+
+type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+const ORDER: Record<Severity, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+interface Signal {
+  id: string;
+  severity: Severity;
+  area: string;
+  headline: string;
+  detail: string;
+  action: string;
+  href: string;
+  impact: number | null;
+  when?: string | null;
+}
 
 export default function CommandCenterPage() {
-  const { data, error, loading, refresh } = useApi<any>('/analytics/command-center');
-
   return (
     <Shell>
+      <CommandCenterBody />
+    </Shell>
+  );
+}
+
+function CommandCenterBody() {
+  const scope = useScope();
+  const suffix = scope.branchId ? `?branchId=${scope.branchId}` : '';
+  const { data, error, loading, refresh } = useApi<any>(`/command-center${suffix}`, [scope.branchId]);
+  const [area, setArea] = useState('all');
+  const [minSeverity, setMinSeverity] = useState<Severity | 'all'>('all');
+
+  const signals = useMemo<Signal[]>(() => {
+    if (!data) return [];
+    const out: Signal[] = [];
+
+    for (const s of data.criticalStockouts ?? []) {
+      out.push({
+        id: `stockout:${s.productId}`,
+        severity: (s.severity ?? 'CRITICAL') as Severity,
+        area: 'Stock',
+        headline: s.product ?? s.name ?? 'Product out of stock',
+        detail: s.sku ? `${s.sku} — nothing on hand` : 'Nothing on hand',
+        action: s.recommendedAction ?? 'Raise a purchase or transfer',
+        href: '/procurement',
+        impact: s.financialImpact ?? null,
+      });
+    }
+    for (const e of data.expiryRisks ?? []) {
+      out.push({
+        id: `expiry:${e.batchId ?? e.batch}`,
+        severity: (e.severity ?? (e.daysRemaining <= 30 ? 'HIGH' : 'MEDIUM')) as Severity,
+        area: 'Expiry',
+        headline: `${e.product ?? 'Batch'} expires in ${e.daysRemaining} days`,
+        detail: `Batch ${e.batch ?? '—'} · ${qty(e.quantity)} units`,
+        action: e.recommendedAction ?? 'Transfer, return or discount before it expires',
+        href: '/inventory/expiry',
+        impact: e.financialImpact ?? e.valueAtRisk ?? null,
+      });
+    }
+    for (const c of data.coldChainAlerts ?? []) {
+      out.push({
+        id: `cold:${c.excursionId ?? c.sensor}`,
+        severity: (c.severity ?? 'HIGH') as Severity,
+        area: 'Cold chain',
+        headline: `Temperature excursion on ${c.sensor ?? 'a sensor'}`,
+        detail: c.detail ?? `${c.durationMinutes ?? 0} minutes outside range`,
+        action: c.recommendedAction ?? 'QA must decide: release, reject or destroy',
+        href: '/cold-chain',
+        impact: c.financialImpact ?? null,
+      });
+    }
+    for (const r of data.recalls ?? []) {
+      out.push({
+        id: `recall:${r.recallId ?? r.recallNo}`,
+        severity: 'CRITICAL',
+        area: 'Recall',
+        headline: `Recall ${r.recallNo ?? ''} is open`,
+        detail: `${r.pendingTasks ?? 0} outstanding task(s) across ${r.affectedBatches ?? 0} batch(es)`,
+        action: r.recommendedAction ?? 'Complete the outstanding recall tasks',
+        href: '/recalls',
+        impact: r.financialImpact ?? null,
+      });
+    }
+    for (const q of data.quarantinedInventory ?? []) {
+      out.push({
+        id: `quarantine:${q.batchId}`,
+        severity: (q.severity ?? 'MEDIUM') as Severity,
+        area: 'Quality',
+        headline: `${q.product} is quarantined`,
+        detail: `Batch ${q.batch} · ${qty(q.quantity)} units · ${q.reason ?? 'no reason recorded'}`,
+        action: q.recommendedAction ?? 'QA review: release, return or dispose',
+        href: '/batches',
+        impact: q.financialImpact ?? null,
+      });
+    }
+    for (const a of data.pendingApprovals ?? []) {
+      out.push({
+        id: `approval:${a.documentId}`,
+        severity: (a.severity ?? 'MEDIUM') as Severity,
+        area: 'Approvals',
+        headline: `${(a.documentType ?? '').replace(/_/g, ' ').toLowerCase()} ${a.reference} is waiting`,
+        detail: `${a.waitingDays ?? 0} day(s) waiting · ${a.status}`,
+        action: a.recommendedAction ?? 'Review and approve or reject',
+        href: '/approvals',
+        impact: a.financialImpact ?? null,
+      });
+    }
+    for (const d of data.supplierDelays ?? []) {
+      out.push({
+        id: `delay:${d.poNo}`,
+        severity: (d.severity ?? 'MEDIUM') as Severity,
+        area: 'Supply',
+        headline: `${d.poNo} from ${d.supplier} is late`,
+        detail: `${d.daysLate ?? 0} day(s) past the expected date`,
+        action: d.recommendedAction ?? 'Chase the supplier and update the expected date',
+        href: '/procurement',
+        impact: d.financialImpact ?? null,
+        when: d.expectedDate,
+      });
+    }
+
+    return out.sort(
+      (a, b) => ORDER[a.severity] - ORDER[b.severity] || (b.impact ?? 0) - (a.impact ?? 0),
+    );
+  }, [data]);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    for (const s of signals) c[s.severity] = (c[s.severity] ?? 0) + 1;
+    return c;
+  }, [signals]);
+
+  const areas = useMemo(() => ['all', ...new Set(signals.map((s) => s.area))], [signals]);
+
+  const shown = signals.filter(
+    (s) =>
+      (area === 'all' || s.area === area) &&
+      (minSeverity === 'all' || ORDER[s.severity] <= ORDER[minSeverity]),
+  );
+
+  const exposure = shown.reduce((sum, s) => sum + (s.impact ?? 0), 0);
+
+  return (
+    <>
       <PageHeader
-        title="Inventory Command Center"
-        subtitle="Everything that needs a decision, ranked by severity and financial impact."
-        action={
-          <button className="btn-ghost" onClick={refresh}>
-            Refresh
-          </button>
-        }
+        title="Command centre"
+        subtitle="Everything that needs a decision today, ranked by severity rather than by module. Each row says what to do and takes you there."
+        action={<button className="btn-ghost btn-sm" onClick={refresh}>Refresh</button>}
       />
 
-      {error && <ErrorBox message={error} />}
-      {loading && <Loading />}
+      {error && <ErrorState message={error} onRetry={refresh} />}
+      {loading && !data && <Loading label="Reading the operation" />}
 
       {data && (
         <div className="space-y-4">
-          <Card title={`Critical stockouts (${data.criticalStockouts.length})`}>
-            {data.criticalStockouts.length ? (
-              <Table head={['Severity', 'Product', 'On hand', 'Reorder level', 'Recommended action']}>
-                {data.criticalStockouts.map((r: any, i: number) => (
-                  <tr key={i}>
-                    <td className="td"><Severity level={r.severity} /></td>
-                    <td className="td">{r.product}<div className="text-xs text-ink-subtle">{r.sku}</div></td>
-                    <td className="td num">{qty(r.onHand)}</td>
-                    <td className="td num text-ink-muted">{qty(r.reorderLevel)}</td>
-                    <td className="td text-ink-muted">{r.recommendedAction}</td>
-                  </tr>
-                ))}
-              </Table>
-            ) : (
-              <Empty>No products are below their reorder level.</Empty>
-            )}
-          </Card>
-
-          <Card title={`Expiry risks (${data.expiryRisks.length})`}>
-            {data.expiryRisks.length ? (
-              <Table head={['Severity', 'Product', 'Batch', 'Days left', 'Quantity', 'Value at risk', 'Action']}>
-                {data.expiryRisks.map((r: any, i: number) => (
-                  <tr key={i}>
-                    <td className="td"><Severity level={r.severity} /></td>
-                    <td className="td">{r.product}<div className="text-xs text-ink-subtle">{r.warehouse}</div></td>
-                    <td className="td text-ink-muted">{r.batch}</td>
-                    <td className="td num">{r.daysRemaining}</td>
-                    <td className="td num">{qty(r.quantity)}</td>
-                    <td className="td num">{money(r.financialImpact)}</td>
-                    <td className="td text-ink-muted">{r.recommendedAction}</td>
-                  </tr>
-                ))}
-              </Table>
-            ) : (
-              <Empty>No stock is approaching expiry.</Empty>
-            )}
-          </Card>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card title={`Cold chain alerts (${data.coldChainAlerts.length})`}>
-              {data.coldChainAlerts.length ? (
-                <Table head={['Sensor', 'Duration', 'Range', 'Affected', 'Action']}>
-                  {data.coldChainAlerts.map((r: any) => (
-                    <tr key={r.excursionId}>
-                      <td className="td">{r.sensor}<div className="text-xs text-ink-subtle">{r.excursionNo}</div></td>
-                      <td className="td num">{r.durationMinutes} min</td>
-                      <td className="td text-ink-muted">{r.range}</td>
-                      <td className="td num">{r.affectedBatches} batches / {qty(r.affectedQuantity)}</td>
-                      <td className="td text-ink-muted">{r.recommendedAction}</td>
-                    </tr>
-                  ))}
-                </Table>
-              ) : (
-                <Empty>All cold-chain sensors are in range.</Empty>
-              )}
-            </Card>
-
-            <Card title={`Active recalls (${data.recalls.length})`}>
-              {data.recalls.length ? (
-                <Table head={['Recall', 'Pending tasks', 'Action']}>
-                  {data.recalls.map((r: any) => (
-                    <tr key={r.recallId}>
-                      <td className="td">
-                        <Link className="text-brand-dark underline" href={`/recalls?id=${r.recallId}`}>
-                          {r.recallNo}
-                        </Link>
-                        <div className="text-xs text-ink-subtle">{r.reason.slice(0, 60)}</div>
-                      </td>
-                      <td className="td num">{r.pendingTasks}</td>
-                      <td className="td text-ink-muted">{r.recommendedAction}</td>
-                    </tr>
-                  ))}
-                </Table>
-              ) : (
-                <Empty>No active recalls.</Empty>
-              )}
-            </Card>
-
-            <Card title={`Quarantined inventory (${data.quarantinedInventory.length})`}>
-              {data.quarantinedInventory.length ? (
-                <Table head={['Product', 'Batch', 'Reason', 'Quantity', 'Value']}>
-                  {data.quarantinedInventory.slice(0, 12).map((r: any) => (
-                    <tr key={r.batchId}>
-                      <td className="td">{r.product}</td>
-                      <td className="td text-ink-muted">{r.batch}</td>
-                      <td className="td text-ink-muted">{r.reason ?? '-'}</td>
-                      <td className="td num">{qty(r.quantity)}</td>
-                      <td className="td num">{money(r.financialImpact)}</td>
-                    </tr>
-                  ))}
-                </Table>
-              ) : (
-                <Empty>Nothing is in quarantine.</Empty>
-              )}
-            </Card>
-
-            <Card title={`Pending approvals (${data.pendingApprovals.length})`}>
-              {data.pendingApprovals.length ? (
-                <Table head={['Document', 'Status', 'Value', 'Waiting']}>
-                  {data.pendingApprovals.map((r: any) => (
-                    <tr key={r.documentId}>
-                      <td className="td">{r.reference}</td>
-                      <td className="td text-ink-muted">{r.status}</td>
-                      <td className="td num">{money(r.financialImpact)}</td>
-                      <td className="td num">{r.waitingDays}d</td>
-                    </tr>
-                  ))}
-                </Table>
-              ) : (
-                <Empty>Nothing is waiting for approval.</Empty>
-              )}
-            </Card>
-
-            <Card title={`Supplier delays (${data.supplierDelays.length})`}>
-              {data.supplierDelays.length ? (
-                <Table head={['PO', 'Supplier', 'Days late', 'Value']}>
-                  {data.supplierDelays.map((r: any, i: number) => (
-                    <tr key={i}>
-                      <td className="td">{r.poNo}</td>
-                      <td className="td">{r.supplier}</td>
-                      <td className="td num text-danger">{r.daysLate}</td>
-                      <td className="td num">{money(r.financialImpact)}</td>
-                    </tr>
-                  ))}
-                </Table>
-              ) : (
-                <Empty>No overdue purchase orders.</Empty>
-              )}
-            </Card>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <Stat label="Critical" value={counts.CRITICAL} tone={counts.CRITICAL ? 'danger' : 'neutral'}
+              sub="Act now" onClick={() => setMinSeverity('CRITICAL')} />
+            <Stat label="High" value={counts.HIGH} tone={counts.HIGH ? 'warn' : 'neutral'}
+              sub="Act today" onClick={() => setMinSeverity('HIGH')} />
+            <Stat label="Medium" value={counts.MEDIUM} sub="This week"
+              onClick={() => setMinSeverity('MEDIUM')} />
+            <Stat label="Signals shown" value={shown.length}
+              sub={shown.length === signals.length ? 'No filter' : `of ${signals.length}`} />
+            <Stat label="Value exposed" value={money(exposure)} tone={exposure > 0 ? 'warn' : 'neutral'}
+              sub="Across the signals shown" />
           </div>
+
+          <Card
+            title="Operational signals"
+            action={
+              <div className="flex flex-wrap items-center gap-2">
+                <select className="input w-auto py-1 text-small" value={minSeverity}
+                  aria-label="Minimum severity"
+                  onChange={(e) => setMinSeverity(e.target.value as Severity | 'all')}>
+                  <option value="all">Every severity</option>
+                  <option value="CRITICAL">Critical only</option>
+                  <option value="HIGH">High and above</option>
+                  <option value="MEDIUM">Medium and above</option>
+                </select>
+                <select className="input w-auto py-1 text-small" value={area}
+                  aria-label="Area" onChange={(e) => setArea(e.target.value)}>
+                  {areas.map((a) => (
+                    <option key={a} value={a}>{a === 'all' ? 'Every area' : a}</option>
+                  ))}
+                </select>
+              </div>
+            }
+            padded={false}
+          >
+            <div className="p-4">
+              {shown.length === 0 ? (
+                <EmptyState
+                  title={signals.length === 0 ? 'Nothing needs a decision right now' : 'Nothing matches this filter'}
+                  body={
+                    signals.length === 0
+                      ? 'Stockouts, expiry risk, cold-chain excursions, open recalls, quarantined stock, waiting approvals and late deliveries all appear here as they arise.'
+                      : 'Widen the severity or area filter to see the rest.'
+                  }
+                />
+              ) : (
+                <DataTable
+                  rows={shown}
+                  getKey={(s) => s.id}
+                  pageSize={25}
+                  exportName="command-centre"
+                  searchPlaceholder="Search signals"
+                  viewKey="command-centre"
+                  rowTone={(s) => (s.severity === 'CRITICAL' ? 'danger' : s.severity === 'HIGH' ? 'warn' : null)}
+                  columns={[
+                    {
+                      key: 'severity', label: 'Severity', width: '7rem',
+                      value: (s) => ORDER[s.severity],
+                      render: (s) => <SeverityBadge level={s.severity} />,
+                    },
+                    { key: 'area', label: 'Area', width: '7rem', value: (s) => s.area },
+                    {
+                      key: 'headline', label: 'What is happening', value: (s) => s.headline,
+                      render: (s) => (
+                        <div>
+                          <div className="font-medium text-ink">{s.headline}</div>
+                          <div className="text-small text-ink-subtle">{s.detail}</div>
+                        </div>
+                      ),
+                    },
+                    { key: 'action', label: 'Recommended action', value: (s) => s.action },
+                    {
+                      key: 'impact', label: 'Value', numeric: true, align: 'right',
+                      value: (s) => s.impact ?? 0,
+                      render: (s) => (s.impact ? money(s.impact) : <span className="text-ink-subtle">—</span>),
+                    },
+                    {
+                      key: 'go', label: '', action: true,
+                      render: (s) => (
+                        <Link href={s.href} className="btn-ghost btn-sm">Open</Link>
+                      ),
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          </Card>
         </div>
       )}
-    </Shell>
+    </>
   );
 }

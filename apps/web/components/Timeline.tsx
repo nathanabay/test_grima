@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useApi } from '@/lib/useApi';
-import { Empty, ErrorBox, Loading, Pill } from '@/components/ui';
+import { EmptyState, ErrorState, Loading } from '@/components/primitives';
+import { StatusBadge, StatusTone } from '@/components/status';
 
 interface TimelineEvent {
   at: string;
@@ -16,25 +17,25 @@ interface TimelineEvent {
 }
 
 /** Colour by what happened, so a recall reads differently from a receipt. */
-const KIND_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'info' | 'brand' | 'neutral'> = {
-  CREATED: 'brand',
-  RECEIVED: 'ok',
+const KIND_TONE: Record<string, StatusTone> = {
+  CREATED: 'info',
+  RECEIVED: 'available',
   DISPENSED: 'info',
   SOLD: 'info',
-  TRANSFERRED: 'info',
-  ADJUSTED: 'warn',
-  COUNTED: 'warn',
-  QUARANTINED: 'warn',
-  RECALLED: 'danger',
-  DISPOSED: 'danger',
-  PRICE_CHANGED: 'warn',
+  TRANSFERRED: 'transit',
+  ADJUSTED: 'near',
+  COUNTED: 'near',
+  QUARANTINED: 'quarantine',
+  RECALLED: 'recall',
+  DISPOSED: 'expired',
+  PRICE_CHANGED: 'near',
   DOCUMENT: 'neutral',
   EDITED: 'neutral',
-  APPROVED: 'ok',
+  APPROVED: 'approved',
 };
 
 /**
- * Everything that happened to one record (§63).
+ * Everything that happened to one record (§44, §63).
  *
  * Assembled server-side from the ledger, the audit trail, price history and
  * documents — so it is a way into the evidence, not a summary written beside
@@ -49,32 +50,42 @@ export function Timeline({
   entityId: string;
   limit?: number;
 }) {
-  const { data, error, loading } = useApi<{ events: TimelineEvent[] }>(
+  const { data, error, loading, refresh } = useApi<{ events: TimelineEvent[] }>(
     entityId ? `/timeline/${entityType}/${entityId}?limit=${limit}` : null,
     [entityType, entityId],
   );
 
   if (loading) return <Loading label="Assembling history" />;
-  if (error) return <ErrorBox message={error} />;
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
   if (!data) return null;
   if (!data.events.length) {
-    return <Empty>Nothing has happened to this record yet.</Empty>;
+    return (
+      <EmptyState
+        title="Nothing has happened to this record yet"
+        body="Receipts, movements, price changes and edits all appear here as they happen, each linking to the document behind it."
+      />
+    );
   }
 
   return (
-    <ol className="relative space-y-3 border-l border-surface-border pl-4">
+    <ol className="relative space-y-3 border-l border-border pl-4">
       {data.events.map((event, i) => (
         <li key={`${event.sourceType}-${event.sourceId ?? i}-${event.at}`} className="relative">
-          <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-brand" aria-hidden />
+          <span
+            className="absolute -left-[21px] top-2 h-2 w-2 rounded-pill bg-brand ring-4 ring-surface"
+            aria-hidden
+          />
           <div className="flex flex-wrap items-center gap-2">
-            <Pill tone={KIND_TONE[event.kind] ?? 'neutral'}>{event.kind.replace(/_/g, ' ').toLowerCase()}</Pill>
-            <span className="text-sm font-medium text-ink">{event.title}</span>
-            <time className="text-xs text-ink-subtle" dateTime={event.at}>
+            <StatusBadge tone={KIND_TONE[event.kind] ?? 'neutral'}>
+              {event.kind.replace(/_/g, ' ').toLowerCase()}
+            </StatusBadge>
+            <span className="text-body font-medium text-ink">{event.title}</span>
+            <time className="num text-caption text-ink-subtle" dateTime={event.at}>
               {new Date(event.at).toLocaleString()}
             </time>
           </div>
-          {event.detail && <p className="mt-0.5 text-xs text-ink-muted">{event.detail}</p>}
-          <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[11px] text-ink-subtle">
+          {event.detail && <p className="mt-0.5 text-small text-ink-muted">{event.detail}</p>}
+          <div className="mt-0.5 flex flex-wrap items-center gap-3 text-caption text-ink-subtle">
             <span>{event.actor ? `by ${event.actor}` : 'no actor recorded'}</span>
             <span>&middot; {event.sourceType.replace(/_/g, ' ').toLowerCase()}</span>
             {event.linkUrl && (
@@ -86,5 +97,43 @@ export function Timeline({
         </li>
       ))}
     </ol>
+  );
+}
+
+/** Tabs for a 360 page. Keyboard-navigable and URL-free, so state stays local. */
+export function Tabs({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: { key: string; label: string; count?: number }[];
+  active: string;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <div className="mb-4 overflow-x-auto border-b border-border" role="tablist">
+      <div className="flex min-w-max gap-1">
+        {tabs.map((tab) => {
+          const on = tab.key === active;
+          return (
+            <button
+              key={tab.key}
+              role="tab"
+              aria-selected={on}
+              onClick={() => onChange(tab.key)}
+              className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-body transition-colors duration-state
+                ${on
+                  ? 'border-brand font-medium text-brand-dark'
+                  : 'border-transparent text-ink-muted hover:text-ink'}`}
+            >
+              {tab.label}
+              {tab.count !== undefined && (
+                <span className="ml-1.5 num text-caption text-ink-subtle">{tab.count}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
