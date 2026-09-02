@@ -1,17 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Shell, PageHeader } from '@/components/Shell';
 import { useApi } from '@/lib/useApi';
-import { api, can, money, shortDate, tokenStore } from '@/lib/api';
+import { api, can, money, qty, shortDate, tokenStore } from '@/lib/api';
 import { Card, Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
 import { DocumentsTab } from '@/components/DocumentsTab';
+import { Card as Panel, EmptyState, ErrorState, Field, Stat } from '@/components/primitives';
+import { DataTable } from '@/components/DataTable';
+import { StatusBadge, SeverityBadge } from '@/components/status';
 
 export default function SuppliersPage() {
   const [term, setTerm] = useState('');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'Profile' | 'Products' | 'Orders' | 'Documents'>('Profile');
+  const [tab, setTab] = useState<'Profile' | 'Risk' | 'Products' | 'Orders' | 'Documents'>('Profile');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -143,7 +146,7 @@ export default function SuppliersPage() {
           {detail.data && (
             <Card title={detail.data.companyName}>
               <div className="mb-3 flex gap-1 border-b border-surface-border pb-2">
-                {(['Profile', 'Products', 'Orders', 'Documents'] as const).map((t) => (
+                {(['Profile', 'Risk', 'Products', 'Orders', 'Documents'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
@@ -193,6 +196,10 @@ export default function SuppliersPage() {
                 </dl>
               )}
 
+              {tab === 'Risk' && (
+                <SupplierRisk supplier={detail.data} canEdit={canEdit} onSaved={() => { detail.refresh(); list.refresh(); }} />
+              )}
+
               {tab === 'Products' && (
                 <Table head={['SKU', 'Product', 'Unit price', 'MOQ', 'Preferred']}>
                   {detail.data.products.map((sp: any) => (
@@ -229,6 +236,189 @@ export default function SuppliersPage() {
           )}
         </div>
       </div>
+
+      <DependencyAnalysis />
     </Shell>
+  );
+}
+
+/**
+ * Risk rating, credit exposure and the reason both matter (§13).
+ *
+ * The score above is measured from receipts; the risk level here is a judgement
+ * a buyer makes and has to justify in writing. Keeping them apart stops a good
+ * delivery record from masking a supplier who is one shipment from insolvency.
+ */
+function SupplierRisk({
+  supplier,
+  canEdit,
+  onSaved,
+}: {
+  supplier: any;
+  canEdit: boolean;
+  onSaved: () => void;
+}) {
+  const [riskLevel, setRiskLevel] = useState(supplier.riskLevel ?? 'LOW');
+  const [riskNotes, setRiskNotes] = useState(supplier.riskNotes ?? '');
+  const [creditLimit, setCreditLimit] = useState(String(supplier.creditLimit ?? 0));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const credit = useApi<any>(`/suppliers/${supplier.id}/credit`, [supplier.id, saved]);
+
+  useEffect(() => {
+    setRiskLevel(supplier.riskLevel ?? 'LOW');
+    setRiskNotes(supplier.riskNotes ?? '');
+    setCreditLimit(String(supplier.creditLimit ?? 0));
+  }, [supplier.id, supplier.riskLevel, supplier.riskNotes, supplier.creditLimit]);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/suppliers/${supplier.id}`, {
+        method: 'PATCH',
+        body: { riskLevel, riskNotes: riskNotes || null, creditLimit: Number(creditLimit) },
+      });
+      setSaved((v) => !v);
+      onSaved();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const exposure = credit.data;
+
+  return (
+    <div className="space-y-4">
+      {error && <ErrorState message={error} />}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Risk rating" value={riskLevel}
+          tone={riskLevel === 'CRITICAL' ? 'danger' : riskLevel === 'HIGH' ? 'warn' : 'ok'}
+          sub="Set by procurement" />
+        <Stat label="Credit limit" value={exposure ? money(exposure.creditLimit) : '-'}
+          sub={exposure?.hasLimit ? 'Agreed with the supplier' : 'No limit agreed'} />
+        <Stat label="Outstanding" value={exposure ? money(exposure.outstanding) : '-'}
+          tone={exposure?.overLimit ? 'danger' : 'neutral'}
+          sub={exposure?.utilisationPercent ? `${exposure.utilisationPercent}% of the limit` : 'Unpaid invoices'} />
+        <Stat label="Overdue" value={exposure ? money(exposure.overdue) : '-'}
+          tone={exposure && Number(exposure.overdue) > 0 ? 'warn' : 'ok'}
+          sub="Past the due date" />
+      </div>
+
+      {exposure?.overLimit && (
+        <div className="rounded-card border border-danger/30 bg-danger/5 px-3 py-2 text-small text-danger">
+          This supplier is over their agreed credit limit. Approving a further purchase order will be
+          refused until outstanding invoices are settled or the limit is raised.
+        </div>
+      )}
+
+      {canEdit ? (
+        <Panel title="Risk assessment">
+          <div className="space-y-3">
+            <Field label="Risk level" hint="How exposed the pharmacy is if this supplier stops delivering.">
+              <select className="input" value={riskLevel} onChange={(e) => setRiskLevel(e.target.value)}>
+                {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Why" hint="A rating with no reasoning cannot be reviewed by anyone else.">
+              <textarea className="input min-h-[6rem]" value={riskNotes} onChange={(e) => setRiskNotes(e.target.value)} />
+            </Field>
+            <Field label="Credit limit" hint="Zero means no limit was agreed; purchase orders are then not checked against one.">
+              <input className="input num" type="number" min={0} value={creditLimit}
+                onChange={(e) => setCreditLimit(e.target.value)} />
+            </Field>
+            <button className="btn-primary btn-sm" disabled={busy} onClick={save}>
+              {busy ? 'Saving...' : 'Save assessment'}
+            </button>
+          </div>
+        </Panel>
+      ) : (
+        <Panel title="Risk assessment">
+          <p className="text-small text-ink-muted">{riskNotes || 'No assessment has been recorded.'}</p>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Which medicines stop if one supplier stops (§13: feature 277).
+ *
+ * A product bought from exactly one approved supplier is a single point of
+ * failure. When that supplier is also rated HIGH or CRITICAL, it is the one to
+ * act on first, which is why the list is ordered by that rather than by name.
+ */
+function DependencyAnalysis() {
+  const { data, error, loading, refresh } = useApi<any>('/suppliers/dependency-analysis', []);
+
+  const rows: any[] = data?.rows ?? [];
+
+  return (
+    <div className="mt-4">
+      {error && <ErrorState message={error} onRetry={refresh} />}
+      {loading && !data && <Loading />}
+
+      {data && (
+        <Panel
+          title="Single-source dependency"
+          description="Products with exactly one active approved supplier. Stock cover is shown because a single-sourced product with three months on the shelf is a different problem from one with three days."
+          padded={false}
+        >
+          <div className="p-4">
+            <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Stat label="Products with a supplier" value={data.productsWithASupplier} sub="Linked in the catalogue" />
+              <Stat label="Single-sourced" value={data.singleSourcedCount}
+                tone={data.singleSourcedCount > 0 ? 'warn' : 'ok'} sub="One supplier only" />
+              <Stat label="On a risky supplier" value={data.atRiskCount}
+                tone={data.atRiskCount > 0 ? 'danger' : 'ok'} sub="Rated HIGH or CRITICAL" />
+            </div>
+
+            {rows.length === 0 ? (
+              <EmptyState
+                title="No single-source dependency"
+                body="Every product linked to a supplier has at least two active approved sources."
+              />
+            ) : (
+              <DataTable
+                rows={rows}
+                getKey={(r: any) => `${r.productId}:${r.supplierId}`}
+                pageSize={15}
+                exportName="single-source-dependency"
+                searchPlaceholder="Search product or supplier"
+                viewKey="supplier-dependency"
+                rowTone={(r: any) => (r.severity === 'CRITICAL' ? 'danger' : r.severity === 'HIGH' ? 'warn' : null)}
+                columns={[
+                  { key: 'severity', label: 'Severity', width: '7rem', value: (r: any) => r.severity,
+                    render: (r: any) => <SeverityBadge level={r.severity} /> },
+                  { key: 'sku', label: 'SKU', value: (r: any) => r.sku },
+                  { key: 'product', label: 'Product', sticky: true, value: (r: any) => r.product },
+                  { key: 'supplierName', label: 'Only supplier', value: (r: any) => r.supplierName },
+                  { key: 'supplierRiskLevel', label: 'Supplier risk', width: '8rem',
+                    value: (r: any) => r.supplierRiskLevel,
+                    render: (r: any) => <StatusBadge status={r.supplierRiskLevel} /> },
+                  { key: 'onHand', label: 'On hand', numeric: true, value: (r: any) => Number(r.onHand),
+                    render: (r: any) => qty(r.onHand) },
+                  { key: 'flags', label: 'Flags', optional: true,
+                    value: (r: any) => [r.isControlled && 'controlled', r.isColdChain && 'cold chain'].filter(Boolean).join(' '),
+                    render: (r: any) => (
+                      <div className="flex gap-1">
+                        {r.isControlled && <StatusBadge status="CONTROLLED" />}
+                        {r.isColdChain && <StatusBadge status="COLD_CHAIN" />}
+                      </div>
+                    ) },
+                ]}
+              />
+            )}
+          </div>
+        </Panel>
+      )}
+    </div>
   );
 }

@@ -5,6 +5,8 @@ import { Shell, PageHeader } from '@/components/Shell';
 import { useApi } from '@/lib/useApi';
 import { money, qty } from '@/lib/api';
 import { BarChart, Card, Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
+import { Card as Panel, EmptyState, ErrorState, Stat } from '@/components/primitives';
+import { DataTable } from '@/components/DataTable';
 
 const METHODS = [
   { value: 'AUTO', label: 'Choose automatically' },
@@ -171,10 +173,85 @@ export default function ForecastPage() {
               <Card title="How the order quantity was reached">
                 <p className="text-sm text-ink-muted">{detail.data.replenishment.explanation}</p>
               </Card>
+
+              <Accuracy productId={productId!} />
             </div>
           )}
         </div>
       </div>
     </Shell>
+  );
+}
+
+/**
+ * How good the forecast has actually been (§39: feature 852).
+ *
+ * A walk-forward backtest: for every month with enough history behind it, each
+ * method is run on the months before it and compared with what really happened.
+ * Scoring a forecast against the data it was fitted on always looks excellent
+ * and means nothing.
+ */
+function Accuracy({ productId }: { productId: string }) {
+  const { data, error, loading, refresh } = useApi<any>(
+    `/analytics/forecast/${productId}/accuracy?months=24`,
+    [productId],
+  );
+
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  if (loading && !data) return <Loading />;
+  if (!data) return null;
+
+  if (!data.methods?.length) {
+    return (
+      <Panel title="Forecast accuracy">
+        <EmptyState title="Not enough history to score a forecast" body={data.message} />
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel
+      title="Forecast accuracy"
+      description="Measured against what actually happened. Months the product was out of stock are excluded — a forecast should not be marked down for being right about demand nobody could buy."
+      padded={false}
+    >
+      <div className="p-4">
+        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Stat label="Best method" value={data.bestMethod?.method?.replace(/_/g, ' ') ?? 'n/a'}
+            sub={data.bestMethod ? `${data.bestMethod.mapePercent}% average error` : 'No scoreable month'} />
+          <Stat label="Months scored" value={data.evaluatedPoints} sub={`Out of ${data.months} read`} />
+          <Stat label="Minimum history" value={data.minHistory} sub="Months before the first score" />
+        </div>
+
+        <DataTable
+          rows={data.methods}
+          getKey={(m: any) => m.method}
+          pageSize={10}
+          exportName="forecast-accuracy"
+          searchPlaceholder="Search method"
+          columns={[
+            { key: 'method', label: 'Method', value: (m: any) => m.method,
+              render: (m: any) => m.method.replace(/_/g, ' ').toLowerCase().replace(/^./, (c: string) => c.toUpperCase()) },
+            { key: 'mapePercent', label: 'Average error', numeric: true,
+              value: (m: any) => m.mapePercent ?? Number.MAX_SAFE_INTEGER,
+              render: (m: any) => (m.mapePercent === null ? 'not scoreable' : `${m.mapePercent}%`) },
+            { key: 'meanAbsoluteError', label: 'Units out', numeric: true,
+              value: (m: any) => m.meanAbsoluteError ?? 0,
+              render: (m: any) => (m.meanAbsoluteError === null ? '-' : qty(m.meanAbsoluteError)) },
+            { key: 'bias', label: 'Bias', numeric: true, value: (m: any) => m.bias ?? 0,
+              render: (m: any) =>
+                m.bias === null ? '-' : (
+                  <span title={Number(m.bias) > 0 ? 'Runs high: shows up as overstocking' : 'Runs low: shows up as stock-outs'}>
+                    {Number(m.bias) > 0 ? '+' : ''}{m.bias}
+                  </span>
+                ) },
+            { key: 'zeroDemandMonths', label: 'Zero-demand months', numeric: true, optional: true,
+              value: (m: any) => m.zeroDemandMonths },
+            { key: 'stockOutMonthsSkipped', label: 'Stock-out months skipped', numeric: true, optional: true,
+              value: (m: any) => m.stockOutMonthsSkipped },
+          ]}
+        />
+      </div>
+    </Panel>
   );
 }

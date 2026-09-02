@@ -5,6 +5,7 @@ import { Shell, PageHeader } from '@/components/Shell';
 import { useApi } from '@/lib/useApi';
 import { api, can, qty, shortDate, tokenStore } from '@/lib/api';
 import { Card, Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
+import { Card as Panel, Drawer, EmptyState, ErrorState, Field, Stat } from '@/components/primitives';
 
 /**
  * Patients and customers (§25).
@@ -24,6 +25,8 @@ export default function PatientsPage() {
   const user = typeof window !== 'undefined' ? tokenStore.user : null;
   const canEdit = can(user, 'sales.patient.CREATE');
   const canSeeHistory = can(user, 'dispensing.dispensing.READ');
+  const canMerge = can(user, 'sales.patient.DELETE');
+  const [governance, setGovernance] = useState(false);
 
   const list = useApi<any>(`/patients?pageSize=50${query ? `&q=${encodeURIComponent(query)}` : ''}`, [query, message]);
   const detail = useApi<any>(selectedId ? `/patients/${selectedId}` : null, [selectedId]);
@@ -34,7 +37,20 @@ export default function PatientsPage() {
       <PageHeader
         title="Patients & Customers"
         subtitle="Only what the pharmacy needs to operate. Clinical notes are restricted by role, and opening a record is audited."
-        action={canEdit && <button className="btn-primary" onClick={() => setCreating((v) => !v)}>{creating ? 'Cancel' : 'Add patient'}</button>}
+        action={
+          <div className="flex gap-2">
+            {canMerge && (
+              <button className="btn-ghost btn-sm" onClick={() => setGovernance(true)}>
+                Duplicates &amp; retention
+              </button>
+            )}
+            {canEdit && (
+              <button className="btn-primary" onClick={() => setCreating((v) => !v)}>
+                {creating ? 'Cancel' : 'Add patient'}
+              </button>
+            )}
+          </div>
+        }
       />
 
       {error && <div className="mb-3"><ErrorBox message={error} /></div>}
@@ -157,6 +173,192 @@ export default function PatientsPage() {
           )}
         </div>
       </div>
+
+      <GovernanceDrawer
+        open={governance}
+        onClose={() => setGovernance(false)}
+        onChanged={(m) => setMessage(m)}
+        onOpenPatient={(id) => { setGovernance(false); setSelectedId(id); }}
+      />
     </Shell>
+  );
+}
+
+/**
+ * Duplicate detection, merge and retention (§14: features 656-659).
+ *
+ * Nothing is merged automatically and nothing is erased automatically. Two
+ * people really can share a name and a birthday, and merging the wrong pair
+ * puts one patient's allergies on another patient's record; erasing on a timer
+ * is how a record still needed for an open recall disappears.
+ */
+function GovernanceDrawer({
+  open,
+  onClose,
+  onChanged,
+  onOpenPatient,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onChanged: (message: string) => void;
+  onOpenPatient: (id: string) => void;
+}) {
+  const [view, setView] = useState<'duplicates' | 'retention'>('duplicates');
+  const [years, setYears] = useState(7);
+  const [version, setVersion] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const duplicates = useApi<any>(open && view === 'duplicates' ? '/patients/duplicates' : null, [open, version]);
+  const retention = useApi<any>(
+    open && view === 'retention' ? `/patients/retention-candidates?years=${years}` : null,
+    [open, years, version],
+  );
+
+  async function merge(sourceId: string, targetId: string, label: string) {
+    const reason = window.prompt(
+      'Why are these the same person? This is recorded in the audit trail.',
+      'Confirmed duplicate at the counter',
+    );
+    if (!reason) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/patients/${sourceId}/merge`, { method: 'POST', body: { targetId, reason } });
+      onChanged(`${label} merged. History was repointed and allergies were combined.`);
+      setVersion((v) => v + 1);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function anonymize(id: string, code: string) {
+    const reason = window.prompt(
+      `Why is ${code} being anonymised? The identifying fields are cleared; the pharmacy record is kept.`,
+      'Erasure requested by the patient',
+    );
+    if (!reason) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/patients/${id}/anonymize`, { method: 'POST', body: { reason } });
+      onChanged(`${code} anonymised. Dispensing history is intact; the identity is gone.`);
+      setVersion((v) => v + 1);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      width="xl"
+      title="Duplicates and retention"
+      description="Both lists are proposals. A person decides on each one."
+    >
+      {error && <div className="mb-3"><ErrorState message={error} /></div>}
+
+      <div className="mb-4 flex gap-1 border-b border-border pb-2" role="tablist">
+        {(['duplicates', 'retention'] as const).map((v) => (
+          <button
+            key={v}
+            role="tab"
+            aria-selected={view === v}
+            onClick={() => setView(v)}
+            className={`rounded px-2 py-1 text-small ${
+              view === v ? 'bg-brand/10 font-medium text-brand-dark' : 'text-ink-muted hover:bg-surface-sunken'
+            }`}
+          >
+            {v === 'duplicates' ? 'Possible duplicates' : 'Retention candidates'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'duplicates' && (
+        <>
+          {duplicates.loading && <Loading />}
+          {(duplicates.data?.groups?.length ?? 0) === 0 && !duplicates.loading && (
+            <EmptyState
+              title="No likely duplicates"
+              body="Records are compared on normalised phone number, and on name plus date of birth."
+            />
+          )}
+          <div className="space-y-3">
+            {(duplicates.data?.groups ?? []).map((g: any, i: number) => (
+              <Panel key={i} title={g.matchedOn} description={`${g.confidence} confidence`}>
+                <ul className="space-y-2">
+                  {g.records.map((r: any) => (
+                    <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border px-2 py-1.5">
+                      <button className="text-left text-small text-ink hover:underline" onClick={() => onOpenPatient(r.id)}>
+                        <span className="font-medium">{r.fullName}</span>
+                        <span className="text-ink-subtle"> · {r.patientCode} · {r.phone ?? 'no phone'} · created {shortDate(r.createdAt)}</span>
+                      </button>
+                      {r.id !== g.records[0].id && (
+                        <button
+                          className="btn-quiet btn-sm"
+                          disabled={busy}
+                          onClick={() => merge(r.id, g.records[0].id, r.patientCode)}
+                        >
+                          Merge into {g.records[0].patientCode}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-caption text-ink-subtle">
+                  The oldest record survives by default. Merging repoints prescriptions, dispensings,
+                  sales, returns, consents and controlled-register entries, and combines allergies
+                  rather than dropping them.
+                </p>
+              </Panel>
+            ))}
+          </div>
+        </>
+      )}
+
+      {view === 'retention' && (
+        <>
+          <div className="mb-3 flex items-center gap-2">
+            <label className="label mb-0" htmlFor="retention-years">Retention period</label>
+            <select id="retention-years" className="input w-auto py-1 text-small" value={years}
+              onChange={(e) => setYears(Number(e.target.value))}>
+              {[3, 5, 7, 10].map((y) => <option key={y} value={y}>{y} years</option>)}
+            </select>
+          </div>
+          {retention.loading && <Loading />}
+          {(retention.data?.candidates?.length ?? 0) === 0 && !retention.loading && (
+            <EmptyState title="No dormant records" body="Nothing has been inactive for the whole retention period." />
+          )}
+          <ul className="space-y-2">
+            {(retention.data?.candidates ?? []).map((c: any) => (
+              <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border px-2 py-1.5">
+                <div className="text-small">
+                  <button className="font-medium text-ink hover:underline" onClick={() => onOpenPatient(c.id)}>
+                    {c.patientCode}
+                  </button>
+                  <span className="text-ink-subtle">
+                    {' '}· created {shortDate(c.createdAt)} · {c.prescriptions} prescription(s) · {c.sales} sale(s)
+                  </span>
+                  {c.blocked && (
+                    <div className="text-caption text-danger">
+                      Outstanding balance {c.outstandingBalance} — settle or write it off first, or the debt loses its owner.
+                    </div>
+                  )}
+                </div>
+                <button className="btn-quiet btn-sm" disabled={busy || c.blocked}
+                  onClick={() => anonymize(c.id, c.patientCode)}>
+                  Anonymise
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Drawer>
   );
 }

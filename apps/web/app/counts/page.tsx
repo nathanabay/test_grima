@@ -125,6 +125,8 @@ function NewCount({
   const [categoryId, setCategoryId] = useState('');
   const [locationId, setLocationId] = useState('');
   const [sampleSize, setSampleSize] = useState(25);
+  const [isBlind, setIsBlind] = useState(false);
+  const [freeze, setFreeze] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const org = useApi<any>('/admin/organization');
@@ -160,6 +162,8 @@ function NewCount({
             categoryId: countType === 'CATEGORY' ? categoryId : undefined,
             locationId: countType === 'BIN' ? locationId : undefined,
             sampleSize: ['CYCLE', 'RANDOM'].includes(countType) ? sampleSize : undefined,
+            isBlind,
+            freeze,
           },
         }),
       );
@@ -235,6 +239,36 @@ function NewCount({
           </div>
         )}
 
+        <div className="sm:col-span-2 lg:col-span-3">
+          <fieldset className="rounded-card border border-border p-3">
+            <legend className="px-1 text-caption uppercase text-ink-muted">How the count is run</legend>
+            <label className="flex items-start gap-2 text-small">
+              <input type="checkbox" className="mt-0.5" checked={isBlind}
+                onChange={(e) => setIsBlind(e.target.checked)} />
+              <span>
+                <span className="text-ink">Blind count</span>
+                <span className="block text-caption text-ink-subtle">
+                  The counter does not see what the system expects. The figures are masked on the
+                  server, not merely hidden here, and are revealed once the sheet is submitted or to
+                  a supervisor who has to judge the variance.
+                </span>
+              </span>
+            </label>
+            <label className="mt-2 flex items-start gap-2 text-small">
+              <input type="checkbox" className="mt-0.5" checked={freeze}
+                onChange={(e) => setFreeze(e.target.checked)} />
+              <span>
+                <span className="text-ink">Freeze the counted stock</span>
+                <span className="block text-caption text-ink-subtle">
+                  No movement may touch these positions until the count is posted or unfrozen, so the
+                  number written on the sheet is still true when it is keyed in. Selling and
+                  dispensing elsewhere in the warehouse is unaffected.
+                </span>
+              </span>
+            </label>
+          </fieldset>
+        </div>
+
         <div className="flex items-end">
           <button
             className="btn-primary w-full"
@@ -288,6 +322,21 @@ function CountSheet({
 
   const closed = count.status === 'CLOSED';
   const counted = count.items.filter((i: any) => i.countedQty !== null).length;
+
+  async function toggleFreeze() {
+    setBusy(true);
+    try {
+      await api(`/stock-counts/${count.id}/freeze`, {
+        method: 'POST',
+        body: { freeze: !count.isFrozen },
+      });
+      onChanged();
+    } catch (e: any) {
+      onError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function saveAll() {
     setBusy(true);
@@ -355,6 +404,9 @@ function CountSheet({
       action={
         !closed && (
           <div className="flex gap-2">
+            <button className="btn-ghost" disabled={busy} onClick={() => void toggleFreeze()}>
+              {count.isFrozen ? 'Unfreeze stock' : 'Freeze stock'}
+            </button>
             <button className="btn-ghost" disabled={busy} onClick={saveAll}>Save entries</button>
             <button className="btn-primary" disabled={busy || counted < count.items.length} onClick={post}>
               Post count
@@ -363,6 +415,19 @@ function CountSheet({
         )
       }
     >
+      {count.isFrozen && (
+        <div className="mb-3 rounded-md border border-info/30 bg-info/5 px-3 py-2 text-sm text-info">
+          Stock on this count is frozen. Any movement touching a counted position is refused until
+          the count is posted or unfrozen.
+        </div>
+      )}
+      {count.blindMasked && (
+        <div className="mb-3 rounded-md border border-warn/30 bg-warn-light px-3 py-2 text-sm text-warn">
+          Blind count: the expected quantities are withheld until the sheet is submitted. Record what
+          is physically on the shelf.
+        </div>
+      )}
+
       {!closed && (
         <div className="mb-4 rounded-md border border-dashed border-surface-border p-3">
           <label className="label">Count by scanning (§21)</label>
@@ -409,7 +474,9 @@ function CountSheet({
             <tr key={i.id} className={i.requiresApproval ? 'bg-warn-light' : ''}>
               <td className="td text-xs">{i.productId.slice(0, 8)}</td>
               <td className="td text-xs text-ink-muted">{i.batchId ? i.batchId.slice(0, 8) : '-'}</td>
-              <td className="td num">{qty(i.systemQty)}</td>
+              <td className="td num">
+                {i.systemQty === null ? <span className="text-ink-subtle">hidden</span> : qty(i.systemQty)}
+              </td>
               <td className="td">
                 {closed ? (
                   <span className="num">{i.countedQty !== null ? qty(i.countedQty) : '-'}</span>

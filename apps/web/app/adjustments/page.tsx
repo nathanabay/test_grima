@@ -5,6 +5,8 @@ import { Shell, PageHeader } from '@/components/Shell';
 import { useApi } from '@/lib/useApi';
 import { api, money, qty, shortDate, tokenStore } from '@/lib/api';
 import { Card, Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
+import { Card as Panel, EmptyState, ErrorState, Stat } from '@/components/primitives';
+import { DataTable } from '@/components/DataTable';
 
 interface Line {
   productId: string;
@@ -347,6 +349,116 @@ export default function AdjustmentsPage() {
           )}
         </Card>
       </div>
+
+      <LossAnalysis warehouseId={warehouseId} refreshKey={message} />
     </Shell>
+  );
+}
+
+/**
+ * Where the stock actually went (§21: feature 180).
+ *
+ * Only negative movements are losses; a positive adjustment is stock found, and
+ * netting the two would cancel real losses against clerical corrections. The
+ * unclassified pile is shown as its own row rather than hidden, because its
+ * size is itself the finding.
+ */
+function LossAnalysis({ warehouseId, refreshKey }: { warehouseId: string; refreshKey: string | null }) {
+  const [days, setDays] = useState(90);
+
+  const from = new Date(Date.now() - days * 86_400_000).toISOString();
+  const query = new URLSearchParams({ from });
+  if (warehouseId) query.set('warehouseId', warehouseId);
+
+  const { data, error, loading, refresh } = useApi<any>(
+    `/stock-adjustments/loss-analysis?${query}`,
+    [warehouseId, days, refreshKey],
+  );
+
+  const byType: any[] = data?.byType ?? [];
+  const topProducts: any[] = data?.topProducts ?? [];
+
+  return (
+    <div className="mt-4 space-y-4">
+      {error && <ErrorState message={error} onRetry={refresh} />}
+      {loading && !data && <Loading />}
+
+      {data && (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Stat label="Value written off" value={money(data.totalValue)}
+              tone={Number(data.totalValue) > 0 ? 'danger' : 'ok'} sub={`Last ${days} days`} />
+            <Stat label="Write-off lines" value={data.totalLines} sub="Negative adjustment lines" />
+            <Stat
+              label="Unclassified"
+              value={money(byType.find((t) => t.lossType === 'UNCLASSIFIED')?.value ?? 0)}
+              tone={byType.some((t) => t.lossType === 'UNCLASSIFIED') ? 'warn' : 'ok'}
+              sub="Recorded before a cause was required"
+            />
+          </div>
+
+          <Panel
+            title="Loss by cause"
+            description="Classification is what turns a shortfall into an action: breakage points at handling, theft at access control, expiry at ordering."
+            action={
+              <select className="input w-auto py-1 text-small" aria-label="Period"
+                value={days} onChange={(e) => setDays(Number(e.target.value))}>
+                {[30, 90, 180, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}
+              </select>
+            }
+            padded={false}
+          >
+            <div className="p-4">
+              {byType.length === 0 ? (
+                <EmptyState title="Nothing has been written off in this period"
+                  body="Write-offs recorded through this screen or through a stock count appear here." />
+              ) : (
+                <DataTable
+                  rows={byType}
+                  getKey={(r: any) => r.lossType}
+                  pageSize={10}
+                  exportName="loss-by-cause"
+                  searchPlaceholder="Search cause"
+                  rowTone={(r: any) => (r.lossType === 'THEFT' ? 'danger' : null)}
+                  columns={[
+                    { key: 'lossType', label: 'Cause', value: (r: any) => r.lossType,
+                      render: (r: any) => r.lossType.replace(/_/g, ' ').toLowerCase().replace(/^./, (c: string) => c.toUpperCase()) },
+                    { key: 'lines', label: 'Lines', numeric: true, value: (r: any) => r.lines },
+                    { key: 'quantity', label: 'Quantity', numeric: true, value: (r: any) => Number(r.quantity),
+                      render: (r: any) => qty(r.quantity) },
+                    { key: 'value', label: 'Value', numeric: true, value: (r: any) => Number(r.value),
+                      render: (r: any) => money(r.value) },
+                    { key: 'share', label: 'Share', numeric: true, value: (r: any) => Number(r.sharePercent),
+                      render: (r: any) => `${r.sharePercent}%` },
+                  ]}
+                />
+              )}
+            </div>
+          </Panel>
+
+          {topProducts.length > 0 && (
+            <Panel title="Worst-affected products" padded={false}>
+              <div className="p-4">
+                <DataTable
+                  rows={topProducts}
+                  getKey={(r: any) => r.productId}
+                  pageSize={10}
+                  exportName="loss-by-product"
+                  searchPlaceholder="Search product"
+                  columns={[
+                    { key: 'sku', label: 'SKU', value: (r: any) => r.sku },
+                    { key: 'name', label: 'Product', value: (r: any) => r.name },
+                    { key: 'quantity', label: 'Quantity', numeric: true, value: (r: any) => Number(r.quantity),
+                      render: (r: any) => qty(r.quantity) },
+                    { key: 'value', label: 'Value', numeric: true, value: (r: any) => Number(r.value),
+                      render: (r: any) => money(r.value) },
+                  ]}
+                />
+              </div>
+            </Panel>
+          )}
+        </>
+      )}
+    </div>
   );
 }

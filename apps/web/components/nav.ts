@@ -56,6 +56,7 @@ export const NAV: NavGroup[] = [
       { href: '/inventory/expiry', labelKey: 'nav.expiry', label: 'Expiry Risk Centre', permission: 'inventory.expiry.READ', keywords: 'expiry near expired risk' },
       { href: '/counts', labelKey: 'nav.counts', label: 'Stock Counts', permission: 'inventory.count.READ', keywords: 'count cycle variance' },
       { href: '/adjustments', labelKey: 'nav.adjustments', label: 'Adjustments', permission: 'inventory.adjustment.CREATE', keywords: 'adjust correction' },
+      { href: '/serials', labelKey: 'nav.serials', label: 'Serial Register', permission: 'inventory.serial.READ', keywords: 'serial track trace pack unit gs1 sn' },
       { href: '/scan', labelKey: 'nav.scan', label: 'Scan Station', permission: 'inventory.balance.READ', keywords: 'barcode gs1 datamatrix scanner' },
     ],
   },

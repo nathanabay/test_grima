@@ -5,6 +5,9 @@ import { Shell, PageHeader } from '@/components/Shell';
 import { useApi } from '@/lib/useApi';
 import { api, qty, shortDate, tokenStore } from '@/lib/api';
 import { Card, Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
+import { Card as Panel, Drawer, EmptyState, Field } from '@/components/primitives';
+import { DataTable } from '@/components/DataTable';
+import { SeverityBadge } from '@/components/status';
 
 const STATUS_TONE: Record<string, any> = {
   DRAFT: 'neutral', SUBMITTED: 'info', APPROVED: 'info', PICKING: 'info',
@@ -18,8 +21,10 @@ export default function TransfersPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dispatching, setDispatching] = useState<any>(null);
 
   const list = useApi<any>('/transfers?pageSize=25', [message]);
+  const overdue = useApi<any[]>('/transfers/overdue', [message]);
   const detail = useApi<any>(selectedId ? `/transfers/${selectedId}` : null, [selectedId, message]);
 
   async function act(path: string, body: any, label: string) {
@@ -39,6 +44,41 @@ export default function TransfersPage() {
 
       {error && <div className="mb-3"><ErrorBox message={error} /></div>}
       {message && <div className="mb-3 rounded-md border border-ok/30 bg-ok-light px-3 py-2 text-sm text-ok">{message}</div>}
+
+      {(overdue.data?.length ?? 0) > 0 && (
+        <Panel
+          className="mb-4"
+          title="Overdue in transit"
+          description="Stock that left the origin and has not been received. Nobody can sell it and nobody has counted it, so a transfer that quietly stays in transit is either lost, stolen, or sitting in a receiving bay unrecorded."
+        >
+          <DataTable
+            rows={overdue.data ?? []}
+            getKey={(r: any) => r.id}
+            pageSize={10}
+            exportName="overdue-transfers"
+            searchPlaceholder="Search transfer, warehouse or courier"
+            rowTone={(r: any) => (r.severity === 'CRITICAL' ? 'danger' : 'warn')}
+            onRowClick={(r: any) => setSelectedId(r.id)}
+            columns={[
+              { key: 'severity', label: 'Severity', width: '7rem', value: (r: any) => r.daysLate,
+                render: (r: any) => <SeverityBadge level={r.severity} /> },
+              { key: 'transferNo', label: 'Transfer', value: (r: any) => r.transferNo },
+              { key: 'route', label: 'Route', value: (r: any) => `${r.fromWarehouse} to ${r.toWarehouse}` },
+              { key: 'daysLate', label: 'Days late', numeric: true, value: (r: any) => r.daysLate },
+              { key: 'expected', label: 'Expected', value: (r: any) => r.expectedArrival ?? '',
+                render: (r: any) => (
+                  <span title={r.expectedBasis === 'STATED' ? 'Stated at dispatch' : 'Default transit allowance'}>
+                    {r.expectedArrival ? shortDate(r.expectedArrival) : 'not stated'}
+                  </span>
+                ) },
+              { key: 'quantity', label: 'In transit', numeric: true, optional: true,
+                value: (r: any) => Number(r.inTransitQuantity), render: (r: any) => qty(r.inTransitQuantity) },
+              { key: 'courier', label: 'Courier', optional: true, value: (r: any) => r.vehicleOrCourier ?? '-' },
+              { key: 'tracking', label: 'Tracking', optional: true, value: (r: any) => r.trackingNumber ?? '-' },
+            ]}
+          />
+        </Panel>
+      )}
 
       {creating && <NewTransfer onDone={(t) => { setCreating(false); setSelectedId(t.id); setMessage(`Transfer ${t.transferNo} created.`); }} onError={setError} />}
 
@@ -105,13 +145,7 @@ export default function TransfersPage() {
                 )}
                 {['APPROVED', 'PICKING'].includes(detail.data.status) && (
                   <button className="btn-primary" disabled={busy}
-                    onClick={() => {
-                      const courier = window.prompt('Courier or vehicle:') ?? undefined;
-                      act(`/transfers/${detail.data.id}/dispatch`, {
-                        lines: detail.data.items.map((i: any) => ({ itemId: i.id, quantity: Number(i.requestedQty) - Number(i.dispatchedQty) })).filter((l: any) => l.quantity > 0),
-                        vehicleOrCourier: courier,
-                      }, 'Dispatched');
-                    }}>Dispatch all</button>
+                    onClick={() => setDispatching(detail.data)}>Dispatch...</button>
                 )}
                 {['IN_TRANSIT', 'PARTIALLY_RECEIVED'].includes(detail.data.status) && (
                   <>
@@ -136,6 +170,13 @@ export default function TransfersPage() {
           )}
         </div>
       </div>
+
+      <DispatchDrawer
+        transfer={dispatching}
+        onClose={() => setDispatching(null)}
+        onDispatched={(no) => { setDispatching(null); setMessage(`Transfer ${no} dispatched.`); }}
+        onError={setError}
+      />
     </Shell>
   );
 }
@@ -234,5 +275,117 @@ function NewTransfer({ onDone, onError }: { onDone: (t: any) => void; onError: (
         {busy ? 'Creating...' : 'Create transfer'}
       </button>
     </Card>
+  );
+}
+
+/**
+ * Dispatch with the logistics detail the destination needs (§20).
+ *
+ * Courier, driver, tracking number and an expected arrival, because a transfer
+ * with none of these cannot be chased when it goes missing. The expected
+ * arrival is what makes the overdue list above possible at all; when it is left
+ * blank the configured transit allowance is used instead.
+ */
+function DispatchDrawer({
+  transfer,
+  onClose,
+  onDispatched,
+  onError,
+}: {
+  transfer: any | null;
+  onClose: () => void;
+  onDispatched: (transferNo: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [vehicleOrCourier, setCourier] = useState('');
+  const [driverName, setDriverName] = useState('');
+  const [driverPhone, setDriverPhone] = useState('');
+  const [trackingNumber, setTracking] = useState('');
+  const [expectedArrival, setExpected] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setCourier('');
+    setDriverName('');
+    setDriverPhone('');
+    setTracking('');
+    setExpected('');
+  }, [transfer?.id]);
+
+  if (!transfer) return null;
+
+  const lines = transfer.items
+    .map((i: any) => ({ itemId: i.id, quantity: Number(i.requestedQty) - Number(i.dispatchedQty) }))
+    .filter((l: any) => l.quantity > 0);
+
+  async function dispatch() {
+    setBusy(true);
+    try {
+      await api(`/transfers/${transfer.id}/dispatch`, {
+        method: 'POST',
+        body: {
+          lines,
+          vehicleOrCourier: vehicleOrCourier || undefined,
+          driverName: driverName || undefined,
+          driverPhone: driverPhone || undefined,
+          trackingNumber: trackingNumber || undefined,
+          expectedArrival: expectedArrival ? new Date(expectedArrival).toISOString() : undefined,
+        },
+      });
+      onDispatched(transfer.transferNo);
+    } catch (e: any) {
+      onError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      title={`Dispatch ${transfer.transferNo}`}
+      description={`${lines.length} line(s) will leave the origin warehouse now.`}
+    >
+      {lines.length === 0 ? (
+        <EmptyState
+          title="Nothing left to dispatch"
+          body="Every line on this transfer has already been sent."
+        />
+      ) : (
+        <div className="space-y-3">
+          <Field label="Courier or vehicle">
+            <input className="input" value={vehicleOrCourier} onChange={(e) => setCourier(e.target.value)} />
+          </Field>
+          <Field label="Driver name">
+            <input className="input" value={driverName} onChange={(e) => setDriverName(e.target.value)} />
+          </Field>
+          <Field
+            label="Driver phone"
+            hint="Held on the transfer so the destination can chase the delivery. It is not copied into the audit log."
+          >
+            <input className="input" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
+          </Field>
+          <Field label="Tracking number">
+            <input className="input" value={trackingNumber} onChange={(e) => setTracking(e.target.value)} />
+          </Field>
+          <Field
+            label="Expected arrival"
+            hint="Leave blank to use the configured transit allowance. Either way the transfer appears on the overdue list once it is late."
+          >
+            <input
+              className="input"
+              type="datetime-local"
+              value={expectedArrival}
+              onChange={(e) => setExpected(e.target.value)}
+            />
+          </Field>
+
+          <button className="btn-primary btn-sm" disabled={busy} onClick={dispatch}>
+            {busy ? 'Dispatching…' : `Dispatch ${lines.length} line(s)`}
+          </button>
+        </div>
+      )}
+    </Drawer>
   );
 }

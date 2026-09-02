@@ -9,6 +9,8 @@ import { money, qty, shortDate } from '@/lib/api';
 import { useScope } from '@/lib/scope';
 import { StatusBadge, ExpiryBadge, QuantityCell } from '@/components/status';
 import { DataTable } from '@/components/DataTable';
+import { Tabs } from '@/components/Timeline';
+import { BarChart } from '@/components/ui';
 
 /**
  * Expiry Risk Centre (§31).
@@ -33,6 +35,7 @@ function ExpiryBody() {
   const scope = useScope();
   const [maxDays, setMaxDays] = useState(90);
   const [bucket, setBucket] = useState<string>('all');
+  const [tab, setTab] = useState('risk');
 
   const query = new URLSearchParams({ maxDays: String(maxDays) });
   if (scope.warehouseId) query.set('warehouseId', scope.warehouseId);
@@ -77,10 +80,23 @@ function ExpiryBody() {
         }
       />
 
-      {error && <ErrorState message={error} onRetry={refresh} />}
-      {loading && !data && <Loading label="Measuring exposure" />}
+      <Tabs
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'risk', label: 'Risk now' },
+          { key: 'calendar', label: 'Calendar' },
+          { key: 'trend', label: 'What we actually lost' },
+          { key: 'comparison', label: 'Compare' },
+        ]}
+      />
 
-      {data && (
+      {tab !== 'risk' && <ExpiryTab tab={tab} />}
+
+      {tab === 'risk' && error && <ErrorState message={error} onRetry={refresh} />}
+      {tab === 'risk' && loading && !data && <Loading label="Measuring exposure" />}
+
+      {tab === 'risk' && data && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Total at risk" value={money(data.totalValueAtRisk)}
@@ -256,6 +272,249 @@ function ExpiryBody() {
         </div>
       )}
     </>
+  );
+}
+
+/** The three analytical views behind the risk list. */
+function ExpiryTab({ tab }: { tab: string }) {
+  if (tab === 'calendar') return <CalendarPanel />;
+  if (tab === 'trend') return <TrendPanel />;
+  return <ComparisonPanel />;
+}
+
+/**
+ * When stock expires, month by month.
+ *
+ * The risk ladder answers "how urgent"; this answers "when", which is the
+ * question a purchasing plan is built from.
+ */
+function CalendarPanel() {
+  const scope = useScope();
+  const [months, setMonths] = useState(12);
+  const query = new URLSearchParams({ months: String(months) });
+  if (scope.warehouseId) query.set('warehouseId', scope.warehouseId);
+
+  const { data, error, loading, refresh } = useApi<any>(
+    `/inventory/expiry/calendar?${query}`,
+    [months, scope.warehouseId],
+  );
+
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  if (loading && !data) return <Loading label="Building the calendar" />;
+  if (!data) return null;
+
+  const rows: any[] = data.rows ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Stat label="Value in the window" value={money(data.totalValue)}
+          tone={Number(data.totalValue) > 0 ? 'warn' : 'neutral'} sub={`Next ${months} months`} />
+        <Stat label="Worst month" value={data.peakMonth?.month ?? '—'}
+          sub={data.peakMonth ? money(data.peakMonth.value) : 'Nothing expiring'} />
+        <Stat label="Months with exposure" value={rows.length} sub="Including anything already expired" />
+      </div>
+
+      <Card
+        title="Expiry by month"
+        description="Value is the available quantity at inventory cost. Stock already expired is shown in its own month — that is a disposal backlog, not a future risk."
+        action={
+          <select className="input w-auto py-1 text-small" aria-label="Horizon in months"
+            value={months} onChange={(e) => setMonths(Number(e.target.value))}>
+            {[6, 12, 18, 24, 36].map((m) => <option key={m} value={m}>{m} months</option>)}
+          </select>
+        }
+      >
+        {rows.length === 0 ? (
+          <EmptyState title="Nothing expires in this window"
+            body="Widen the horizon to look further ahead." />
+        ) : (
+          <>
+            <BarChart
+              data={rows.map((r) => ({ label: r.month, value: Number(r.value) }))}
+              labelKey="label"
+              valueKey="value"
+              format={(v) => money(v)}
+            />
+            <div className="mt-4">
+              <DataTable
+                rows={rows}
+                getKey={(r: any) => r.month}
+                pageSize={24}
+                exportName="expiry-calendar"
+                searchPlaceholder="Search month"
+                columns={[
+                  { key: 'month', label: 'Month', value: (r: any) => r.month },
+                  { key: 'batches', label: 'Batch positions', numeric: true, value: (r: any) => r.batches },
+                  { key: 'quantity', label: 'Quantity', numeric: true, value: (r: any) => Number(r.quantity),
+                    render: (r: any) => qty(r.quantity) },
+                  { key: 'value', label: 'Value at risk', numeric: true, value: (r: any) => Number(r.value),
+                    render: (r: any) => money(r.value) },
+                  { key: 'state', label: 'State', value: (r: any) => (r.alreadyExpired ? 'EXPIRED' : 'AT_RISK'),
+                    render: (r: any) => <StatusBadge status={r.alreadyExpired ? 'EXPIRED' : 'NEAR_EXPIRY'} /> },
+                ]}
+              />
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/**
+ * What was actually written off, read from the ledger.
+ *
+ * This is history, not projection. Trending the projection would only measure
+ * how the projection changed.
+ */
+function TrendPanel() {
+  const scope = useScope();
+  const [months, setMonths] = useState(12);
+  const query = new URLSearchParams({ months: String(months) });
+  if (scope.warehouseId) query.set('warehouseId', scope.warehouseId);
+
+  const { data, error, loading, refresh } = useApi<any>(
+    `/inventory/expiry/trend?${query}`,
+    [months, scope.warehouseId],
+  );
+
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  if (loading && !data) return <Loading label="Reading the write-off history" />;
+  if (!data) return null;
+
+  const series: any[] = data.series ?? [];
+  const worst: any[] = data.worstProducts ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Stat label="Written off" value={money(data.totalValue)}
+          tone={Number(data.totalValue) > 0 ? 'danger' : 'ok'} sub={`Last ${months} months`} />
+        <Stat label="Months with a write-off" value={series.length} sub="Expiry and disposal movements" />
+        <Stat label="Products affected" value={worst.length} sub="Ranked by value lost" />
+      </div>
+
+      <Card
+        title="Write-offs by month"
+        description="Valued at the cost each movement was posted at, not today's average — restating history every time a price moves would make the trend meaningless."
+        action={
+          <select className="input w-auto py-1 text-small" aria-label="Period"
+            value={months} onChange={(e) => setMonths(Number(e.target.value))}>
+            {[6, 12, 24, 36].map((m) => <option key={m} value={m}>{m} months</option>)}
+          </select>
+        }
+      >
+        {series.length === 0 ? (
+          <EmptyState title="Nothing has been written off in this period"
+            body="Expiry and disposal movements appear here as they are posted to the ledger." />
+        ) : (
+          <BarChart
+            data={series.map((s) => ({ label: s.month, value: Number(s.value) }))}
+            labelKey="label"
+            valueKey="value"
+            format={(v) => money(v)}
+          />
+        )}
+      </Card>
+
+      {worst.length > 0 && (
+        <Card title="Where the loss went" padded={false}>
+          <div className="p-4">
+            <DataTable
+              rows={worst}
+              getKey={(r: any) => r.productId}
+              pageSize={20}
+              exportName="expiry-losses-by-product"
+              searchPlaceholder="Search product"
+              columns={[
+                { key: 'sku', label: 'SKU', value: (r: any) => r.sku },
+                { key: 'product', label: 'Product', value: (r: any) => r.product },
+                { key: 'quantity', label: 'Quantity', numeric: true, value: (r: any) => Number(r.quantity),
+                  render: (r: any) => qty(r.quantity) },
+                { key: 'value', label: 'Value lost', numeric: true, value: (r: any) => Number(r.value),
+                  render: (r: any) => money(r.value) },
+              ]}
+            />
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/** Exposure compared across one dimension at a time. */
+function ComparisonPanel() {
+  const [dimension, setDimension] = useState<'branch' | 'category' | 'supplier'>('branch');
+  const [withinDays, setWithinDays] = useState(180);
+
+  const { data, error, loading, refresh } = useApi<any>(
+    `/inventory/expiry/comparison?dimension=${dimension}&withinDays=${withinDays}`,
+    [dimension, withinDays],
+  );
+
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  if (loading && !data) return <Loading label="Comparing exposure" />;
+  if (!data) return null;
+
+  const rows: any[] = data.rows ?? [];
+
+  return (
+    <Card
+      title={`Expiry exposure by ${dimension}`}
+      description="One dimension at a time: a table that crosses all three is unreadable and nobody acts on it. Value is compared rather than batch count, because counting batches ranks cheap sachets above insulin."
+      action={
+        <div className="flex flex-wrap items-center gap-2">
+          <select className="input w-auto py-1 text-small" aria-label="Dimension"
+            value={dimension} onChange={(e) => setDimension(e.target.value as any)}>
+            <option value="branch">By branch</option>
+            <option value="category">By category</option>
+            <option value="supplier">By supplier</option>
+          </select>
+          <select className="input w-auto py-1 text-small" aria-label="Horizon"
+            value={withinDays} onChange={(e) => setWithinDays(Number(e.target.value))}>
+            {[30, 90, 180, 365].map((d) => <option key={d} value={d}>Within {d} days</option>)}
+          </select>
+        </div>
+      }
+      padded={false}
+    >
+      <div className="p-4">
+        {rows.length === 0 ? (
+          <EmptyState title="No exposure in this horizon"
+            body="Widen the horizon, or switch dimension." />
+        ) : (
+          <>
+            <BarChart
+              data={rows.slice(0, 12).map((r) => ({ label: r.label, value: Number(r.value) }))}
+              labelKey="label"
+              valueKey="value"
+              format={(v) => money(v)}
+            />
+            <div className="mt-4">
+              <DataTable
+                rows={rows}
+                getKey={(r: any) => r.id}
+                pageSize={25}
+                exportName={`expiry-by-${dimension}`}
+                searchPlaceholder="Search"
+                columns={[
+                  { key: 'label', label: dimension === 'branch' ? 'Branch' : dimension === 'category' ? 'Category' : 'Supplier',
+                    sticky: true, value: (r: any) => r.label },
+                  { key: 'batches', label: 'Positions', numeric: true, value: (r: any) => r.batches },
+                  { key: 'quantity', label: 'Quantity', numeric: true, value: (r: any) => Number(r.quantity),
+                    render: (r: any) => qty(r.quantity) },
+                  { key: 'value', label: 'Value at risk', numeric: true, value: (r: any) => Number(r.value),
+                    render: (r: any) => money(r.value) },
+                  { key: 'share', label: 'Share', numeric: true, value: (r: any) => Number(r.sharePercent),
+                    render: (r: any) => `${r.sharePercent}%` },
+                ]}
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
   );
 }
 

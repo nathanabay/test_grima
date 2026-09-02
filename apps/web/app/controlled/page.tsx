@@ -5,6 +5,9 @@ import { Shell, PageHeader } from '@/components/Shell';
 import { useApi } from '@/lib/useApi';
 import { api, qty, shortDate } from '@/lib/api';
 import { Card, Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
+import { Card as Panel, EmptyState, ErrorState, Stat } from '@/components/primitives';
+import { DataTable } from '@/components/DataTable';
+import { SeverityBadge } from '@/components/status';
 
 /**
  * Controlled medicines register (§28).
@@ -142,6 +145,83 @@ export default function ControlledPage() {
           </Table>
         ) : (!register.loading && <Empty>No register entries. Controlled medicines appear here once received or dispensed.</Empty>)}
       </Card>
+
+      <Anomalies />
     </Shell>
+  );
+}
+
+/**
+ * Patterns worth investigating (§28: features 918-922).
+ *
+ * Diversion does not announce itself; it shows up as a pattern. Every signal
+ * carries the arithmetic behind it so a supervisor can judge rather than trust,
+ * and nothing here is a finding on its own — that is stated on the screen, not
+ * only in the code, because an accusation dressed as a system output is how a
+ * colleague gets wrongly suspended.
+ */
+function Anomalies() {
+  const [days, setDays] = useState(90);
+  const { data, error, loading, refresh } = useApi<any>(
+    `/controlled-register/anomalies?days=${days}`,
+    [days],
+  );
+
+  const signals: any[] = data?.signals ?? [];
+
+  return (
+    <div className="mt-4">
+      {error && <ErrorState message={error} onRetry={refresh} />}
+      {loading && !data && <Loading />}
+
+      {data && (
+        <Panel
+          title="Patterns worth investigating"
+          description={data.note}
+          action={
+            <select className="input w-auto py-1 text-small" aria-label="Period"
+              value={days} onChange={(e) => setDays(Number(e.target.value))}>
+              {[30, 90, 180, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}
+            </select>
+          }
+          padded={false}
+        >
+          <div className="p-4">
+            <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Stat label="Entries examined" value={data.entriesExamined} sub="Controlled dispensings" />
+              <Stat label="Signals" value={signals.length}
+                tone={signals.length ? 'warn' : 'ok'} sub="Prompts, not findings" />
+              <Stat label="High priority" value={signals.filter((s) => s.severity === 'HIGH').length}
+                tone={signals.some((s) => s.severity === 'HIGH') ? 'danger' : 'ok'}
+                sub="Look at these first" />
+            </div>
+
+            {signals.length === 0 ? (
+              <EmptyState
+                title="No pattern stands out in this period"
+                body="A quiet report is not a clean bill of health: it means nothing crossed the thresholds this check uses. Reconciliation against physical stock is the other half of the picture."
+              />
+            ) : (
+              <DataTable
+                rows={signals}
+                getKey={(s: any, ) => `${s.type}:${s.subject}:${s.detail}`}
+                pageSize={20}
+                exportName="controlled-anomalies"
+                searchPlaceholder="Search signal"
+                rowTone={(s: any) => (s.severity === 'HIGH' ? 'danger' : 'warn')}
+                columns={[
+                  { key: 'severity', label: 'Priority', width: '7rem', value: (s: any) => s.severity,
+                    render: (s: any) => <SeverityBadge level={s.severity} /> },
+                  { key: 'type', label: 'Pattern', value: (s: any) => s.type,
+                    render: (s: any) => s.type.replace(/_/g, ' ').toLowerCase().replace(/^./, (c: string) => c.toUpperCase()) },
+                  { key: 'detail', label: 'What was seen', value: (s: any) => s.detail },
+                  { key: 'subject', label: 'Subject', optional: true, value: (s: any) => s.subject },
+                ]}
+              />
+            )}
+          </div>
+        </Panel>
+      )}
+    </div>
   );
 }
