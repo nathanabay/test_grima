@@ -4,7 +4,8 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 
 type DocumentKind =
   | 'PR' | 'RFQ' | 'QUO' | 'PO' | 'GRN' | 'TRF' | 'ADJ' | 'CNT'
-  | 'RX' | 'DSP' | 'SALE' | 'RET' | 'RCL' | 'DIS' | 'QI' | 'EXC' | 'CASH';
+  | 'RX' | 'DSP' | 'SALE' | 'RET' | 'RCL' | 'DIS' | 'QI' | 'EXC' | 'CASH'
+  | 'INV' | 'PAY';
 
 /**
  * Sequential, human-readable document numbers: PO-2026-000123.
@@ -40,6 +41,8 @@ export class DocumentNumberService {
       QI: { model: 'qualityIncident', field: 'incidentNo' },
       EXC: { model: 'temperatureExcursion', field: 'excursionNo' },
       CASH: { model: 'cashSession', field: 'sessionNo' },
+      INV: { model: 'supplierInvoice', field: 'internalNo' },
+      PAY: { model: 'supplierPayment', field: 'paymentNo' },
     };
 
     const { model, field } = table[kind];

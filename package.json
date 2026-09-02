@@ -14,6 +14,7 @@
     "db:push": "pnpm --filter @pharmacore/api prisma db push",
     "db:seed": "pnpm --filter @pharmacore/api seed",
     "db:studio": "pnpm --filter @pharmacore/api prisma studio",
-    "test:e2e": "node scripts/e2e-workflow.mjs"
+    "test:e2e": "node scripts/e2e-workflow.mjs",
+    "test:e2e:procurement": "node scripts/e2e-procurement.mjs"
   }
 }

@@ -27,6 +27,13 @@ export interface ReceiveLineInput {
   locationId?: string;
   packagingDamaged?: boolean;
   serials?: string[];
+  /**
+   * Quantity refused at the door (§15). Only the accepted remainder enters
+   * stock; the rejected portion is recorded on the receipt for the supplier
+   * claim and feeds the supplier rejection-rate KPI.
+   */
+  rejectedQty?: number;
+  rejectionReason?: string;
 }
 
 export interface ReceiveInput {
@@ -169,9 +176,28 @@ export class ReceivingService {
             );
           }
           const factor = unit ? Number(unit.factorToBase) : 1;
-          const baseQuantity = line.quantity * factor;
-          if (baseQuantity <= 0) {
+          const deliveredQuantity = line.quantity * factor;
+          if (deliveredQuantity <= 0) {
             throw new BadRequestException('Received quantity must be greater than zero');
+          }
+
+          // §15: a rejected portion never enters stock.
+          const rejectedQuantity = (line.rejectedQty ?? 0) * factor;
+          if (rejectedQuantity < 0 || rejectedQuantity > deliveredQuantity) {
+            throw new BadRequestException(
+              `Rejected quantity must be between 0 and the delivered quantity (${line.quantity})`,
+            );
+          }
+          if (rejectedQuantity > 0 && !line.rejectionReason?.trim()) {
+            throw new BadRequestException(
+              'Rejecting part of a delivery requires a reason',
+            );
+          }
+          const baseQuantity = deliveredQuantity - rejectedQuantity;
+          if (baseQuantity <= 0) {
+            throw new BadRequestException(
+              'The whole delivery line was rejected; record it as a supplier return instead of a receipt',
+            );
           }
           // Cost is given per purchase unit; the ledger stores cost per base unit.
           const baseUnitCost = line.unitCost / factor;
@@ -234,8 +260,12 @@ export class ReceivingService {
               batchNumber: line.batchNumber,
               expiryDate: new Date(line.expiryDate),
               manufacturingDate: line.manufacturingDate ? new Date(line.manufacturingDate) : null,
-              receivedQty: new Prisma.Decimal(baseQuantity),
+              // Delivered, accepted and rejected are three different numbers
+              // (§15); only the accepted quantity reached stock above.
+              receivedQty: new Prisma.Decimal(deliveredQuantity),
               acceptedQty: new Prisma.Decimal(baseQuantity),
+              rejectedQty: new Prisma.Decimal(rejectedQuantity),
+              rejectionReason: line.rejectionReason ?? null,
               unitCost: new Prisma.Decimal(baseUnitCost),
               locationId: line.locationId ?? null,
               flags,

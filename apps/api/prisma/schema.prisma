@@ -124,6 +124,26 @@ enum TransferStatus {
   CANCELLED
 }
 
+enum SupplierInvoiceStatus {
+  DRAFT
+  SUBMITTED
+  MATCHED
+  DISPUTED
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+/// Three-way match outcome: purchase order vs goods receipt vs invoice (§45).
+enum InvoiceMatchStatus {
+  UNMATCHED
+  MATCHED
+  PRICE_VARIANCE
+  QUANTITY_VARIANCE
+  BOTH_VARIANCE
+}
+
 enum ReturnType {
   CUSTOMER
   SUPPLIER
@@ -689,6 +709,7 @@ model Supplier {
   purchaseOrders PurchaseOrder[]
   quotations     SupplierQuotation[]
   batches        Batch[]
+  invoices       SupplierInvoice[]
 
   @@map("suppliers")
 }
@@ -1055,6 +1076,79 @@ model GoodsReceiptItem {
   goodsReceipt GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
 
   @@map("goods_receipt_items")
+}
+
+/// Accounts payable (§11 final steps, §45).
+model SupplierInvoice {
+  id              String                @id @default(uuid()) @db.Uuid
+  internalNo      String                @unique
+  /// The number printed on the supplier's own invoice.
+  supplierInvoiceNo String
+  supplierId      String                @db.Uuid
+  purchaseOrderId String?               @db.Uuid
+  goodsReceiptId  String?               @db.Uuid
+  branchId        String                @db.Uuid
+  invoiceDate     DateTime
+  dueDate         DateTime?
+  currency        String                @default("ETB")
+  subtotal        Decimal               @default(0) @db.Decimal(18, 4)
+  taxTotal        Decimal               @default(0) @db.Decimal(18, 4)
+  freightCost     Decimal               @default(0) @db.Decimal(18, 4)
+  grandTotal      Decimal               @default(0) @db.Decimal(18, 4)
+  amountPaid      Decimal               @default(0) @db.Decimal(18, 4)
+  status          SupplierInvoiceStatus @default(DRAFT)
+  matchStatus     InvoiceMatchStatus    @default(UNMATCHED)
+  matchNotes      String?
+  disputeReason   String?
+  createdById     String?               @db.Uuid
+  approvedById    String?               @db.Uuid
+  approvedAt      DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  supplier Supplier              @relation(fields: [supplierId], references: [id])
+  items    SupplierInvoiceItem[]
+  payments SupplierPayment[]
+
+  @@unique([supplierId, supplierInvoiceNo])
+  @@index([status])
+  @@map("supplier_invoices")
+}
+
+model SupplierInvoiceItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  invoiceId String  @db.Uuid
+  productId String  @db.Uuid
+  quantity  Decimal @db.Decimal(18, 4)
+  unitPrice Decimal @db.Decimal(18, 4)
+  taxRate   Decimal @default(0) @db.Decimal(6, 4)
+  lineTotal Decimal @db.Decimal(18, 4)
+  /// Populated by the three-way match so variances are visible per line.
+  orderedQty  Decimal? @db.Decimal(18, 4)
+  receivedQty Decimal? @db.Decimal(18, 4)
+  poUnitPrice Decimal? @db.Decimal(18, 4)
+  variance    String?
+
+  invoice SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("supplier_invoice_items")
+}
+
+model SupplierPayment {
+  id         String        @id @default(uuid()) @db.Uuid
+  paymentNo  String        @unique
+  invoiceId  String        @db.Uuid
+  amount     Decimal       @db.Decimal(18, 4)
+  method     PaymentMethod
+  reference  String?
+  paidAt     DateTime      @default(now())
+  recordedById String?     @db.Uuid
+  notes      String?
+
+  invoice SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("supplier_payments")
 }
 
 // ============================================================

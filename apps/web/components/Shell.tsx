@@ -43,6 +43,8 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { href: '/pos', label: 'Point of Sale', permission: 'sales.sale.CREATE' },
       { href: '/dispensing', label: 'Prescriptions', permission: 'dispensing.prescription.READ' },
       { href: '/procurement', label: 'Procurement', permission: 'procurement.purchase_order.READ' },
+      { href: '/receiving', label: 'Goods Receiving', permission: 'inventory.goods_receipt.CREATE' },
+      { href: '/invoices', label: 'Supplier Invoices', permission: 'finance.invoice.READ' },
     ],
   },
   {

@@ -296,7 +296,13 @@ export class ProcurementService {
    * advisory and the buyer chooses.
    */
   async compareQuotations(rfqId: string, weights: Partial<QuotationWeights> = {}) {
-    const w = { ...DEFAULT_WEIGHTS, ...weights };
+    // Spreading `weights` directly would overwrite defaults with `undefined`,
+    // because the controller always passes all five keys. Drop the undefined
+    // entries first, or every weight becomes NaN and the score serialises to null.
+    const supplied = Object.fromEntries(
+      Object.entries(weights).filter(([, v]) => v !== undefined && Number.isFinite(v)),
+    );
+    const w: QuotationWeights = { ...DEFAULT_WEIGHTS, ...supplied };
     const rfq = await this.prisma.rfq.findUniqueOrThrow({
       where: { id: rfqId },
       include: {
@@ -433,6 +439,80 @@ export class ProcurementService {
         : null,
       note: 'Advisory only. Selection requires an explicit decision by the procurement officer (§14).',
     };
+  }
+
+  /**
+   * Record the buyer's supplier selection (§11).
+   *
+   * Deliberately a separate, explicit act: §14 forbids the system choosing a
+   * supplier on its own, so the comparison ranks and this records a human
+   * decision. Selecting a quotation that is not the top-ranked one requires a
+   * reason, which lands in the audit trail.
+   */
+  async selectQuotation(
+    quotationId: string,
+    user: AuthenticatedUser,
+    reason?: string,
+  ) {
+    const quotation = await this.prisma.supplierQuotation.findUniqueOrThrow({
+      where: { id: quotationId },
+      include: { supplier: { select: { companyName: true } }, rfq: true },
+    });
+
+    if (quotation.validUntil && quotation.validUntil < new Date()) {
+      throw new BadRequestException(
+        `Quotation ${quotation.quotationNo} expired on ${quotation.validUntil.toISOString().slice(0, 10)}`,
+      );
+    }
+
+    const comparison = await this.compareQuotations(quotation.rfqId);
+    const ranked = comparison.quotations;
+    const top = ranked[0];
+    const isNotTopRanked = top && top.quotationId !== quotationId;
+
+    if (isNotTopRanked && !reason?.trim()) {
+      throw new BadRequestException(
+        `${quotation.supplier.companyName} is not the highest-scoring quotation ` +
+          `(${top.supplierName} scores ${top.totalScore}). A reason is required to select it.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Exactly one winner per RFQ.
+      await tx.supplierQuotation.updateMany({
+        where: { rfqId: quotation.rfqId },
+        data: { isSelected: false },
+      });
+      await tx.supplierQuotation.update({
+        where: { id: quotationId },
+        data: { isSelected: true },
+      });
+      await tx.rfq.update({
+        where: { id: quotation.rfqId },
+        data: { status: DocumentStatus.CLOSED },
+      });
+    });
+
+    await this.audit.record({
+      userId: user.id,
+      userLabel: user.fullName,
+      module: 'procurement',
+      action: 'SUPPLIER_SELECTED',
+      entityType: 'SupplierQuotation',
+      entityId: quotationId,
+      newValue: {
+        rfqNo: quotation.rfq.rfqNo,
+        supplier: quotation.supplier.companyName,
+        wasTopRanked: !isNotTopRanked,
+        topRanked: top?.supplierName ?? null,
+      },
+      reason,
+    });
+
+    return this.prisma.supplierQuotation.findUniqueOrThrow({
+      where: { id: quotationId },
+      include: { items: true, supplier: true },
+    });
   }
 
   // ---- Purchase orders (§11) ----

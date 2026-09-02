@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PurchaseOrderStatus } from '@prisma/client';
 import { ProcurementService } from './procurement.service';
 import { SuppliersService } from './suppliers.service';
+import { InvoicesService, CreateInvoiceInput } from './invoices.service';
 import { AuthenticatedUser, CurrentUser, RequirePermissions } from '../../common/decorators';
 
 @ApiTags('Procurement')
@@ -11,6 +12,7 @@ export class ProcurementController {
   constructor(
     private readonly procurement: ProcurementService,
     private readonly suppliers: SuppliersService,
+    private readonly invoices: InvoicesService,
   ) {}
 
   // ---- Suppliers ----
@@ -111,6 +113,82 @@ export class ProcurementController {
       supplierScore: query.wSupplier ? Number(query.wSupplier) : undefined,
       paymentTerms: query.wTerms ? Number(query.wTerms) : undefined,
     });
+  }
+
+  @Post('quotations/:id/select')
+  @RequirePermissions('procurement.quotation.APPROVE')
+  @ApiOperation({
+    summary: 'Record the buyer supplier selection. Choosing other than the top-ranked quotation needs a reason.',
+  })
+  selectQuotation(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.procurement.selectQuotation(id, user, body?.reason);
+  }
+
+  // ---- Supplier invoices and payments (§11, §45) ----
+
+  @Get('supplier-invoices')
+  @RequirePermissions('finance.invoice.READ')
+  listInvoices(@Query() query: any) {
+    return this.invoices.findAll({
+      status: query.status,
+      supplierId: query.supplierId,
+      overdueOnly: query.overdueOnly === 'true',
+      page: query.page ? Number(query.page) : 1,
+      pageSize: query.pageSize ? Number(query.pageSize) : 25,
+    });
+  }
+
+  @Get('supplier-invoices/ageing')
+  @RequirePermissions('finance.report.READ')
+  @ApiOperation({ summary: 'Accounts payable ageing by overdue bucket' })
+  ageing() {
+    return this.invoices.ageing();
+  }
+
+  @Get('supplier-invoices/:id')
+  @RequirePermissions('finance.invoice.READ')
+  invoice(@Param('id') id: string) {
+    return this.invoices.findOne(id);
+  }
+
+  @Post('supplier-invoices')
+  @RequirePermissions('finance.invoice.CREATE')
+  @ApiOperation({
+    summary: 'Enter a supplier invoice; it is three-way matched against the order and the goods received',
+  })
+  createInvoice(@Body() body: CreateInvoiceInput, @CurrentUser() user: AuthenticatedUser) {
+    return this.invoices.create(body, user);
+  }
+
+  @Post('supplier-invoices/:id/match')
+  @RequirePermissions('finance.invoice.READ')
+  rematch(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.invoices.match(id, user);
+  }
+
+  @Post('supplier-invoices/:id/approve')
+  @RequirePermissions('finance.invoice.APPROVE')
+  @ApiOperation({ summary: 'Approve for payment; a disputed invoice requires an override reason' })
+  approveInvoice(
+    @Param('id') id: string,
+    @Body() body: { overrideReason?: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.approve(id, user, body?.overrideReason);
+  }
+
+  @Post('supplier-invoices/:id/pay')
+  @RequirePermissions('finance.invoice.EDIT')
+  pay(
+    @Param('id') id: string,
+    @Body() body: { amount: number; method: any; reference?: string; notes?: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.pay(id, body, user);
   }
 
   // ---- Purchase orders ----
