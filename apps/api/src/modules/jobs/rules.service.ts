@@ -11,6 +11,7 @@ import { JobRunnerService } from './job-runner.service';
 import { PostingService } from '../accounting/posting.service';
 import { AutomationService } from '../automation/automation.service';
 import { ConfigService } from '../../common/config/config.service';
+import { ReportBuilderService } from '../intelligence/report-builder.service';
 
 /**
  * Rule engine and scheduled jobs (§58).
@@ -34,6 +35,7 @@ export class RulesService implements OnModuleInit {
     private readonly posting: PostingService,
     private readonly automation: AutomationService,
     private readonly config: ConfigService,
+    private readonly reportBuilder: ReportBuilderService,
   ) {}
 
   /**
@@ -47,6 +49,14 @@ export class RulesService implements OnModuleInit {
       description: 'Drains the outbound integration queue and retries failed deliveries.',
       schedule: 'Every minute',
       run: () => this.runDeliverWebhooks(),
+    });
+    this.runner.register({
+      key: 'reports.deliverScheduled',
+      label: 'Deliver scheduled reports',
+      description:
+        'Runs each saved report whose schedule fires this hour, with the owner\'s own permissions.',
+      schedule: 'Hourly',
+      run: () => this.runDeliverScheduledReports(),
     });
     this.runner.register({
       key: 'expiry.alerts',
@@ -338,5 +348,27 @@ export class RulesService implements OnModuleInit {
   @Cron(CronExpression.EVERY_HOUR)
   async automationCron() {
     return this.runner.execute('automation.runAll');
+  }
+
+  /**
+   * Scheduled report delivery (§40).
+   *
+   * Hourly, because that is the finest granularity the delivery notification is
+   * useful at; a report scheduled for 08:30 goes out in the 08:00 pass.
+   */
+  async runDeliverScheduledReports() {
+    const result = await this.reportBuilder.deliverScheduled();
+    if (result.skipped.length) {
+      this.logger.warn(
+        `Scheduled reports: ${result.skipped.length} could not be delivered ` +
+          `(${result.skipped.map((s) => s.name).join(', ')})`,
+      );
+    }
+    return result;
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async scheduledReportsCron() {
+    return this.runner.execute('reports.deliverScheduled');
   }
 }

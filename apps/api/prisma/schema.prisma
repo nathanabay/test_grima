@@ -2197,11 +2197,76 @@ model TemperatureSensor {
   lastReadingAt       DateTime?
   createdAt           DateTime  @default(now())
 
-  warehouse  Warehouse              @relation(fields: [warehouseId], references: [id])
-  logs       TemperatureLog[]
-  excursions TemperatureExcursion[]
+  /// Calibration is what makes a reading evidence rather than a number
+  /// (§27: features 897-899). A sensor past its calibration due date is still
+  /// read - refusing readings would blind the cold room - but every excursion
+  /// decision made on it is marked as resting on an uncalibrated instrument.
+  lastCalibratedAt    DateTime?
+  calibrationDueAt    DateTime?
+  calibrationInterval Int       @default(365)
+  lastMaintenanceAt   DateTime?
+  nextMaintenanceAt   DateTime?
+
+  warehouse    Warehouse              @relation(fields: [warehouseId], references: [id])
+  logs         TemperatureLog[]
+  excursions   TemperatureExcursion[]
+  calibrations SensorCalibration[]
+  maintenance  SensorMaintenance[]
 
   @@map("temperature_sensors")
+}
+
+/// Append-only calibration certificate history (§27: feature 897).
+///
+/// Kept as its own table rather than as fields on the sensor because a
+/// regulator asks for the certificate that was current on a given date, which
+/// a single "last calibrated" field cannot answer.
+model SensorCalibration {
+  id             String   @id @default(uuid()) @db.Uuid
+  sensorId       String   @db.Uuid
+  calibratedAt   DateTime
+  /// When this certificate stops being valid.
+  validUntil     DateTime
+  /// The certificate number issued by the calibrating body.
+  certificateNo  String?
+  performedBy    String?
+  /// Reference reading vs sensor reading at calibration, in degrees Celsius.
+  referenceTempC Decimal? @db.Decimal(6, 2)
+  measuredTempC  Decimal? @db.Decimal(6, 2)
+  /// PASS | ADJUSTED | FAIL — a failed calibration is recorded, not discarded.
+  result         String   @default("PASS")
+  notes          String?
+  recordedById   String?  @db.Uuid
+  createdAt      DateTime @default(now())
+
+  sensor TemperatureSensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+
+  @@index([sensorId, calibratedAt])
+  @@map("sensor_calibrations")
+}
+
+/// Maintenance and service history for cold-chain equipment (§27: feature 898).
+model SensorMaintenance {
+  id           String    @id @default(uuid()) @db.Uuid
+  sensorId     String    @db.Uuid
+  /// PREVENTIVE | CORRECTIVE | BATTERY | REPLACEMENT | INSPECTION
+  workType     String
+  performedAt  DateTime
+  performedBy  String?
+  description  String
+  /// When the next service of this kind falls due.
+  nextDueAt    DateTime?
+  /// True when the equipment was out of service while this was done.
+  tookOffline  Boolean   @default(false)
+  offlineFrom  DateTime?
+  offlineUntil DateTime?
+  recordedById String?   @db.Uuid
+  createdAt    DateTime  @default(now())
+
+  sensor TemperatureSensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+
+  @@index([sensorId, performedAt])
+  @@map("sensor_maintenance")
 }
 
 model TemperatureLog {

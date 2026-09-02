@@ -172,4 +172,64 @@ export class QualityController {
   ) {
     return this.coldChain.decideExcursion(id, body, user);
   }
+
+  // ---- Cold chain equipment: calibration and maintenance (§27) ----
+
+  @Get('cold-chain/equipment/due')
+  @RequirePermissions('quality.cold_chain.READ')
+  @ApiOperation({ summary: 'Sensors whose calibration or service is overdue or falls due soon' })
+  equipmentDue(@Query('withinDays') withinDays?: string) {
+    return this.coldChain.equipmentDue(withinDays ? Number(withinDays) : 30);
+  }
+
+  @Get('cold-chain/equipment/:sensorId')
+  @RequirePermissions('quality.cold_chain.READ')
+  @ApiOperation({ summary: 'Calibration certificates and service history for one sensor' })
+  equipmentHistory(@Param('sensorId') sensorId: string) {
+    return this.coldChain.equipmentHistory(sensorId);
+  }
+
+  @Post('cold-chain/equipment/:sensorId/calibrations')
+  @RequirePermissions('quality.cold_chain.EDIT')
+  @ApiOperation({
+    summary: 'Record a calibration certificate; a FAIL is recorded and does not extend the due date',
+  })
+  calibrate(
+    @Param('sensorId') sensorId: string,
+    @Body()
+    body: {
+      calibratedAt?: string;
+      validUntil?: string;
+      certificateNo?: string;
+      performedBy?: string;
+      referenceTempC?: number;
+      measuredTempC?: number;
+      result?: string;
+      notes?: string;
+    },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.coldChain.recordCalibration(sensorId, body, user);
+  }
+
+  @Post('cold-chain/equipment/:sensorId/maintenance')
+  @RequirePermissions('quality.cold_chain.EDIT')
+  @ApiOperation({ summary: 'Record a service visit or repair on cold-chain equipment' })
+  maintenance(
+    @Param('sensorId') sensorId: string,
+    @Body()
+    body: {
+      workType: string;
+      performedAt?: string;
+      performedBy?: string;
+      description: string;
+      nextDueAt?: string;
+      tookOffline?: boolean;
+      offlineFrom?: string;
+      offlineUntil?: string;
+    },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.coldChain.recordMaintenance(sensorId, body, user);
+  }
 }

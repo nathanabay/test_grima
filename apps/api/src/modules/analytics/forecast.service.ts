@@ -335,6 +335,119 @@ export class ForecastService {
   }
 
   /** Forecast the products that matter most, for the planning screen. */
+  /**
+   * How good the forecast actually was (§39: feature 852).
+   *
+   * Walk-forward backtest: for every month with enough history behind it, the
+   * method is run on the months before it and compared with what really
+   * happened. That is the only honest way to score a forecast - scoring it
+   * against the same data it was fitted on always looks excellent.
+   *
+   * MAPE is undefined for a month of zero demand (division by zero), so those
+   * months are counted separately rather than dropped silently or fudged to 1.
+   */
+  async accuracy(
+    request: { productId: string; branchId?: string; months?: number; minHistory?: number },
+    user: AuthenticatedUser,
+  ) {
+    const months = Math.min(Math.max(request.months ?? 24, 6), 48);
+    const minHistory = Math.min(Math.max(request.minHistory ?? 6, 3), 12);
+
+    const product = await this.prisma.product.findUniqueOrThrow({
+      where: { id: request.productId },
+      select: { id: true, sku: true, genericName: true, strength: true, baseUnit: true },
+    });
+
+    const { series, labels, stockOutMonths } = await this.monthlySeries(
+      request.productId,
+      months,
+      request.branchId,
+      user,
+    );
+
+    if (series.length <= minHistory) {
+      return {
+        product,
+        months,
+        evaluatedPoints: 0,
+        // Reported as insufficient data rather than as a perfect score, which
+        // is what an empty average would otherwise produce.
+        message: `Only ${series.length} months of history; at least ${minHistory + 1} are needed to score a forecast.`,
+        methods: [],
+      };
+    }
+
+    const METHODS = [
+      'MOVING_AVERAGE',
+      'WEIGHTED_MOVING_AVERAGE',
+      'EXPONENTIAL_SMOOTHING',
+      'SEASONAL_NAIVE',
+    ] as const;
+
+    const methods = METHODS.map((method) => {
+      const points: Array<{ month: string; actual: number; predicted: number; error: number }> = [];
+      let absoluteErrorSum = 0;
+      let percentageErrorSum = 0;
+      let percentageCount = 0;
+      let biasSum = 0;
+      let zeroDemandMonths = 0;
+      let stockOutSkipped = 0;
+
+      for (let i = minHistory; i < series.length; i++) {
+        // A month the product was out of stock is not evidence about demand,
+        // so scoring against it would penalise a forecast for being right.
+        if (stockOutMonths.includes(i)) {
+          stockOutSkipped += 1;
+          continue;
+        }
+        const history = series.slice(0, i);
+        const predicted = this.runMethod(method, history).forecast;
+        const actual = series[i];
+        const error = predicted - actual;
+
+        points.push({ month: labels[i], actual, predicted: Number(predicted.toFixed(2)), error: Number(error.toFixed(2)) });
+        absoluteErrorSum += Math.abs(error);
+        biasSum += error;
+        if (actual !== 0) {
+          percentageErrorSum += Math.abs(error) / actual;
+          percentageCount += 1;
+        } else {
+          zeroDemandMonths += 1;
+        }
+      }
+
+      const n = points.length;
+      return {
+        method,
+        evaluatedPoints: n,
+        stockOutMonthsSkipped: stockOutSkipped,
+        zeroDemandMonths,
+        meanAbsoluteError: n ? Number((absoluteErrorSum / n).toFixed(2)) : null,
+        mapePercent: percentageCount
+          ? Number(((percentageErrorSum / percentageCount) * 100).toFixed(1))
+          : null,
+        // Positive bias means the forecast runs high, which shows up as
+        // overstocking; negative bias shows up as stock-outs.
+        bias: n ? Number((biasSum / n).toFixed(2)) : null,
+        points,
+      };
+    });
+
+    const scored = methods.filter((m) => m.mapePercent !== null);
+    const best = scored.length
+      ? scored.reduce((a, b) => (a.mapePercent! <= b.mapePercent! ? a : b))
+      : null;
+
+    return {
+      product,
+      months,
+      minHistory,
+      evaluatedPoints: methods[0]?.evaluatedPoints ?? 0,
+      bestMethod: best ? { method: best.method, mapePercent: best.mapePercent } : null,
+      methods,
+    };
+  }
+
   async topProducts(user: AuthenticatedUser, limit = 20, months = 12) {
     const since = new Date(Date.now() - months * 30 * 86_400_000);
     const grouped = await this.prisma.inventoryTransaction.groupBy({

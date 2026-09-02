@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, TransactionType } from '@prisma/client';
 import {
   bucketFor,
   classifyExpiry,
@@ -262,6 +262,298 @@ export class InventoryService {
       buckets: ladder,
       summary,
       totalValueAtRisk: rows.reduce((sum, r) => sum + Number(r.potentialLoss), 0),
+    };
+  }
+
+  /**
+   * Month-by-month expiry calendar (§9: feature 108).
+   *
+   * The bucket ladder answers "how urgent"; the calendar answers "when", which
+   * is the question a purchasing plan is built from. Value at risk is the
+   * quantity that is actually available - stock already reserved against an
+   * order is not going to sit on the shelf and expire.
+   */
+  async expiryCalendar(
+    user: AuthenticatedUser,
+    options: { warehouseId?: string; months?: number } = {},
+  ) {
+    const months = Math.min(36, Math.max(1, options.months ?? 12));
+    const now = new Date();
+    const horizon = new Date(now.getFullYear(), now.getMonth() + months, 1);
+
+    const balances = await this.prisma.inventoryBalance.findMany({
+      where: {
+        onHand: { gt: 0 },
+        batchId: { not: null },
+        ...(options.warehouseId ? { warehouseId: options.warehouseId } : {}),
+        ...(this.scope.isUnscoped(user) ? {} : { branchId: { in: user.branchIds } }),
+        batch: { expiryDate: { lt: horizon } },
+      },
+      include: {
+        batch: { select: { id: true, batchNumber: true, expiryDate: true } },
+        product: { select: { id: true, sku: true, genericName: true, averageCost: true } },
+      },
+    });
+
+    const cells = new Map<
+      string,
+      { month: string; batches: number; quantity: Prisma.Decimal; value: Prisma.Decimal; alreadyExpired: boolean }
+    >();
+
+    for (const b of balances) {
+      if (!b.batch) continue;
+      const expiry = b.batch.expiryDate;
+      const month = `${expiry.getFullYear()}-${String(expiry.getMonth() + 1).padStart(2, '0')}`;
+      const available = b.onHand.minus(b.reserved);
+      if (available.lessThanOrEqualTo(0)) continue;
+
+      const cell = cells.get(month) ?? {
+        month,
+        batches: 0,
+        quantity: new Prisma.Decimal(0),
+        value: new Prisma.Decimal(0),
+        // Stock that has already expired is shown in its own month rather than
+        // folded into "this month": it is a disposal backlog, not a risk.
+        alreadyExpired: expiry.getTime() < now.getTime(),
+      };
+      cells.set(month, {
+        ...cell,
+        batches: cell.batches + 1,
+        quantity: cell.quantity.plus(available),
+        value: cell.value.plus(available.times(b.product.averageCost)),
+      });
+    }
+
+    const rows = [...cells.values()]
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map((c) => ({
+        month: c.month,
+        batches: c.batches,
+        quantity: c.quantity.toFixed(2),
+        value: c.value.toFixed(2),
+        alreadyExpired: c.alreadyExpired,
+      }));
+
+    return {
+      months,
+      generatedAt: now,
+      rows,
+      peakMonth: rows.reduce<null | (typeof rows)[number]>(
+        (peak, r) => (!peak || Number(r.value) > Number(peak.value) ? r : peak),
+        null,
+      ),
+      totalValue: rows.reduce((sum, r) => sum + Number(r.value), 0).toFixed(2),
+    };
+  }
+
+  /**
+   * How much stock we actually lost to expiry, month by month (§9: feature 109).
+   *
+   * This is history, not projection: it reads the EXPIRY_WRITE_OFF and DISPOSAL
+   * movements the ledger already holds. Trending what was projected would only
+   * measure how the projection changed.
+   */
+  async expiryTrend(user: AuthenticatedUser, options: { months?: number; warehouseId?: string } = {}) {
+    const months = Math.min(36, Math.max(1, options.months ?? 12));
+    const since = new Date();
+    since.setMonth(since.getMonth() - months);
+    since.setDate(1);
+    since.setHours(0, 0, 0, 0);
+
+    const movements = await this.prisma.inventoryTransaction.findMany({
+      where: {
+        type: { in: [TransactionType.EXPIRY, TransactionType.DISPOSAL] },
+        occurredAt: { gte: since },
+        ...(options.warehouseId ? { warehouseId: options.warehouseId } : {}),
+        ...(this.scope.isUnscoped(user) ? {} : { branchId: { in: user.branchIds } }),
+      },
+      select: {
+        type: true,
+        occurredAt: true,
+        quantityOut: true,
+        unitCost: true,
+        productId: true,
+      },
+    });
+
+    const byMonth = new Map<string, { quantity: Prisma.Decimal; value: Prisma.Decimal; lines: number }>();
+    const byProduct = new Map<string, { quantity: Prisma.Decimal; value: Prisma.Decimal }>();
+
+    for (const m of movements) {
+      const key = `${m.occurredAt.getFullYear()}-${String(m.occurredAt.getMonth() + 1).padStart(2, '0')}`;
+      const cell = byMonth.get(key) ?? {
+        quantity: new Prisma.Decimal(0),
+        value: new Prisma.Decimal(0),
+        lines: 0,
+      };
+      // Value is quantity x the cost the movement was actually posted at, not
+      // today's average cost: writing off last year's stock at this year's
+      // price would restate history every time a price moved.
+      const quantity = m.quantityOut;
+      const cost = quantity.times(m.unitCost);
+      byMonth.set(key, {
+        quantity: cell.quantity.plus(quantity),
+        value: cell.value.plus(cost),
+        lines: cell.lines + 1,
+      });
+
+      const p = byProduct.get(m.productId) ?? {
+        quantity: new Prisma.Decimal(0),
+        value: new Prisma.Decimal(0),
+      };
+      byProduct.set(m.productId, {
+        quantity: p.quantity.plus(quantity),
+        value: p.value.plus(cost),
+      });
+    }
+
+    const productIds = [...byProduct.keys()];
+    const products = productIds.length
+      ? await this.prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, sku: true, genericName: true, strength: true },
+        })
+      : [];
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    const series = [...byMonth.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, v]) => ({
+        month,
+        lines: v.lines,
+        quantity: v.quantity.toFixed(2),
+        value: v.value.toFixed(2),
+      }));
+
+    return {
+      months,
+      series,
+      totalValue: series.reduce((sum, s) => sum + Number(s.value), 0).toFixed(2),
+      worstProducts: [...byProduct.entries()]
+        .map(([productId, v]) => ({
+          productId,
+          sku: productById.get(productId)?.sku ?? productId,
+          product: productById.get(productId)
+            ? `${productById.get(productId)!.genericName} ${productById.get(productId)!.strength}`.trim()
+            : productId,
+          quantity: v.quantity.toFixed(2),
+          value: v.value.toFixed(2),
+        }))
+        .sort((a, b) => Number(b.value) - Number(a.value))
+        .slice(0, 20),
+    };
+  }
+
+  /**
+   * Expiry exposure compared across branches, categories or suppliers
+   * (§9: features 110-112).
+   *
+   * One dimension per call, because a table that crosses all three at once is
+   * unreadable and nobody acts on it. Value at risk is what is compared -
+   * counting batches would rank a branch holding cheap sachets above one
+   * holding insulin.
+   */
+  async expiryComparison(
+    user: AuthenticatedUser,
+    dimension: 'branch' | 'category' | 'supplier',
+    options: { withinDays?: number } = {},
+  ) {
+    const withinDays = Math.min(730, Math.max(1, options.withinDays ?? 180));
+    const horizon = new Date(Date.now() + withinDays * 86_400_000);
+
+    const balances = await this.prisma.inventoryBalance.findMany({
+      where: {
+        onHand: { gt: 0 },
+        batchId: { not: null },
+        batch: { expiryDate: { lt: horizon } },
+        ...(this.scope.isUnscoped(user) ? {} : { branchId: { in: user.branchIds } }),
+      },
+      include: {
+        batch: { select: { expiryDate: true, supplierId: true } },
+        product: { select: { id: true, categoryId: true, averageCost: true } },
+      },
+    });
+
+    const groups = new Map<
+      string,
+      { key: string; batches: number; quantity: Prisma.Decimal; value: Prisma.Decimal }
+    >();
+
+    for (const b of balances) {
+      if (!b.batch) continue;
+      const available = b.onHand.minus(b.reserved);
+      if (available.lessThanOrEqualTo(0)) continue;
+
+      const key =
+        dimension === 'branch'
+          ? b.branchId
+          : dimension === 'category'
+            ? b.product.categoryId ?? 'UNCATEGORISED'
+            : b.batch.supplierId ?? 'UNKNOWN_SUPPLIER';
+
+      const cell = groups.get(key) ?? {
+        key,
+        batches: 0,
+        quantity: new Prisma.Decimal(0),
+        value: new Prisma.Decimal(0),
+      };
+      groups.set(key, {
+        key,
+        batches: cell.batches + 1,
+        quantity: cell.quantity.plus(available),
+        value: cell.value.plus(available.times(b.product.averageCost)),
+      });
+    }
+
+    const keys = [...groups.keys()].filter((k) => !['UNCATEGORISED', 'UNKNOWN_SUPPLIER'].includes(k));
+    const labels = new Map<string, string>();
+    if (dimension === 'branch' && keys.length) {
+      const branches = await this.prisma.branch.findMany({
+        where: { id: { in: keys } },
+        select: { id: true, name: true },
+      });
+      branches.forEach((b) => labels.set(b.id, b.name));
+    } else if (dimension === 'category' && keys.length) {
+      const categories = await this.prisma.productCategory.findMany({
+        where: { id: { in: keys } },
+        select: { id: true, name: true },
+      });
+      categories.forEach((c) => labels.set(c.id, c.name));
+    } else if (dimension === 'supplier' && keys.length) {
+      const suppliers = await this.prisma.supplier.findMany({
+        where: { id: { in: keys } },
+        select: { id: true, companyName: true },
+      });
+      suppliers.forEach((s) => labels.set(s.id, s.companyName));
+    }
+
+    const rows = [...groups.values()]
+      .map((g) => ({
+        id: g.key,
+        // An unlabelled group is named for what it is rather than dropped: a
+        // large pile of uncategorised expiry is itself a finding.
+        label:
+          labels.get(g.key) ??
+          (g.key === 'UNCATEGORISED'
+            ? 'Uncategorised'
+            : g.key === 'UNKNOWN_SUPPLIER'
+              ? 'No supplier recorded'
+              : g.key),
+        batches: g.batches,
+        quantity: g.quantity.toFixed(2),
+        value: g.value.toFixed(2),
+      }))
+      .sort((a, b) => Number(b.value) - Number(a.value));
+
+    const total = rows.reduce((sum, r) => sum + Number(r.value), 0);
+    return {
+      dimension,
+      withinDays,
+      totalValue: total.toFixed(2),
+      rows: rows.map((r) => ({
+        ...r,
+        sharePercent: total ? ((Number(r.value) / total) * 100).toFixed(1) : '0.0',
+      })),
     };
   }
 

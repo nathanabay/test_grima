@@ -4,14 +4,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, UserStatus } from '@prisma/client';
 import { evaluateConditions, readField, ConditionGroup } from '@pharmacore/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { ScopeService } from '../../common/guards/scope.service';
 import { ConfigService } from '../../common/config/config.service';
+import { AuthService } from '../auth/auth.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { REPORT_SOURCES, ReportColumn, SOURCES_BY_KEY } from './report-sources';
+import { cronMatchesHour } from './cron-window';
 
 export interface ReportDefinition {
   dataSource: string;
@@ -45,6 +48,8 @@ export class ReportBuilderService {
     private readonly audit: AuditService,
     private readonly scope: ScopeService,
     private readonly config: ConfigService,
+    private readonly auth: AuthService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** The catalogue, filtered to what this user may actually read. */
@@ -386,6 +391,93 @@ export class ReportBuilderService {
 
     await this.prisma.savedReport.update({ where: { id }, data: { lastRunAt: new Date() } });
     return { report: { id: report.id, name: report.name, visualization: report.visualization }, ...result };
+  }
+
+  /**
+   * Deliver every saved report whose schedule fires this hour
+   * (§40: features 823-826).
+   *
+   * A scheduled run executes with the OWNER's authorization, rebuilt from their
+   * live roles - never with an unbounded system identity. Otherwise scheduling
+   * a report would be a way to read data the scheduler could not read directly,
+   * and a report saved by someone who has since left would keep running on
+   * their old access (§73).
+   */
+  async deliverScheduled(now = new Date()) {
+    const scheduled = await this.prisma.savedReport.findMany({
+      where: { schedule: { not: null } },
+    });
+
+    const delivered: Array<{ id: string; name: string; rows: number; recipients: string[] }> = [];
+    const skipped: Array<{ id: string; name: string; reason: string }> = [];
+
+    for (const report of scheduled) {
+      if (!report.schedule || !cronMatchesHour(report.schedule, now)) continue;
+
+      if (!report.ownerId) {
+        skipped.push({ id: report.id, name: report.name, reason: 'The report has no owner to run as' });
+        continue;
+      }
+
+      const owner = await this.prisma.user.findUnique({
+        where: { id: report.ownerId },
+        select: { id: true, email: true, username: true, fullName: true, status: true },
+      });
+      if (!owner || owner.status !== UserStatus.ACTIVE) {
+        skipped.push({
+          id: report.id,
+          name: report.name,
+          reason: 'The owner is not an active user, so the report cannot be run on their behalf',
+        });
+        continue;
+      }
+
+      let authz;
+      try {
+        authz = await this.auth.loadAuthorization(owner.id);
+      } catch {
+        skipped.push({ id: report.id, name: report.name, reason: 'The owner authorization could not be loaded' });
+        continue;
+      }
+
+      const runAs: AuthenticatedUser = {
+        id: owner.id,
+        email: owner.email,
+        username: owner.username,
+        fullName: owner.fullName,
+        sessionId: `scheduled-report:${report.id}`,
+        ...authz,
+      };
+
+      try {
+        const result = await this.runSaved(report.id, runAs);
+        const rows = Array.isArray((result as any).rows) ? (result as any).rows.length : 0;
+
+        await this.notifications.emit({
+          eventType: 'SCHEDULED_REPORT',
+          severity: 'INFO',
+          title: `${report.name} is ready`,
+          body: `The scheduled report "${report.name}" ran with ${rows} row(s).`,
+          // Recipients are role codes; the report itself is not attached to the
+          // notification, so nobody receives data their own permissions would
+          // not let them open.
+          roleCodes: report.recipients.length ? report.recipients : undefined,
+          userId: report.recipients.length ? undefined : owner.id,
+          linkUrl: `/reports/builder?saved=${report.id}`,
+        });
+
+        delivered.push({ id: report.id, name: report.name, rows, recipients: report.recipients });
+      } catch (error: any) {
+        skipped.push({
+          id: report.id,
+          name: report.name,
+          // The message is the report's own validation text, never a stack.
+          reason: error?.message ?? 'The report failed to run',
+        });
+      }
+    }
+
+    return { checkedAt: now, delivered, skipped };
   }
 
   async remove(id: string, user: AuthenticatedUser) {

@@ -32,6 +32,282 @@ export class ColdChainService {
     private readonly config: ConfigService,
   ) {}
 
+  // ---- Calibration and maintenance (§27: features 897-899) ----
+
+  /**
+   * Record a calibration certificate against a sensor.
+   *
+   * The history is append-only and a FAIL is recorded like any other result: a
+   * sensor that failed calibration is exactly the one whose past readings need
+   * looking at, and deleting the record would hide that.
+   */
+  async recordCalibration(
+    sensorId: string,
+    input: {
+      calibratedAt?: string | Date;
+      validUntil?: string | Date;
+      certificateNo?: string;
+      performedBy?: string;
+      referenceTempC?: number;
+      measuredTempC?: number;
+      result?: string;
+      notes?: string;
+    },
+    user: AuthenticatedUser,
+  ) {
+    const sensor = await this.prisma.temperatureSensor.findUniqueOrThrow({
+      where: { id: sensorId },
+      select: { id: true, code: true, name: true, calibrationInterval: true },
+    });
+
+    const RESULTS = ['PASS', 'ADJUSTED', 'FAIL'];
+    const result = (input.result ?? 'PASS').toUpperCase();
+    if (!RESULTS.includes(result)) {
+      throw new BadRequestException(`Calibration result must be one of ${RESULTS.join(', ')}`);
+    }
+
+    const calibratedAt = input.calibratedAt ? new Date(input.calibratedAt) : new Date();
+    if (Number.isNaN(calibratedAt.getTime())) {
+      throw new BadRequestException('The calibration date is not a valid date');
+    }
+    if (calibratedAt.getTime() > Date.now() + 60_000) {
+      throw new BadRequestException('A calibration cannot be dated in the future');
+    }
+
+    const validUntil = input.validUntil
+      ? new Date(input.validUntil)
+      : new Date(calibratedAt.getTime() + sensor.calibrationInterval * 86_400_000);
+    if (Number.isNaN(validUntil.getTime()) || validUntil <= calibratedAt) {
+      throw new BadRequestException('The certificate must remain valid past the calibration date');
+    }
+
+    const record = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.sensorCalibration.create({
+        data: {
+          sensorId,
+          calibratedAt,
+          validUntil,
+          certificateNo: input.certificateNo ?? null,
+          performedBy: input.performedBy ?? null,
+          referenceTempC:
+            input.referenceTempC === undefined ? null : new Prisma.Decimal(input.referenceTempC),
+          measuredTempC:
+            input.measuredTempC === undefined ? null : new Prisma.Decimal(input.measuredTempC),
+          result,
+          notes: input.notes ?? null,
+          recordedById: user.id,
+        },
+      });
+
+      // A failed calibration does not extend the due date: the instrument is
+      // not calibrated, and marking it as such would be the opposite of what
+      // the certificate says.
+      if (result !== 'FAIL') {
+        await tx.temperatureSensor.update({
+          where: { id: sensorId },
+          data: { lastCalibratedAt: calibratedAt, calibrationDueAt: validUntil },
+        });
+      }
+
+      return created;
+    });
+
+    await this.audit.record({
+      userId: user.id,
+      userLabel: user.fullName,
+      module: 'quality',
+      action: 'CREATE',
+      entityType: 'SensorCalibration',
+      entityId: record.id,
+      newValue: {
+        sensor: sensor.code,
+        result,
+        certificateNo: input.certificateNo ?? null,
+        validUntil: validUntil.toISOString(),
+      },
+    });
+
+    if (result === 'FAIL') {
+      await this.notifications.emit({
+        eventType: 'SENSOR_CALIBRATION_FAILED',
+        severity: 'CRITICAL',
+        title: `Sensor ${sensor.code} failed calibration`,
+        body:
+          `${sensor.name} did not pass calibration. Readings taken since the last passing ` +
+          `certificate cannot be relied on and any excursion decision made on them should be reviewed.`,
+        roleCodes: ['QA_OFFICER', 'WAREHOUSE_MANAGER', 'PHARMACY_ADMIN'],
+        linkUrl: '/cold-chain',
+      });
+    }
+
+    return record;
+  }
+
+  /** Record a service visit or repair on cold-chain equipment. */
+  async recordMaintenance(
+    sensorId: string,
+    input: {
+      workType: string;
+      performedAt?: string | Date;
+      performedBy?: string;
+      description: string;
+      nextDueAt?: string | Date;
+      tookOffline?: boolean;
+      offlineFrom?: string | Date;
+      offlineUntil?: string | Date;
+    },
+    user: AuthenticatedUser,
+  ) {
+    const sensor = await this.prisma.temperatureSensor.findUniqueOrThrow({
+      where: { id: sensorId },
+      select: { id: true, code: true },
+    });
+
+    const WORK_TYPES = ['PREVENTIVE', 'CORRECTIVE', 'BATTERY', 'REPLACEMENT', 'INSPECTION'];
+    const workType = (input.workType ?? '').toUpperCase();
+    if (!WORK_TYPES.includes(workType)) {
+      throw new BadRequestException(`Work type must be one of ${WORK_TYPES.join(', ')}`);
+    }
+    if (!input.description?.trim()) {
+      throw new BadRequestException('Describe what was done, or the record proves nothing');
+    }
+
+    const performedAt = input.performedAt ? new Date(input.performedAt) : new Date();
+    if (Number.isNaN(performedAt.getTime())) {
+      throw new BadRequestException('The maintenance date is not a valid date');
+    }
+    const nextDueAt = input.nextDueAt ? new Date(input.nextDueAt) : null;
+    if (nextDueAt && Number.isNaN(nextDueAt.getTime())) {
+      throw new BadRequestException('The next-due date is not a valid date');
+    }
+
+    const record = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.sensorMaintenance.create({
+        data: {
+          sensorId,
+          workType,
+          performedAt,
+          performedBy: input.performedBy ?? null,
+          description: input.description.trim(),
+          nextDueAt,
+          tookOffline: input.tookOffline ?? false,
+          offlineFrom: input.offlineFrom ? new Date(input.offlineFrom) : null,
+          offlineUntil: input.offlineUntil ? new Date(input.offlineUntil) : null,
+          recordedById: user.id,
+        },
+      });
+
+      await tx.temperatureSensor.update({
+        where: { id: sensorId },
+        data: { lastMaintenanceAt: performedAt, nextMaintenanceAt: nextDueAt },
+      });
+
+      return created;
+    });
+
+    await this.audit.record({
+      userId: user.id,
+      userLabel: user.fullName,
+      module: 'quality',
+      action: 'CREATE',
+      entityType: 'SensorMaintenance',
+      entityId: record.id,
+      newValue: { sensor: sensor.code, workType, performedAt: performedAt.toISOString() },
+    });
+
+    return record;
+  }
+
+  /** Calibration and service history for one sensor. */
+  async equipmentHistory(sensorId: string) {
+    const sensor = await this.prisma.temperatureSensor.findUniqueOrThrow({
+      where: { id: sensorId },
+      include: {
+        calibrations: { orderBy: { calibratedAt: 'desc' }, take: 50 },
+        maintenance: { orderBy: { performedAt: 'desc' }, take: 50 },
+        warehouse: { select: { id: true, name: true } },
+      },
+    });
+
+    const now = Date.now();
+    return {
+      ...sensor,
+      calibrationStatus: !sensor.calibrationDueAt
+        ? 'NEVER_CALIBRATED'
+        : sensor.calibrationDueAt.getTime() < now
+          ? 'OVERDUE'
+          : sensor.calibrationDueAt.getTime() - now < 30 * 86_400_000
+            ? 'DUE_SOON'
+            : 'VALID',
+    };
+  }
+
+  /**
+   * Equipment whose calibration or service is overdue or falls due soon
+   * (§27: feature 899).
+   *
+   * A sensor that has never been calibrated is listed first and separately: it
+   * is not "due in 30 days", it has no certificate at all.
+   */
+  async equipmentDue(withinDays = 30) {
+    const horizon = new Date(Date.now() + withinDays * 86_400_000);
+    const now = new Date();
+
+    const sensors = await this.prisma.temperatureSensor.findMany({
+      where: { isActive: true },
+      include: { warehouse: { select: { id: true, name: true } } },
+      orderBy: { code: 'asc' },
+    });
+
+    const rows = sensors
+      .map((s) => {
+        const calibrationOverdue = !!s.calibrationDueAt && s.calibrationDueAt < now;
+        const calibrationDueSoon =
+          !!s.calibrationDueAt && !calibrationOverdue && s.calibrationDueAt <= horizon;
+        const maintenanceOverdue = !!s.nextMaintenanceAt && s.nextMaintenanceAt < now;
+        const maintenanceDueSoon =
+          !!s.nextMaintenanceAt && !maintenanceOverdue && s.nextMaintenanceAt <= horizon;
+        const neverCalibrated = !s.calibrationDueAt;
+
+        if (
+          !neverCalibrated &&
+          !calibrationOverdue &&
+          !calibrationDueSoon &&
+          !maintenanceOverdue &&
+          !maintenanceDueSoon
+        ) {
+          return null;
+        }
+
+        return {
+          sensorId: s.id,
+          code: s.code,
+          name: s.name,
+          warehouse: s.warehouse.name,
+          lastCalibratedAt: s.lastCalibratedAt,
+          calibrationDueAt: s.calibrationDueAt,
+          nextMaintenanceAt: s.nextMaintenanceAt,
+          neverCalibrated,
+          calibrationOverdue,
+          calibrationDueSoon,
+          maintenanceOverdue,
+          maintenanceDueSoon,
+          severity:
+            neverCalibrated || calibrationOverdue
+              ? 'CRITICAL'
+              : maintenanceOverdue
+                ? 'HIGH'
+                : 'MEDIUM',
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+
+    const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 } as const;
+    rows.sort((a, b) => order[a.severity as keyof typeof order] - order[b.severity as keyof typeof order]);
+
+    return { withinDays, activeSensors: sensors.length, rows };
+  }
+
   /** Ingest a sensor reading (IoT integration point, §53). */
   async recordReading(input: {
     sensorCode: string;
@@ -345,6 +621,15 @@ export class ColdChainService {
               ? 'STALE'
               : 'OK',
         openExcursionId: s.excursions[0]?.id ?? null,
+        // A reading from an instrument whose certificate has lapsed is still
+        // shown - blinding the cold room would be worse - but it is labelled,
+        // because a QA release resting on it is a release resting on nothing.
+        calibrationDueAt: s.calibrationDueAt,
+        calibrationStatus: !s.calibrationDueAt
+          ? 'NEVER_CALIBRATED'
+          : s.calibrationDueAt.getTime() < Date.now()
+            ? 'OVERDUE'
+            : 'VALID',
       };
     });
   }

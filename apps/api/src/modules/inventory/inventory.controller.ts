@@ -82,6 +82,38 @@ export class InventoryController {
     });
   }
 
+  @Get('expiry/calendar')
+  @RequirePermissions('inventory.expiry.READ')
+  @ApiOperation({ summary: 'Month-by-month expiry calendar with value at risk (§9)' })
+  expiryCalendar(@CurrentUser() user: AuthenticatedUser, @Query() query: any) {
+    return this.inventory.expiryCalendar(user, {
+      warehouseId: query.warehouseId,
+      months: query.months ? Number(query.months) : undefined,
+    });
+  }
+
+  @Get('expiry/trend')
+  @RequirePermissions('inventory.expiry.READ')
+  @ApiOperation({ summary: 'What was actually written off to expiry, month by month (§9)' })
+  expiryTrend(@CurrentUser() user: AuthenticatedUser, @Query() query: any) {
+    return this.inventory.expiryTrend(user, {
+      warehouseId: query.warehouseId,
+      months: query.months ? Number(query.months) : undefined,
+    });
+  }
+
+  @Get('expiry/comparison')
+  @RequirePermissions('inventory.expiry.READ')
+  @ApiOperation({ summary: 'Expiry exposure by branch, category or supplier (§9)' })
+  expiryComparison(@CurrentUser() user: AuthenticatedUser, @Query() query: any) {
+    const dimension = ['branch', 'category', 'supplier'].includes(query.dimension)
+      ? (query.dimension as 'branch' | 'category' | 'supplier')
+      : 'branch';
+    return this.inventory.expiryComparison(user, dimension, {
+      withinDays: query.withinDays ? Number(query.withinDays) : undefined,
+    });
+  }
+
   @Get('expiry/redistribution')
   @RequirePermissions('inventory.expiry.READ')
   @ApiOperation({ summary: 'Smart expiry redistribution suggestions across branches (§10)' })

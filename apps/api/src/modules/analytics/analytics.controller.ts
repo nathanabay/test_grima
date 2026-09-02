@@ -39,6 +39,28 @@ export class AnalyticsController {
     return this.analytics.deadStock(user, days ? Number(days) : 180);
   }
 
+  @Get('forecast/:productId/accuracy')
+  @RequirePermissions('analytics.forecast.READ')
+  @ApiOperation({
+    summary:
+      'Walk-forward backtest of every forecasting method against what actually happened (§39)',
+  })
+  forecastAccuracy(
+    @Param('productId') productId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: any,
+  ) {
+    return this.forecastService.accuracy(
+      {
+        productId,
+        branchId: query.branchId,
+        months: query.months ? Number(query.months) : undefined,
+        minHistory: query.minHistory ? Number(query.minHistory) : undefined,
+      },
+      user,
+    );
+  }
+
   @Get('forecast/:productId')
   @RequirePermissions('analytics.forecast.READ')
   @ApiOperation({

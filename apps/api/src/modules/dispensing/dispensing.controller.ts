@@ -90,6 +90,21 @@ export class DispensingController {
     });
   }
 
+  @Get('controlled-register/anomalies')
+  @RequirePermissions('dispensing.controlled.READ')
+  @ApiOperation({
+    summary:
+      'Patterns in the controlled register worth investigating: volume outliers, unusual ' +
+      'quantities, out-of-hours entries, missing witnesses, prescriber concentration (§28)',
+  })
+  anomalies(@Query() query: any) {
+    return this.controlled.anomalies({
+      branchId: query.branchId,
+      productId: query.productId,
+      days: query.days ? Number(query.days) : undefined,
+    });
+  }
+
   @Get('controlled-register/reconcile')
   @RequirePermissions('dispensing.controlled.READ')
   reconcile(@Query('productId') productId: string, @Query('branchId') branchId: string) {
