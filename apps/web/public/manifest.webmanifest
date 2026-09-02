@@ -1,0 +1,19 @@
+{
+  "name": "PharmaCore — Pharmacy Inventory & Management",
+  "short_name": "PharmaCore",
+  "description": "Enterprise pharmaceutical inventory, dispensing and compliance system",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0d7d6c",
+  "orientation": "any",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Scan Station", "url": "/scan" },
+    { "name": "Point of Sale", "url": "/pos" },
+    { "name": "Goods Receiving", "url": "/receiving" },
+    { "name": "Stock Counts", "url": "/counts" }
+  ]
+}

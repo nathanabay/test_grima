@@ -4,59 +4,63 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AuthUser, api, can, logout, tokenStore } from '@/lib/api';
+import { LanguagePicker, useI18n } from '@/lib/i18n';
+import { OfflineBar } from '@/components/OfflineBar';
 
 interface NavItem {
   href: string;
-  label: string;
+  /** Message id, so navigation is translated like everything else (§66). */
+  labelKey: string;
   permission?: string;
 }
 
-const NAV: Array<{ group: string; items: NavItem[] }> = [
+const NAV: Array<{ groupKey: string; items: NavItem[] }> = [
   {
-    group: 'Overview',
+    groupKey: 'nav.group.overview',
     items: [
-      { href: '/dashboard', label: 'Dashboard', permission: 'analytics.dashboard.READ' },
-      { href: '/command-center', label: 'Command Center', permission: 'analytics.dashboard.READ' },
+      { href: '/dashboard', labelKey: 'nav.dashboard', permission: 'analytics.dashboard.READ' },
+      { href: '/command-center', labelKey: 'nav.commandCenter', permission: 'analytics.dashboard.READ' },
     ],
   },
   {
-    group: 'Catalogue',
+    groupKey: 'nav.group.catalogue',
     items: [
-      { href: '/products', label: 'Drug Master', permission: 'catalog.product.READ' },
-      { href: '/suppliers', label: 'Suppliers', permission: 'procurement.supplier.READ' },
+      { href: '/products', labelKey: 'nav.products', permission: 'catalog.product.READ' },
+      { href: '/suppliers', labelKey: 'nav.suppliers', permission: 'procurement.supplier.READ' },
     ],
   },
   {
-    group: 'Inventory',
+    groupKey: 'nav.group.inventory',
     items: [
-      { href: '/inventory', label: 'Stock Balances', permission: 'inventory.balance.READ' },
-      { href: '/scan', label: 'Scan Station', permission: 'inventory.balance.READ' },
-      { href: '/inventory/expiry', label: 'Expiry Management', permission: 'inventory.expiry.READ' },
-      { href: '/batches', label: 'Batches & Quarantine', permission: 'inventory.batch.READ' },
-      { href: '/counts', label: 'Stock Counts', permission: 'inventory.count.READ' },
-      { href: '/adjustments', label: 'Adjustments', permission: 'inventory.adjustment.CREATE' },
+      { href: '/inventory', labelKey: 'nav.inventory', permission: 'inventory.balance.READ' },
+      { href: '/scan', labelKey: 'nav.scan', permission: 'inventory.balance.READ' },
+      { href: '/inventory/expiry', labelKey: 'nav.expiry', permission: 'inventory.expiry.READ' },
+      { href: '/batches', labelKey: 'nav.batches', permission: 'inventory.batch.READ' },
+      { href: '/counts', labelKey: 'nav.counts', permission: 'inventory.count.READ' },
+      { href: '/adjustments', labelKey: 'nav.adjustments', permission: 'inventory.adjustment.CREATE' },
     ],
   },
   {
-    group: 'Operations',
+    groupKey: 'nav.group.operations',
     items: [
-      { href: '/pos', label: 'Point of Sale', permission: 'sales.sale.CREATE' },
-      { href: '/dispensing', label: 'Prescriptions', permission: 'dispensing.prescription.READ' },
-      { href: '/procurement', label: 'Procurement', permission: 'procurement.purchase_order.READ' },
-      { href: '/receiving', label: 'Goods Receiving', permission: 'inventory.goods_receipt.CREATE' },
-      { href: '/invoices', label: 'Supplier Invoices', permission: 'finance.invoice.READ' },
+      { href: '/pos', labelKey: 'nav.pos', permission: 'sales.sale.CREATE' },
+      { href: '/dispensing', labelKey: 'nav.dispensing', permission: 'dispensing.prescription.READ' },
+      { href: '/procurement', labelKey: 'nav.procurement', permission: 'procurement.purchase_order.READ' },
+      { href: '/receiving', labelKey: 'nav.receiving', permission: 'inventory.goods_receipt.CREATE' },
+      { href: '/invoices', labelKey: 'nav.invoices', permission: 'finance.invoice.READ' },
     ],
   },
   {
-    group: 'Compliance',
+    groupKey: 'nav.group.compliance',
     items: [
-      { href: '/recalls', label: 'Recalls', permission: 'quality.recall.READ' },
-      { href: '/cold-chain', label: 'Cold Chain', permission: 'quality.cold_chain.READ' },
+      { href: '/recalls', labelKey: 'nav.recalls', permission: 'quality.recall.READ' },
+      { href: '/cold-chain', labelKey: 'nav.coldChain', permission: 'quality.cold_chain.READ' },
     ],
   },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
@@ -86,7 +90,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (!ready || !user) {
     return (
       <div className="flex h-screen items-center justify-center text-sm text-ink-muted">
-        Checking your session...
+        {t('auth.checkingSession')}
       </div>
     );
   }
@@ -100,7 +104,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen lg:flex">
       {/* Mobile header */}
       <div className="lg:hidden flex items-center justify-between border-b border-surface-border bg-white px-4 py-3">
-        <span className="font-semibold text-brand-dark">PharmaCore</span>
+        <span className="font-semibold text-brand-dark">{t('app.name')}</span>
         <button className="btn-ghost" onClick={() => setOpen((v) => !v)} aria-label="Toggle navigation">
           Menu
         </button>
@@ -110,15 +114,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
         className={`${open ? 'block' : 'hidden'} lg:block lg:w-64 shrink-0 border-r border-surface-border bg-white`}
       >
         <div className="hidden lg:block px-4 py-4 border-b border-surface-border">
-          <div className="font-semibold text-brand-dark">PharmaCore</div>
-          <div className="text-xs text-ink-subtle">Pharmacy Management</div>
+          <div className="font-semibold text-brand-dark">{t('app.name')}</div>
+          <div className="text-xs text-ink-subtle">{t('app.tagline')}</div>
         </div>
 
         <nav className="p-3 space-y-4">
           {visible.map((group) => (
-            <div key={group.group}>
+            <div key={t(group.groupKey)}>
               <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                {group.group}
+                {t(group.groupKey)}
               </div>
               {group.items.map((item) => {
                 const active = pathname === item.href;
@@ -130,7 +134,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                       active ? 'bg-brand-light font-medium text-brand-dark' : 'text-ink-muted hover:bg-surface-sunken'
                     }`}
                   >
-                    {item.label}
+                    {t(item.labelKey)}
                   </Link>
                 );
               })}
@@ -142,8 +146,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="font-medium text-ink">{user.fullName}</div>
           <div className="text-ink-subtle">{user.roles.join(', ')}</div>
           <div className="mt-1 text-ink-subtle">
-            {user.branchIds.length ? `${user.branchIds.length} branch scope` : 'Organization-wide'}
-            {unread > 0 && <> &middot; {unread} unread alerts</>}
+            {user.branchIds.length
+              ? t('auth.branchScope', { count: user.branchIds.length })
+              : t('auth.organizationWide')}
+            {unread > 0 && <> &middot; {t('auth.unreadAlerts', { count: unread })}</>}
           </div>
           <button
             className="btn-ghost mt-2 w-full"
@@ -152,12 +158,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
               router.replace('/login');
             }}
           >
-            Sign out
+            {t('auth.signOut')}
           </button>
+          <LanguagePicker />
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0 p-4 lg:p-6">{children}</main>
+      <main className="flex-1 min-w-0 p-4 lg:p-6">
+        <OfflineBar />
+        {children}
+      </main>
     </div>
   );
 }
