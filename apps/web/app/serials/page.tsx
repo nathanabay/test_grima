@@ -1,12 +1,21 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Shell } from '@/components/Shell';
-import { Card, Drawer, EmptyState, ErrorState, Loading, PageHeader, Stat, Field } from '@/components/primitives';
-import { DataTable } from '@/components/DataTable';
-import { StatusBadge, statusLabel } from '@/components/status';
-import { useApi } from '@/lib/useApi';
-import { api, can, shortDate, tokenStore } from '@/lib/api';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Shell } from "@/components/Shell";
+import {
+  Card,
+  Drawer,
+  EmptyState,
+  ErrorState,
+  Loading,
+  PageHeader,
+  Stat,
+  Field,
+} from "@/components/primitives";
+import { DataTable } from "@/components/DataTable";
+import { StatusBadge, statusLabel } from "@/components/status";
+import { useApi } from "@/lib/useApi";
+import { api, can, shortDate, tokenStore } from "@/lib/api";
 
 /**
  * Serial register (§3: features 141-150).
@@ -31,7 +40,13 @@ interface SerialRow {
     batchNumber: string;
     expiryDate: string;
     status: string;
-    product: { id: string; sku: string; genericName: string; brandName: string | null; strength: string };
+    product: {
+      id: string;
+      sku: string;
+      genericName: string;
+      brandName: string | null;
+      strength: string;
+    };
   };
 }
 
@@ -49,15 +64,15 @@ interface SerialEvent {
 
 /** Wording an operator recognises, rather than the machine event name. */
 const EVENT_LABEL: Record<string, string> = {
-  RECEIVED: 'Receive into stock',
-  DISPENSED: 'Record as dispensed',
-  SOLD: 'Record as sold',
-  TRANSFERRED: 'Send on a transfer',
-  RETURNED: 'Record a return',
-  RECALLED: 'Mark recalled',
-  RELEASED: 'Release back to stock',
-  DESTROYED: 'Record destruction',
-  CORRECTED: 'Correct this record',
+  RECEIVED: "Receive into stock",
+  DISPENSED: "Record as dispensed",
+  SOLD: "Record as sold",
+  TRANSFERRED: "Send on a transfer",
+  RETURNED: "Record a return",
+  RECALLED: "Mark recalled",
+  RELEASED: "Release back to stock",
+  DESTROYED: "Record destruction",
+  CORRECTED: "Correct this record",
 };
 
 export default function SerialsPage() {
@@ -69,33 +84,33 @@ export default function SerialsPage() {
 }
 
 function SerialsBody() {
-  const [serial, setSerial] = useState('');
-  const [status, setStatus] = useState('');
-  const [debounced, setDebounced] = useState('');
+  const [serial, setSerial] = useState("");
+  const [status, setStatus] = useState("");
+  const [debounced, setDebounced] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
 
-  const user = typeof window !== 'undefined' ? tokenStore.user : null;
-  const canMove = can(user, 'inventory.serial.EDIT');
-  const canImport = can(user, 'inventory.serial.IMPORT');
+  const user = typeof window !== "undefined" ? tokenStore.user : null;
+  const canMove = can(user, "inventory.serial.EDIT");
+  const canImport = can(user, "inventory.serial.IMPORT");
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(serial.trim()), 250);
     return () => clearTimeout(t);
   }, [serial]);
 
-  const query = new URLSearchParams({ pageSize: '100' });
-  if (debounced) query.set('serial', debounced);
-  if (status) query.set('status', status);
+  const query = new URLSearchParams({ pageSize: "100" });
+  if (debounced) query.set("serial", debounced);
+  if (status) query.set("status", status);
 
   const list = useApi<{ data: SerialRow[]; meta: { total: number } }>(
     `/serials?${query.toString()}`,
     [debounced, status, reload],
   );
-  const summary = useApi<{ total: number; byStatus: Array<{ status: string; count: number }> }>(
-    '/serials/summary',
-    [reload],
-  );
+  const summary = useApi<{
+    total: number;
+    byStatus: Array<{ status: string; count: number }>;
+  }>("/serials/summary", [reload]);
 
   const rows = list.data?.data ?? [];
   const counts = useMemo(() => {
@@ -114,7 +129,9 @@ function SerialsBody() {
         action={
           <div className="flex gap-2">
             {canImport && <ImportButton onDone={refresh} />}
-            <button className="btn-ghost btn-sm" onClick={refresh}>Refresh</button>
+            <button className="btn-ghost btn-sm" onClick={refresh}>
+              Refresh
+            </button>
           </div>
         }
       />
@@ -125,16 +142,37 @@ function SerialsBody() {
       {list.data && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <Stat label="Registered packs" value={summary.data?.total ?? 0} sub="All batches" />
-            <Stat label="In stock" value={counts.IN_STOCK ?? 0} tone="ok"
-              sub="Available to move" onClick={() => setStatus('IN_STOCK')} />
-            <Stat label="In transit" value={counts.TRANSFERRED ?? 0}
-              sub="Dispatched, not yet received" onClick={() => setStatus('TRANSFERRED')} />
-            <Stat label="Recalled" value={counts.RECALLED ?? 0}
-              tone={counts.RECALLED ? 'danger' : 'neutral'}
-              sub="Must not be supplied" onClick={() => setStatus('RECALLED')} />
-            <Stat label="Destroyed" value={counts.DESTROYED ?? 0}
-              sub="Terminal — no further movement" onClick={() => setStatus('DESTROYED')} />
+            <Stat
+              label="Registered packs"
+              value={summary.data?.total ?? 0}
+              sub="All batches"
+            />
+            <Stat
+              label="In stock"
+              value={counts.IN_STOCK ?? 0}
+              tone="ok"
+              sub="Available to move"
+              onClick={() => setStatus("IN_STOCK")}
+            />
+            <Stat
+              label="In transit"
+              value={counts.TRANSFERRED ?? 0}
+              sub="Dispatched, not yet received"
+              onClick={() => setStatus("TRANSFERRED")}
+            />
+            <Stat
+              label="Recalled"
+              value={counts.RECALLED ?? 0}
+              tone={counts.RECALLED ? "danger" : "neutral"}
+              sub="Must not be supplied"
+              onClick={() => setStatus("RECALLED")}
+            />
+            <Stat
+              label="Destroyed"
+              value={counts.DESTROYED ?? 0}
+              sub="Terminal — no further movement"
+              onClick={() => setStatus("DESTROYED")}
+            />
           </div>
 
           <Card
@@ -155,8 +193,18 @@ function SerialsBody() {
                   onChange={(e) => setStatus(e.target.value)}
                 >
                   <option value="">Every status</option>
-                  {['IN_STOCK', 'TRANSFERRED', 'DISPENSED', 'SOLD', 'RETURNED', 'RECALLED', 'DESTROYED'].map((s) => (
-                    <option key={s} value={s}>{statusLabel(s)}</option>
+                  {[
+                    "IN_STOCK",
+                    "TRANSFERRED",
+                    "DISPENSED",
+                    "SOLD",
+                    "RETURNED",
+                    "RECALLED",
+                    "DESTROYED",
+                  ].map((s) => (
+                    <option key={s} value={s}>
+                      {statusLabel(s)}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -180,37 +228,63 @@ function SerialsBody() {
                   total={list.data.meta.total}
                   onRowClick={(r) => setOpenId(r.id)}
                   selectedKey={openId}
-                  rowTone={(r) => (r.status === 'RECALLED' ? 'danger' : null)}
+                  rowTone={(r) => (r.status === "RECALLED" ? "danger" : null)}
                   columns={[
-                    { key: 'serial', label: 'Serial', sticky: true, value: (r) => r.serial },
                     {
-                      key: 'product', label: 'Product',
-                      value: (r) => `${r.batch.product.genericName} ${r.batch.product.strength}`,
+                      key: "serial",
+                      label: "Serial",
+                      sticky: true,
+                      value: (r) => r.serial,
+                    },
+                    {
+                      key: "product",
+                      label: "Product",
+                      value: (r) =>
+                        `${r.batch.product.genericName} ${r.batch.product.strength}`,
                       render: (r) => (
                         <div>
-                          <div className="text-ink">{r.batch.product.genericName} {r.batch.product.strength}</div>
-                          <div className="text-caption text-ink-subtle">{r.batch.product.sku}</div>
+                          <div className="text-ink">
+                            {r.batch.product.genericName}{" "}
+                            {r.batch.product.strength}
+                          </div>
+                          <div className="text-caption text-ink-subtle">
+                            {r.batch.product.sku}
+                          </div>
                         </div>
                       ),
                     },
-                    { key: 'batch', label: 'Batch', value: (r) => r.batch.batchNumber },
                     {
-                      key: 'expiry', label: 'Expiry', value: (r) => r.batch.expiryDate,
+                      key: "batch",
+                      label: "Batch",
+                      value: (r) => r.batch.batchNumber,
+                    },
+                    {
+                      key: "expiry",
+                      label: "Expiry",
+                      value: (r) => r.batch.expiryDate,
                       render: (r) => shortDate(r.batch.expiryDate),
                     },
                     {
-                      key: 'status', label: 'Status', width: '9rem', value: (r) => r.status,
+                      key: "status",
+                      label: "Status",
+                      width: "9rem",
+                      value: (r) => r.status,
                       render: (r) => <StatusBadge status={r.status} />,
                     },
                     {
-                      key: 'lastMovedAt', label: 'Last moved', optional: true,
-                      value: (r) => r.lastMovedAt ?? '',
-                      render: (r) => (r.lastMovedAt ? shortDate(r.lastMovedAt) : '—'),
+                      key: "lastMovedAt",
+                      label: "Last moved",
+                      optional: true,
+                      value: (r) => r.lastMovedAt ?? "",
+                      render: (r) =>
+                        r.lastMovedAt ? shortDate(r.lastMovedAt) : "—",
                     },
                     {
-                      key: 'lastReferenceType', label: 'Last document', optional: true,
-                      value: (r) => r.lastReferenceType ?? '',
-                      render: (r) => r.lastReferenceType ?? '—',
+                      key: "lastReferenceType",
+                      label: "Last document",
+                      optional: true,
+                      value: (r) => r.lastReferenceType ?? "",
+                      render: (r) => r.lastReferenceType ?? "—",
                     },
                   ]}
                 />
@@ -242,18 +316,21 @@ function SerialDrawer({
   onChanged: () => void;
 }) {
   const [version, setVersion] = useState(0);
-  const detail = useApi<SerialRow & { events: SerialEvent[] }>(id ? `/serials/${id}` : null, [id, version]);
-  const [event, setEvent] = useState('');
-  const [reason, setReason] = useState('');
-  const [correctedTo, setCorrectedTo] = useState('IN_STOCK');
-  const [referenceNo, setReferenceNo] = useState('');
+  const detail = useApi<SerialRow & { events: SerialEvent[] }>(
+    id ? `/serials/${id}` : null,
+    [id, version],
+  );
+  const [event, setEvent] = useState("");
+  const [reason, setReason] = useState("");
+  const [correctedTo, setCorrectedTo] = useState("IN_STOCK");
+  const [referenceNo, setReferenceNo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setEvent('');
-    setReason('');
-    setReferenceNo('');
+    setEvent("");
+    setReason("");
+    setReferenceNo("");
     setError(null);
   }, [id]);
 
@@ -263,17 +340,17 @@ function SerialDrawer({
     setError(null);
     try {
       await api(`/serials/${id}/events`, {
-        method: 'POST',
+        method: "POST",
         body: {
           eventType: event,
           reason: reason || undefined,
           referenceNo: referenceNo || undefined,
-          correctedTo: event === 'CORRECTED' ? correctedTo : undefined,
+          correctedTo: event === "CORRECTED" ? correctedTo : undefined,
         },
       });
-      setEvent('');
-      setReason('');
-      setReferenceNo('');
+      setEvent("");
+      setReason("");
+      setReferenceNo("");
       setVersion((v) => v + 1);
       onChanged();
     } catch (e: any) {
@@ -290,14 +367,16 @@ function SerialDrawer({
       open={!!id}
       onClose={onClose}
       width="lg"
-      title={serial ? `Serial ${serial.serial}` : 'Serial'}
+      title={serial ? `Serial ${serial.serial}` : "Serial"}
       description={
         serial
           ? `${serial.batch.product.genericName} ${serial.batch.product.strength} · batch ${serial.batch.batchNumber}`
           : undefined
       }
     >
-      {detail.loading && !serial && <Loading label="Reading the pack history" />}
+      {detail.loading && !serial && (
+        <Loading label="Reading the pack history" />
+      )}
       {detail.error && <ErrorState message={detail.error} />}
 
       {serial && (
@@ -311,7 +390,11 @@ function SerialDrawer({
 
           {canMove && serial.allowedEvents.length > 0 && (
             <Card title="Record a movement">
-              {error && <div className="mb-3"><ErrorState message={error} /></div>}
+              {error && (
+                <div className="mb-3">
+                  <ErrorState message={error} />
+                </div>
+              )}
               <div className="space-y-3">
                 <Field label="What happened">
                   <select
@@ -321,45 +404,79 @@ function SerialDrawer({
                   >
                     <option value="">Choose a movement…</option>
                     {serial.allowedEvents.map((e) => (
-                      <option key={e} value={e}>{EVENT_LABEL[e] ?? statusLabel(e)}</option>
+                      <option key={e} value={e}>
+                        {EVENT_LABEL[e] ?? statusLabel(e)}
+                      </option>
                     ))}
                   </select>
                   <p className="mt-1 text-caption text-ink-subtle">
-                    Only movements the lifecycle allows from {statusLabel(serial.status)} are offered.
+                    Only movements the lifecycle allows from{" "}
+                    {statusLabel(serial.status)} are offered.
                   </p>
                 </Field>
 
-                {event === 'CORRECTED' && (
+                {event === "CORRECTED" && (
                   <Field
                     label="Corrected status"
                     hint="The original entry stays visible; this records what it should have said."
                   >
-                    <select className="input" value={correctedTo} onChange={(e) => setCorrectedTo(e.target.value)}>
-                      {['IN_STOCK', 'TRANSFERRED', 'DISPENSED', 'SOLD', 'RETURNED', 'RECALLED', 'DESTROYED'].map((s) => (
-                        <option key={s} value={s}>{statusLabel(s)}</option>
+                    <select
+                      className="input"
+                      value={correctedTo}
+                      onChange={(e) => setCorrectedTo(e.target.value)}
+                    >
+                      {[
+                        "IN_STOCK",
+                        "TRANSFERRED",
+                        "DISPENSED",
+                        "SOLD",
+                        "RETURNED",
+                        "RECALLED",
+                        "DESTROYED",
+                      ].map((s) => (
+                        <option key={s} value={s}>
+                          {statusLabel(s)}
+                        </option>
                       ))}
                     </select>
                   </Field>
                 )}
 
-                <Field label="Document reference" hint="The transfer, sale or disposal note this movement belongs to.">
-                  <input className="input" value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} />
+                <Field
+                  label="Document reference"
+                  hint="The transfer, sale or disposal note this movement belongs to."
+                >
+                  <input
+                    className="input"
+                    value={referenceNo}
+                    onChange={(e) => setReferenceNo(e.target.value)}
+                  />
                 </Field>
 
                 <Field
                   label="Reason"
-                  required={event === 'CORRECTED'}
-                  hint={event === 'CORRECTED' ? 'A correction must say why the record was wrong.' : undefined}
+                  required={event === "CORRECTED"}
+                  hint={
+                    event === "CORRECTED"
+                      ? "A correction must say why the record was wrong."
+                      : undefined
+                  }
                 >
-                  <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} />
+                  <input
+                    className="input"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
                 </Field>
 
                 <button
                   className="btn-primary btn-sm"
-                  disabled={busy || !event || (event === 'CORRECTED' && !reason.trim())}
+                  disabled={
+                    busy || !event || (event === "CORRECTED" && !reason.trim())
+                  }
                   onClick={record}
                 >
-                  {busy ? 'Recording…' : 'Record movement'}
+                  {busy ? "Recording…" : "Record movement"}
                 </button>
               </div>
             </Card>
@@ -376,14 +493,22 @@ function SerialDrawer({
                         {EVENT_LABEL[e.eventType] ?? statusLabel(e.eventType)}
                       </span>
                     </div>
-                    <span className="text-caption text-ink-subtle">{shortDate(e.occurredAt)}</span>
+                    <span className="text-caption text-ink-subtle">
+                      {shortDate(e.occurredAt)}
+                    </span>
                   </div>
                   <div className="mt-1 text-caption text-ink-muted">
-                    {e.fromStatus ? `${statusLabel(e.fromStatus)} → ${statusLabel(e.toStatus)}` : 'First entry'}
-                    {e.referenceNo ? ` · ${e.referenceNo}` : ''}
-                    {e.performedByName ? ` · ${e.performedByName}` : ''}
+                    {e.fromStatus
+                      ? `${statusLabel(e.fromStatus)} → ${statusLabel(e.toStatus)}`
+                      : "First entry"}
+                    {e.referenceNo ? ` · ${e.referenceNo}` : ""}
+                    {e.performedByName ? ` · ${e.performedByName}` : ""}
                   </div>
-                  {e.reason && <p className="mt-1 text-caption text-ink-muted">{e.reason}</p>}
+                  {e.reason && (
+                    <p className="mt-1 text-caption text-ink-muted">
+                      {e.reason}
+                    </p>
+                  )}
                 </li>
               ))}
             </ol>
@@ -397,21 +522,29 @@ function SerialDrawer({
 /** Bulk registration of the serials delivered with a batch. */
 function ImportButton({ onDone }: { onDone: () => void }) {
   const [open, setOpen] = useState(false);
-  const [batchId, setBatchId] = useState('');
-  const [text, setText] = useState('');
+  const [batchId, setBatchId] = useState("");
+  const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
 
-  const batches = useApi<any>(open ? '/inventory/batches?pageSize=100' : null, [open]);
+  const batches = useApi<any>(open ? "/inventory/batches?pageSize=100" : null, [
+    open,
+  ]);
 
   async function submit() {
     setBusy(true);
     setError(null);
     setResult(null);
     try {
-      const serials = text.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
-      const res = await api('/serials/import', { method: 'POST', body: { batchId, serials } });
+      const serials = text
+        .split(/[\s,;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const res = await api("/serials/import", {
+        method: "POST",
+        body: { batchId, serials },
+      });
       setResult(res);
       onDone();
     } catch (e: any) {
@@ -423,34 +556,55 @@ function ImportButton({ onDone }: { onDone: () => void }) {
 
   return (
     <>
-      <button className="btn-sm btn-primary" onClick={() => setOpen(true)}>Register serials</button>
+      <button className="btn-sm btn-primary" onClick={() => setOpen(true)}>
+        Register serials
+      </button>
       <Drawer
         open={open}
-        onClose={() => { setOpen(false); setResult(null); }}
+        onClose={() => {
+          setOpen(false);
+          setResult(null);
+        }}
         title="Register serials against a batch"
         description="Serials already registered are reported rather than overwritten — the same serial arriving twice is a counterfeit signal, not a duplicate row to tidy away."
       >
-        {error && <div className="mb-3"><ErrorState message={error} /></div>}
+        {error && (
+          <div className="mb-3">
+            <ErrorState message={error} />
+          </div>
+        )}
         <div className="space-y-3">
           <Field label="Batch" required>
-            <select className="input" value={batchId} onChange={(e) => setBatchId(e.target.value)}>
+            <select
+              className="input"
+              value={batchId}
+              onChange={(e) => setBatchId(e.target.value)}
+            >
               <option value="">Choose a batch…</option>
               {(batches.data?.data ?? []).map((b: any) => (
                 <option key={b.id} value={b.id}>
-                  {b.product?.genericName} {b.product?.strength} · {b.batchNumber}
+                  {b.product?.genericName} {b.product?.strength} ·{" "}
+                  {b.batchNumber}
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Serials" hint="One per line, or separated by commas or spaces.">
+          <Field
+            label="Serials"
+            hint="One per line, or separated by commas or spaces."
+          >
             <textarea
               className="input min-h-[10rem] font-mono text-small"
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
           </Field>
-          <button className="btn-primary btn-sm" disabled={busy || !batchId || !text.trim()} onClick={submit}>
-            {busy ? 'Registering…' : 'Register'}
+          <button
+            className="btn-primary btn-sm"
+            disabled={busy || !batchId || !text.trim()}
+            onClick={submit}
+          >
+            {busy ? "Registering…" : "Register"}
           </button>
 
           {result && (
@@ -458,13 +612,21 @@ function ImportButton({ onDone }: { onDone: () => void }) {
               <p className="text-ink">{result.created} serial(s) registered.</p>
               {result.duplicates.length > 0 && (
                 <p className="mt-1 text-warn">
-                  {result.duplicates.length} already registered: {result.duplicates.slice(0, 5).map((d: any) => d.serial).join(', ')}
-                  {result.duplicates.length > 5 ? '…' : ''}
+                  {result.duplicates.length} already registered:{" "}
+                  {result.duplicates
+                    .slice(0, 5)
+                    .map((d: any) => d.serial)
+                    .join(", ")}
+                  {result.duplicates.length > 5 ? "…" : ""}
                 </p>
               )}
               {result.invalid.length > 0 && (
                 <p className="mt-1 text-danger">
-                  {result.invalid.length} rejected: {result.invalid.slice(0, 5).map((d: any) => `${d.serial} (${d.reason})`).join(', ')}
+                  {result.invalid.length} rejected:{" "}
+                  {result.invalid
+                    .slice(0, 5)
+                    .map((d: any) => `${d.serial} (${d.reason})`)
+                    .join(", ")}
                 </p>
               )}
             </div>

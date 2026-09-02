@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useApi } from '@/lib/useApi';
-import { EmptyState, ErrorState, Loading } from '@/components/primitives';
-import { StatusBadge, StatusTone } from '@/components/status';
+import Link from "next/link";
+import { useApi } from "@/lib/useApi";
+import { EmptyState, ErrorState, Loading } from "@/components/primitives";
+import { StatusBadge, StatusTone } from "@/components/status";
 
 interface TimelineEvent {
   at: string;
@@ -18,20 +18,20 @@ interface TimelineEvent {
 
 /** Colour by what happened, so a recall reads differently from a receipt. */
 const KIND_TONE: Record<string, StatusTone> = {
-  CREATED: 'info',
-  RECEIVED: 'available',
-  DISPENSED: 'info',
-  SOLD: 'info',
-  TRANSFERRED: 'transit',
-  ADJUSTED: 'near',
-  COUNTED: 'near',
-  QUARANTINED: 'quarantine',
-  RECALLED: 'recall',
-  DISPOSED: 'expired',
-  PRICE_CHANGED: 'near',
-  DOCUMENT: 'neutral',
-  EDITED: 'neutral',
-  APPROVED: 'approved',
+  CREATED: "info",
+  RECEIVED: "available",
+  DISPENSED: "info",
+  SOLD: "info",
+  TRANSFERRED: "transit",
+  ADJUSTED: "near",
+  COUNTED: "near",
+  QUARANTINED: "quarantine",
+  RECALLED: "recall",
+  DISPOSED: "expired",
+  PRICE_CHANGED: "near",
+  DOCUMENT: "neutral",
+  EDITED: "neutral",
+  APPROVED: "approved",
 };
 
 /**
@@ -46,7 +46,7 @@ export function Timeline({
   entityId,
   limit = 100,
 }: {
-  entityType: 'PRODUCT' | 'BATCH' | 'PATIENT' | 'SUPPLIER';
+  entityType: "PRODUCT" | "BATCH" | "PATIENT" | "SUPPLIER";
   entityId: string;
   limit?: number;
 }) {
@@ -70,24 +70,38 @@ export function Timeline({
   return (
     <ol className="relative space-y-3 border-l border-border pl-4">
       {data.events.map((event, i) => (
-        <li key={`${event.sourceType}-${event.sourceId ?? i}-${event.at}`} className="relative">
+        <li
+          key={`${event.sourceType}-${event.sourceId ?? i}-${event.at}`}
+          className="relative"
+        >
           <span
             className="absolute -left-[21px] top-2 h-2 w-2 rounded-pill bg-brand ring-4 ring-surface"
             aria-hidden
           />
           <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone={KIND_TONE[event.kind] ?? 'neutral'}>
-              {event.kind.replace(/_/g, ' ').toLowerCase()}
+            <StatusBadge tone={KIND_TONE[event.kind] ?? "neutral"}>
+              {event.kind.replace(/_/g, " ").toLowerCase()}
             </StatusBadge>
-            <span className="text-body font-medium text-ink">{event.title}</span>
-            <time className="num text-caption text-ink-subtle" dateTime={event.at}>
+            <span className="text-body font-medium text-ink">
+              {event.title}
+            </span>
+            <time
+              className="num text-caption text-ink-subtle"
+              dateTime={event.at}
+            >
               {new Date(event.at).toLocaleString()}
             </time>
           </div>
-          {event.detail && <p className="mt-0.5 text-small text-ink-muted">{event.detail}</p>}
+          {event.detail && (
+            <p className="mt-0.5 text-small text-ink-muted">{event.detail}</p>
+          )}
           <div className="mt-0.5 flex flex-wrap items-center gap-3 text-caption text-ink-subtle">
-            <span>{event.actor ? `by ${event.actor}` : 'no actor recorded'}</span>
-            <span>&middot; {event.sourceType.replace(/_/g, ' ').toLowerCase()}</span>
+            <span>
+              {event.actor ? `by ${event.actor}` : "no actor recorded"}
+            </span>
+            <span>
+              &middot; {event.sourceType.replace(/_/g, " ").toLowerCase()}
+            </span>
             {event.linkUrl && (
               <Link className="text-brand-dark underline" href={event.linkUrl}>
                 Open the record
@@ -122,13 +136,17 @@ export function Tabs({
               aria-selected={on}
               onClick={() => onChange(tab.key)}
               className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-body transition-colors duration-state
-                ${on
-                  ? 'border-brand font-medium text-brand-dark'
-                  : 'border-transparent text-ink-muted hover:text-ink'}`}
+                ${
+                  on
+                    ? "border-brand font-medium text-brand-dark"
+                    : "border-transparent text-ink-muted hover:text-ink"
+                }`}
             >
               {tab.label}
               {tab.count !== undefined && (
-                <span className="ml-1.5 num text-caption text-ink-subtle">{tab.count}</span>
+                <span className="ml-1.5 num text-caption text-ink-subtle">
+                  {tab.count}
+                </span>
               )}
             </button>
           );

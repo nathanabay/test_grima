@@ -1,46 +1,52 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useApi } from '@/lib/useApi';
-import { can, shortDate, tokenStore } from '@/lib/api';
-import { Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
+import { useState } from "react";
+import { useApi } from "@/lib/useApi";
+import { can, shortDate, tokenStore } from "@/lib/api";
+import { Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 /**
  * Attach and browse documents for any record (§44): supplier licences, product
  * leaflets, scanned prescriptions, disposal certificates.
  */
-export function DocumentsTab({ entityType, entityId }: { entityType: string; entityId: string }) {
+export function DocumentsTab({
+  entityType,
+  entityId,
+}: {
+  entityType: string;
+  entityId: string;
+}) {
   const { data, loading, refresh } = useApi<any[]>(
     `/documents?entityType=${entityType}&entityId=${entityId}`,
     [entityId],
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState('');
-  const user = typeof window !== 'undefined' ? tokenStore.user : null;
-  const canUpload = can(user, 'catalog.product.EDIT');
+  const [expiresAt, setExpiresAt] = useState("");
+  const user = typeof window !== "undefined" ? tokenStore.user : null;
+  const canUpload = can(user, "catalog.product.EDIT");
 
   async function upload(file: File) {
     setBusy(true);
     setError(null);
     try {
       const form = new FormData();
-      form.append('file', file);
-      form.append('entityType', entityType);
-      form.append('entityId', entityId);
-      if (expiresAt) form.append('expiresAt', expiresAt);
+      form.append("file", file);
+      form.append("entityType", entityType);
+      form.append("entityId", entityId);
+      if (expiresAt) form.append("expiresAt", expiresAt);
 
       // Multipart must not carry a JSON content-type, so this bypasses api().
       const res = await fetch(`${API_BASE}/api/documents`, {
-        method: 'POST',
+        method: "POST",
         headers: { Authorization: `Bearer ${tokenStore.access}` },
         body: form,
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? 'Upload failed');
-      setExpiresAt('');
+      if (!res.ok) throw new Error(body.error ?? "Upload failed");
+      setExpiresAt("");
       refresh();
     } catch (e: any) {
       setError(e.message);
@@ -62,7 +68,7 @@ export function DocumentsTab({ entityType, entityId }: { entityType: string; ent
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) void upload(f);
-                e.target.value = '';
+                e.target.value = "";
               }}
             />
             <input
@@ -74,8 +80,8 @@ export function DocumentsTab({ entityType, entityId }: { entityType: string; ent
             />
           </div>
           <p className="mt-1 text-xs text-ink-subtle">
-            PDF, image, Word, Excel or CSV, up to 15 MB. Set an expiry date on licences so the
-            system warns you before they lapse.
+            PDF, image, Word, Excel or CSV, up to 15 MB. Set an expiry date on
+            licences so the system warns you before they lapse.
           </p>
         </div>
       )}
@@ -84,7 +90,7 @@ export function DocumentsTab({ entityType, entityId }: { entityType: string; ent
       {loading && <Loading />}
 
       {data?.length ? (
-        <Table head={['File', 'Type', 'Size', 'Expiry', '']}>
+        <Table head={["File", "Type", "Size", "Expiry", ""]}>
           {data.map((d) => (
             <tr key={d.id}>
               <td className="td font-medium">{d.fileName}</td>
@@ -94,11 +100,11 @@ export function DocumentsTab({ entityType, entityId }: { entityType: string; ent
                 {d.expiresAt ? (
                   <Pill
                     tone={
-                      d.expiryStatus === 'EXPIRED'
-                        ? 'danger'
-                        : d.expiryStatus === 'EXPIRING_SOON'
-                          ? 'warn'
-                          : 'ok'
+                      d.expiryStatus === "EXPIRED"
+                        ? "danger"
+                        : d.expiryStatus === "EXPIRING_SOON"
+                          ? "warn"
+                          : "ok"
                     }
                   >
                     {shortDate(d.expiresAt)}

@@ -35,7 +35,7 @@ export default {
         },
         ok: { DEFAULT: token('--success'), light: token('--success-soft') },
         warn: { DEFAULT: token('--warning'), light: token('--warning-soft') },
-        danger: { DEFAULT: token('--danger'), light: token('--danger-soft') },
+        danger: { DEFAULT: token('--danger'), fg: token('--danger-fg'), light: token('--danger-soft') },
         info: { DEFAULT: token('--info'), light: token('--info-soft') },
         ring: token('--ring'),
 

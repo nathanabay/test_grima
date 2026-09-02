@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '@/lib/api';
-import { ErrorBox, Pill } from '@/components/ui';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
+import { ErrorBox, Pill } from "@/components/ui";
 
 /**
  * Camera barcode scanning (§17).
@@ -13,7 +13,16 @@ import { ErrorBox, Pill } from '@/components/ui';
  * how a wedge scanner behaves. It never pretends to scan when it cannot.
  */
 
-const FORMATS = ['data_matrix', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'];
+const FORMATS = [
+  "data_matrix",
+  "ean_13",
+  "ean_8",
+  "upc_a",
+  "upc_e",
+  "code_128",
+  "code_39",
+  "qr_code",
+];
 
 export interface ScanResolution {
   parsed: {
@@ -33,13 +42,13 @@ export interface ScanResolution {
 }
 
 export function cameraScanSupported(): boolean {
-  return typeof window !== 'undefined' && 'BarcodeDetector' in window;
+  return typeof window !== "undefined" && "BarcodeDetector" in window;
 }
 
 export function Scanner({
   onResolved,
   autoStart = false,
-  label = 'Scan',
+  label = "Scan",
 }: {
   onResolved: (result: ScanResolution) => void;
   autoStart?: boolean;
@@ -48,10 +57,10 @@ export function Scanner({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const loopRef = useRef<number | null>(null);
-  const lastCodeRef = useRef<{ code: string; at: number }>({ code: '', at: 0 });
+  const lastCodeRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
 
   const [active, setActive] = useState(false);
-  const [manual, setManual] = useState('');
+  const [manual, setManual] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [supported, setSupported] = useState(false);
@@ -64,9 +73,14 @@ export function Scanner({
       setBusy(true);
       setError(null);
       try {
-        onResolved(await api<ScanResolution>('/scan', { method: 'POST', body: { code } }));
+        onResolved(
+          await api<ScanResolution>("/scan", {
+            method: "POST",
+            body: { code },
+          }),
+        );
       } catch (e: any) {
-        setError(e.message ?? 'Could not resolve the scanned code');
+        setError(e.message ?? "Could not resolve the scanned code");
       } finally {
         setBusy(false);
       }
@@ -88,7 +102,7 @@ export function Scanner({
     setError(null);
     if (!cameraScanSupported()) {
       setError(
-        'This browser has no barcode detector. Use a USB/Bluetooth scanner or type the code below.',
+        "This browser has no barcode detector. Use a USB/Bluetooth scanner or type the code below.",
       );
       return;
     }
@@ -96,7 +110,7 @@ export function Scanner({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         // Rear camera on a handset; falls back to whatever exists on a laptop.
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
       });
       streamRef.current = stream;
       setActive(true);
@@ -107,7 +121,8 @@ export function Scanner({
       }
 
       const Detector = (window as any).BarcodeDetector;
-      const supportedFormats: string[] = await Detector.getSupportedFormats().catch(() => FORMATS);
+      const supportedFormats: string[] =
+        await Detector.getSupportedFormats().catch(() => FORMATS);
       const detector = new Detector({
         formats: FORMATS.filter((f) => supportedFormats.includes(f)),
       });
@@ -121,7 +136,10 @@ export function Scanner({
             const now = Date.now();
             // The same pack stays in frame for many frames; debounce so one
             // physical scan produces one lookup.
-            if (value !== lastCodeRef.current.code || now - lastCodeRef.current.at > 2500) {
+            if (
+              value !== lastCodeRef.current.code ||
+              now - lastCodeRef.current.at > 2500
+            ) {
               lastCodeRef.current = { code: value, at: now };
               if (navigator.vibrate) navigator.vibrate(40);
               await resolve(value);
@@ -135,8 +153,8 @@ export function Scanner({
       loopRef.current = requestAnimationFrame(tick);
     } catch (e: any) {
       setError(
-        e?.name === 'NotAllowedError'
-          ? 'Camera permission was refused. Allow it in your browser settings, or type the code below.'
+        e?.name === "NotAllowedError"
+          ? "Camera permission was refused. Allow it in your browser settings, or type the code below."
           : `Could not start the camera: ${e?.message ?? e}`,
       );
       stop();
@@ -154,7 +172,12 @@ export function Scanner({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         {!active ? (
-          <button type="button" className="btn-primary" onClick={start} disabled={busy}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={start}
+            disabled={busy}
+          >
             {label} with camera
           </button>
         ) : (
@@ -192,7 +215,7 @@ export function Scanner({
         onSubmit={(e) => {
           e.preventDefault();
           void resolve(manual);
-          setManual('');
+          setManual("");
         }}
       >
         <input
@@ -204,17 +227,17 @@ export function Scanner({
           // explicitly rather than relying on implicit form submission, which
           // some embedded browsers and scanner drivers do not trigger.
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === "Enter") {
               e.preventDefault();
               const code = manual;
-              setManual('');
+              setManual("");
               void resolve(code);
             }
           }}
           autoFocus={!active}
         />
         <button className="btn-ghost" disabled={busy || !manual.trim()}>
-          {busy ? 'Looking up...' : 'Look up'}
+          {busy ? "Looking up..." : "Look up"}
         </button>
       </form>
 

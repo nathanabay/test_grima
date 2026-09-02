@@ -15,7 +15,15 @@
     --surface-raised: 255 255 255;
     --foreground: 15 23 42;
     --muted: 71 85 105;
-    --subtle: 148 163 184;
+    /* Slate-500, not slate-400. Slate-400 on white measures 2.56:1, so every
+       caption and every "sub" line under a statistic failed WCAG AA.
+       This is 4.76:1 on white and 4.55:1 on the sunken surface.
+
+       Those are the ONLY two grounds it may be painted on. A tinted ground —
+       a toned statistic tile, a highlighted table row — darkens the surface
+       enough to push it under 4.5:1, so meaningful text on a tint uses
+       --muted instead. */
+    --subtle: 100 116 139;
     --border: 226 232 240;
     --border-strong: 203 213 225;
     --shadow: 15 23 42;
@@ -26,20 +34,28 @@
     --primary-fg: 255 255 255;
     --ring: 13 125 108;
 
-    --success: 21 128 61;
+    /* Green-800, not green-700. A status badge paints its text over a 10% wash
+       of the same hue, where green-700 measures 4.39:1 — under the AA floor for
+       the 11px uppercase label a badge uses. Green-800 measures 6.2:1 there. */
+    --success: 22 101 52;
     --success-soft: 240 253 244;
-    --warning: 180 83 9;
+    /* Amber-800, not amber-700. A badge paints its text over a 10% wash of the
+       same hue, where amber-700 measures 4.38:1 — just under the AA floor for
+       the 11px uppercase label a badge actually uses. Amber-800 measures
+       6.2:1 on that ground and 7.0:1 on plain surface. */
+    --warning: 146 64 14;
     --warning-soft: 255 251 235;
     --danger: 185 28 28;
+    --danger-fg: 255 255 255;
     --danger-soft: 254 242 242;
     --info: 29 78 216;
     --info-soft: 239 246 255;
 
     /* Pharmaceutical status (§27). One meaning per token, product-wide. */
-    --st-available: 21 128 61;
-    --st-low: 180 83 9;
+    --st-available: 22 101 52;
+    --st-low: 146 64 14;
     --st-out: 185 28 28;
-    --st-near-expiry: 180 83 9;
+    --st-near-expiry: 146 64 14;
     --st-expired: 153 27 27;
     --st-quarantine: 109 40 217;
     --st-recall: 159 18 57;
@@ -65,8 +81,11 @@
       --surface-sunken: 12 18 28;
       --surface-raised: 24 33 47;
       --foreground: 226 232 240;
-      --muted: 148 163 184;
-      --subtle: 100 116 139;
+      /* Each step lightened: slate-500 on the dark surface measured 3.74:1.
+         Muted is slate-300 and subtle is slate-400, which measure 11.9:1 and
+         6.9:1 against --surface. */
+      --muted: 203 213 225;
+      --subtle: 148 163 184;
       --border: 34 46 63;
       --border-strong: 51 65 85;
       --shadow: 0 0 0;
@@ -82,6 +101,9 @@
       --warning: 251 191 36;
       --warning-soft: 61 44 12;
       --danger: 248 113 113;
+      /* Dark mode inverts the relationship: --danger is a light red, so text
+         painted on it has to be dark. White measured 2.77:1. */
+      --danger-fg: 40 8 8;
       --danger-soft: 63 24 24;
       --info: 96 165 250;
       --info-soft: 23 39 68;
@@ -107,8 +129,9 @@
     --surface-sunken: 12 18 28;
     --surface-raised: 24 33 47;
     --foreground: 226 232 240;
-    --muted: 148 163 184;
-    --subtle: 100 116 139;
+    /* Kept in step with the media-query block above. */
+    --muted: 203 213 225;
+    --subtle: 148 163 184;
     --border: 34 46 63;
     --border-strong: 51 65 85;
     --shadow: 0 0 0;
@@ -124,6 +147,9 @@
     --warning: 251 191 36;
     --warning-soft: 61 44 12;
     --danger: 248 113 113;
+    /* Dark mode inverts the relationship: --danger is a light red, so text
+       painted on it has to be dark. White measured 2.77:1. */
+    --danger-fg: 40 8 8;
     --danger-soft: 63 24 24;
     --info: 96 165 250;
     --info-soft: 23 39 68;
@@ -177,7 +203,16 @@
 }
 
 @layer components {
-  .card { @apply bg-surface rounded-card border border-border shadow-raised; }
+  /*
+   * min-w-0 is load-bearing, not decoration.
+   *
+   * A grid or flex item defaults to min-width:auto, which means its content can
+   * push the track wider than the container. A card holding a table with a
+   * min-width (so its columns stay readable) therefore widened the whole page
+   * instead of scrolling inside its own overflow-x container, and every
+   * dashboard scrolled sideways on a phone.
+   */
+  .card { @apply min-w-0 bg-surface rounded-card border border-border shadow-raised; }
 
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded px-3 py-1.5
@@ -187,7 +222,7 @@
   .btn-primary { @apply btn bg-brand text-brand-fg hover:bg-brand-dark; }
   .btn-ghost   { @apply btn border border-border-strong bg-surface text-ink hover:bg-surface-sunken; }
   .btn-quiet   { @apply btn text-ink-muted hover:bg-surface-sunken hover:text-ink; }
-  .btn-danger  { @apply btn bg-danger text-white hover:opacity-90; }
+  .btn-danger  { @apply btn bg-danger text-danger-fg hover:opacity-90; }
   .btn-sm      { @apply px-2 py-1 text-small; }
 
   .input {

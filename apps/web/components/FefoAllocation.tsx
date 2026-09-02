@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import { api, qty, shortDate } from '@/lib/api';
-import { Card, EmptyState, ErrorState, Loading } from '@/components/primitives';
-import { StatusBadge, ExpiryBadge, QuantityCell } from '@/components/status';
+import { useCallback, useEffect, useState } from "react";
+import { api, qty, shortDate } from "@/lib/api";
+import { Card, EmptyState, ErrorState, Loading } from "@/components/primitives";
+import { StatusBadge, ExpiryBadge, QuantityCell } from "@/components/status";
 
 /**
  * FEFO allocation, shown rather than assumed (§32).
@@ -42,12 +42,12 @@ function daysTo(date: string) {
 /** Why a batch was refused, as a tone — a recall is not the same as an empty bin. */
 function exclusionTone(reason: string) {
   const r = reason.toLowerCase();
-  if (r.includes('recall')) return 'recall' as const;
-  if (r.includes('expired')) return 'expired' as const;
-  if (r.includes('quarantin')) return 'quarantine' as const;
-  if (r.includes('status')) return 'blocked' as const;
-  if (r.includes('shelf life')) return 'near' as const;
-  return 'neutral' as const;
+  if (r.includes("recall")) return "recall" as const;
+  if (r.includes("expired")) return "expired" as const;
+  if (r.includes("quarantin")) return "quarantine" as const;
+  if (r.includes("status")) return "blocked" as const;
+  if (r.includes("shelf life")) return "near" as const;
+  return "neutral" as const;
 }
 
 export function FefoAllocation({
@@ -79,8 +79,8 @@ export function FefoAllocation({
     setError(null);
     try {
       setResult(
-        await api<FefoResult>('/inventory/fefo/allocate', {
-          method: 'POST',
+        await api<FefoResult>("/inventory/fefo/allocate", {
+          method: "POST",
           body: { productId, warehouseId, quantity, minRemainingDays },
         }),
       );
@@ -110,9 +110,13 @@ export function FefoAllocation({
     >
       {!result.fullyAllocated && (
         <div className="mb-3 rounded border border-warn/30 bg-warn-light px-3 py-2 text-small text-warn">
-          Only <span className="num font-medium">{qty(result.allocatedQuantity)}</span> of{' '}
-          <span className="num font-medium">{qty(quantity)}</span> can be allocated from stock that
-          may be picked. The shortfall is <span className="num font-medium">{qty(result.shortfall)}</span>.
+          Only{" "}
+          <span className="num font-medium">
+            {qty(result.allocatedQuantity)}
+          </span>{" "}
+          of <span className="num font-medium">{qty(quantity)}</span> can be
+          allocated from stock that may be picked. The shortfall is{" "}
+          <span className="num font-medium">{qty(result.shortfall)}</span>.
         </div>
       )}
 
@@ -131,27 +135,35 @@ export function FefoAllocation({
               <li
                 key={a.batchId}
                 className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded border px-3 py-2
-                  ${isChosen
-                    ? 'border-brand bg-brand/10'
-                    : isRecommended
-                      ? 'border-ok/40 bg-ok/[0.06]'
-                      : 'border-border bg-surface'}`}
+                  ${
+                    isChosen
+                      ? "border-brand bg-brand/10"
+                      : isRecommended
+                        ? "border-ok/40 bg-ok/[0.06]"
+                        : "border-border bg-surface"
+                  }`}
               >
-                <StatusBadge tone={isRecommended ? 'available' : 'info'}>
-                  {isRecommended ? 'Recommended' : `Alternative ${i}`}
+                <StatusBadge tone={isRecommended ? "available" : "info"}>
+                  {isRecommended ? "Recommended" : `Alternative ${i}`}
                 </StatusBadge>
-                <span className="num font-medium text-ink">{a.batchNumber}</span>
-                <span className="num text-small text-ink-muted">{shortDate(a.expiryDate)}</span>
+                <span className="num font-medium text-ink">
+                  {a.batchNumber}
+                </span>
+                <span className="num text-small text-ink-muted">
+                  {shortDate(a.expiryDate)}
+                </span>
                 <ExpiryBadge days={days} />
                 <span className="ml-auto flex items-center gap-3">
                   <QuantityCell value={a.quantity} />
                   {onChoose && (
                     <button
                       type="button"
-                      className={isChosen ? 'btn-primary btn-sm' : 'btn-ghost btn-sm'}
+                      className={
+                        isChosen ? "btn-primary btn-sm" : "btn-ghost btn-sm"
+                      }
                       onClick={() => onChoose(a.batchId)}
                     >
-                      {isChosen ? 'Chosen' : 'Use this'}
+                      {isChosen ? "Chosen" : "Use this"}
                     </button>
                   )}
                 </span>
@@ -166,8 +178,13 @@ export function FefoAllocation({
           <p className="label">Refused, and why</p>
           <ul className="space-y-1">
             {result.excluded.map((e) => (
-              <li key={e.batchId} className="flex flex-wrap items-center gap-2 text-small">
-                <StatusBadge tone={exclusionTone(e.reason)}>Blocked</StatusBadge>
+              <li
+                key={e.batchId}
+                className="flex flex-wrap items-center gap-2 text-small"
+              >
+                <StatusBadge tone={exclusionTone(e.reason)}>
+                  Blocked
+                </StatusBadge>
                 <span className="num text-ink">{e.batchNumber}</span>
                 <span className="text-ink-muted">{e.reason}</span>
               </li>
@@ -178,8 +195,9 @@ export function FefoAllocation({
 
       {onChoose && recommended && (
         <p className="mt-3 text-caption text-ink-subtle">
-          Taking anything other than the recommendation needs the override permission and a written
-          reason. The batch FEFO chose is stored beside the one taken, so the decision stays visible.
+          Taking anything other than the recommendation needs the override
+          permission and a written reason. The batch FEFO chose is stored beside
+          the one taken, so the decision stays visible.
         </p>
       )}
     </Card>

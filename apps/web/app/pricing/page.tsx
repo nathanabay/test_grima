@@ -1,26 +1,32 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Shell, PageHeader } from '@/components/Shell';
-import { useApi } from '@/lib/useApi';
-import { api, money, shortDate } from '@/lib/api';
-import { Card, Empty, ErrorBox, Loading, Pill } from '@/components/ui';
-import { DataTable } from '@/components/DataTable';
-import { useFeedback } from '@/components/Feedback';
+import { useState } from "react";
+import { Shell, PageHeader } from "@/components/Shell";
+import { useApi } from "@/lib/useApi";
+import { api, money, shortDate } from "@/lib/api";
+import { Card, Empty, ErrorBox, Loading, Pill } from "@/components/ui";
+import { DataTable } from "@/components/DataTable";
+import { useFeedback } from "@/components/Feedback";
 
-const LIST_TYPES = ['RETAIL', 'WHOLESALE', 'INSURANCE', 'CONTRACT', 'PROMOTIONAL'];
+const LIST_TYPES = [
+  "RETAIL",
+  "WHOLESALE",
+  "INSURANCE",
+  "CONTRACT",
+  "PROMOTIONAL",
+];
 
-const TYPE_TONE: Record<string, 'brand' | 'info' | 'warn' | 'neutral'> = {
-  RETAIL: 'brand',
-  WHOLESALE: 'info',
-  INSURANCE: 'info',
-  CONTRACT: 'neutral',
-  PROMOTIONAL: 'warn',
+const TYPE_TONE: Record<string, "brand" | "info" | "warn" | "neutral"> = {
+  RETAIL: "brand",
+  WHOLESALE: "info",
+  INSURANCE: "info",
+  CONTRACT: "neutral",
+  PROMOTIONAL: "warn",
 };
 
 function productLabel(p: any) {
-  if (!p) return '—';
-  return [p.brandName || p.genericName, p.strength].filter(Boolean).join(' ');
+  if (!p) return "—";
+  return [p.brandName || p.genericName, p.strength].filter(Boolean).join(" ");
 }
 
 export default function PricingPage() {
@@ -31,24 +37,32 @@ export default function PricingPage() {
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
   const [addingPrice, setAddingPrice] = useState(false);
-  const [quoteProduct, setQuoteProduct] = useState('');
-  const [quoteQuantity, setQuoteQuantity] = useState('1');
-  const [quoteGroup, setQuoteGroup] = useState('');
+  const [quoteProduct, setQuoteProduct] = useState("");
+  const [quoteQuantity, setQuoteQuantity] = useState("1");
+  const [quoteGroup, setQuoteGroup] = useState("");
   const [quote, setQuote] = useState<any | null>(null);
 
-  const lists = useApi<any[]>('/price-lists', [version]);
-  const groups = useApi<any[]>('/customer-groups', [version]);
-  const detail = useApi<any>(selectedId ? `/price-lists/${selectedId}` : null, [selectedId, version]);
-  const products = useApi<any>('/products?pageSize=200', []);
+  const lists = useApi<any[]>("/price-lists", [version]);
+  const groups = useApi<any[]>("/customer-groups", [version]);
+  const detail = useApi<any>(selectedId ? `/price-lists/${selectedId}` : null, [
+    selectedId,
+    version,
+  ]);
+  const products = useApi<any>("/products?pageSize=200", []);
 
   const productRows: any[] = products.data?.data ?? products.data?.items ?? [];
 
-  async function submit(path: string, body: unknown, done: string, method = 'POST') {
+  async function submit(
+    path: string,
+    body: unknown,
+    done: string,
+    method = "POST",
+  ) {
     setBusy(true);
     setError(null);
     try {
       const result = await api<any>(path, { method, body });
-      toast(done, 'ok');
+      toast(done, "ok");
       setVersion((v) => v + 1);
       return result;
     } catch (e: any) {
@@ -62,18 +76,22 @@ export default function PricingPage() {
   async function createList(form: HTMLFormElement) {
     const f = new FormData(form);
     const created = await submit(
-      '/price-lists',
+      "/price-lists",
       {
-        code: String(f.get('code') || '').trim(),
-        name: String(f.get('name') || '').trim(),
-        listType: f.get('listType'),
-        priority: Number(f.get('priority') || 0),
-        customerGroupId: f.get('customerGroupId') || null,
-        effectiveFrom: f.get('effectiveFrom') ? new Date(String(f.get('effectiveFrom'))).toISOString() : undefined,
-        effectiveTo: f.get('effectiveTo') ? new Date(String(f.get('effectiveTo'))).toISOString() : null,
-        notes: String(f.get('notes') || '') || null,
+        code: String(f.get("code") || "").trim(),
+        name: String(f.get("name") || "").trim(),
+        listType: f.get("listType"),
+        priority: Number(f.get("priority") || 0),
+        customerGroupId: f.get("customerGroupId") || null,
+        effectiveFrom: f.get("effectiveFrom")
+          ? new Date(String(f.get("effectiveFrom"))).toISOString()
+          : undefined,
+        effectiveTo: f.get("effectiveTo")
+          ? new Date(String(f.get("effectiveTo"))).toISOString()
+          : null,
+        notes: String(f.get("notes") || "") || null,
       },
-      'Price list created',
+      "Price list created",
     );
     if (created) {
       setCreating(false);
@@ -87,11 +105,11 @@ export default function PricingPage() {
     const ok = await submit(
       `/price-lists/${selectedId}/items`,
       {
-        productId: f.get('productId'),
-        unitPrice: String(f.get('unitPrice')),
-        minQuantity: String(f.get('minQuantity') || '0'),
+        productId: f.get("productId"),
+        unitPrice: String(f.get("unitPrice")),
+        minQuantity: String(f.get("minQuantity") || "0"),
       },
-      'Price set — a price-history row was written',
+      "Price set — a price-history row was written",
     );
     if (ok) {
       setAddingPrice(false);
@@ -102,12 +120,17 @@ export default function PricingPage() {
   async function removeItem(item: any) {
     const { confirmed } = await confirm({
       title: `Remove the price for ${productLabel(item.product)}?`,
-      body: 'The line is deleted from this list. Prices already charged on past sales are unaffected — they are stored on the sale itself.',
-      confirmLabel: 'Remove',
-      tone: 'danger',
+      body: "The line is deleted from this list. Prices already charged on past sales are unaffected — they are stored on the sale itself.",
+      confirmLabel: "Remove",
+      tone: "danger",
     });
     if (!confirmed) return;
-    await submit(`/price-lists/items/${item.id}`, undefined, 'Price removed', 'DELETE');
+    await submit(
+      `/price-lists/items/${item.id}`,
+      undefined,
+      "Price removed",
+      "DELETE",
+    );
   }
 
   async function toggleList(list: any) {
@@ -115,13 +138,18 @@ export default function PricingPage() {
     const { confirmed } = await confirm({
       title: next ? `Activate ${list.name}?` : `Deactivate ${list.name}?`,
       body: next
-        ? 'Sales made from now on will consider this list.'
-        : 'The list stops applying immediately. Its lines are kept, so it can be switched back on.',
-      confirmLabel: next ? 'Activate' : 'Deactivate',
-      tone: next ? 'primary' : 'danger',
+        ? "Sales made from now on will consider this list."
+        : "The list stops applying immediately. Its lines are kept, so it can be switched back on.",
+      confirmLabel: next ? "Activate" : "Deactivate",
+      tone: next ? "primary" : "danger",
     });
     if (!confirmed) return;
-    await submit(`/price-lists/${list.id}`, { isActive: next }, next ? 'List activated' : 'List deactivated', 'PATCH');
+    await submit(
+      `/price-lists/${list.id}`,
+      { isActive: next },
+      next ? "List activated" : "List deactivated",
+      "PATCH",
+    );
   }
 
   async function runQuote() {
@@ -130,8 +158,8 @@ export default function PricingPage() {
     setError(null);
     setQuote(null);
     try {
-      const result = await api<Record<string, any>>('/price-lists/quote', {
-        method: 'POST',
+      const result = await api<Record<string, any>>("/price-lists/quote", {
+        method: "POST",
         body: {
           productIds: [quoteProduct],
           quantity: Number(quoteQuantity || 1),
@@ -149,15 +177,15 @@ export default function PricingPage() {
   async function createGroup(form: HTMLFormElement) {
     const f = new FormData(form);
     const ok = await submit(
-      '/customer-groups',
+      "/customer-groups",
       {
-        code: String(f.get('code') || '').trim(),
-        name: String(f.get('name') || '').trim(),
-        description: String(f.get('description') || '') || null,
+        code: String(f.get("code") || "").trim(),
+        name: String(f.get("name") || "").trim(),
+        description: String(f.get("description") || "") || null,
         // Stored as a fraction, so 5% is entered as 5 and sent as 0.05.
-        discountPercent: String(Number(f.get('discountPercent') || 0) / 100),
+        discountPercent: String(Number(f.get("discountPercent") || 0) / 100),
       },
-      'Customer group created',
+      "Customer group created",
     );
     if (ok) form.reset();
   }
@@ -168,8 +196,11 @@ export default function PricingPage() {
         title="Pricing"
         subtitle="One authority decides what a product costs. The till, dispensing and invoicing all resolve through these lists — none of them reads a product price directly."
         action={
-          <button className="btn-primary" onClick={() => setCreating((v) => !v)}>
-            {creating ? 'Cancel' : 'New price list'}
+          <button
+            className="btn-primary"
+            onClick={() => setCreating((v) => !v)}
+          >
+            {creating ? "Cancel" : "New price list"}
           </button>
         }
       />
@@ -187,11 +218,21 @@ export default function PricingPage() {
           >
             <label className="text-xs text-ink-muted">
               Code
-              <input name="code" required className="input mt-1" placeholder="WHOLESALE-2026" />
+              <input
+                name="code"
+                required
+                className="input mt-1"
+                placeholder="WHOLESALE-2026"
+              />
             </label>
             <label className="text-xs text-ink-muted">
               Name
-              <input name="name" required className="input mt-1" placeholder="Wholesale 2026" />
+              <input
+                name="name"
+                required
+                className="input mt-1"
+                placeholder="Wholesale 2026"
+              />
             </label>
             <label className="text-xs text-ink-muted">
               Type
@@ -203,7 +244,12 @@ export default function PricingPage() {
             </label>
             <label className="text-xs text-ink-muted">
               Priority (higher wins)
-              <input name="priority" type="number" defaultValue={0} className="input mt-1" />
+              <input
+                name="priority"
+                type="number"
+                defaultValue={0}
+                className="input mt-1"
+              />
             </label>
             <label className="text-xs text-ink-muted">
               Customer group (optional)
@@ -226,7 +272,11 @@ export default function PricingPage() {
             </label>
             <label className="text-xs text-ink-muted md:col-span-2">
               Notes
-              <input name="notes" className="input mt-1" placeholder="Why this list exists" />
+              <input
+                name="notes"
+                className="input mt-1"
+                placeholder="Why this list exists"
+              />
             </label>
             <div className="md:col-span-3">
               <button className="btn-primary" disabled={busy}>
@@ -248,52 +298,73 @@ export default function PricingPage() {
               exportName="price-lists"
               searchPlaceholder="Search price lists"
               selectedKey={selectedId}
-              onRowClick={(l: any) => setSelectedId((s) => (s === l.id ? null : l.id))}
+              onRowClick={(l: any) =>
+                setSelectedId((s) => (s === l.id ? null : l.id))
+              }
               empty="No price list has been created. Until one exists, every sale falls back to the product's own retail price."
               columns={[
-                { key: 'code', label: 'Code', value: (l: any) => l.code },
-                { key: 'name', label: 'Name', value: (l: any) => l.name },
+                { key: "code", label: "Code", value: (l: any) => l.code },
+                { key: "name", label: "Name", value: (l: any) => l.name },
                 {
-                  key: 'listType',
-                  label: 'Type',
+                  key: "listType",
+                  label: "Type",
                   value: (l: any) => l.listType,
-                  render: (l: any) => <Pill tone={TYPE_TONE[l.listType] ?? 'neutral'}>{l.listType}</Pill>,
+                  render: (l: any) => (
+                    <Pill tone={TYPE_TONE[l.listType] ?? "neutral"}>
+                      {l.listType}
+                    </Pill>
+                  ),
                 },
                 {
-                  key: 'scope',
-                  label: 'Scope',
-                  value: (l: any) => l.customerGroup?.name ?? 'Everyone',
+                  key: "scope",
+                  label: "Scope",
+                  value: (l: any) => l.customerGroup?.name ?? "Everyone",
                   render: (l: any) => (
                     <span className="text-xs text-ink-muted">
-                      {l.customerGroup?.name ?? 'Everyone'}
-                      {l.branchId ? ' · one branch' : ''}
+                      {l.customerGroup?.name ?? "Everyone"}
+                      {l.branchId ? " · one branch" : ""}
                     </span>
                   ),
                 },
-                { key: 'priority', label: 'Priority', numeric: true, align: 'right', value: (l: any) => l.priority },
-                { key: 'items', label: 'Lines', numeric: true, align: 'right', value: (l: any) => l._count?.items ?? 0 },
                 {
-                  key: 'window',
-                  label: 'Window',
+                  key: "priority",
+                  label: "Priority",
+                  numeric: true,
+                  align: "right",
+                  value: (l: any) => l.priority,
+                },
+                {
+                  key: "items",
+                  label: "Lines",
+                  numeric: true,
+                  align: "right",
+                  value: (l: any) => l._count?.items ?? 0,
+                },
+                {
+                  key: "window",
+                  label: "Window",
                   optional: true,
                   value: (l: any) => l.effectiveFrom,
                   render: (l: any) => (
                     <span className="text-xs">
-                      {shortDate(l.effectiveFrom)} → {l.effectiveTo ? shortDate(l.effectiveTo) : 'open'}
+                      {shortDate(l.effectiveFrom)} →{" "}
+                      {l.effectiveTo ? shortDate(l.effectiveTo) : "open"}
                     </span>
                   ),
                 },
                 {
-                  key: 'active',
-                  label: 'Status',
-                  value: (l: any) => (l.isActive ? 'Active' : 'Inactive'),
+                  key: "active",
+                  label: "Status",
+                  value: (l: any) => (l.isActive ? "Active" : "Inactive"),
                   render: (l: any) => (
-                    <Pill tone={l.isActive ? 'ok' : 'neutral'}>{l.isActive ? 'Active' : 'Inactive'}</Pill>
+                    <Pill tone={l.isActive ? "ok" : "neutral"}>
+                      {l.isActive ? "Active" : "Inactive"}
+                    </Pill>
                   ),
                 },
                 {
-                  key: 'toggle',
-                  label: '',
+                  key: "toggle",
+                  label: "",
                   render: (l: any) => (
                     <button
                       className="btn-ghost"
@@ -303,7 +374,7 @@ export default function PricingPage() {
                         void toggleList(l);
                       }}
                     >
-                      {l.isActive ? 'Deactivate' : 'Activate'}
+                      {l.isActive ? "Deactivate" : "Activate"}
                     </button>
                   ),
                 },
@@ -314,13 +385,19 @@ export default function PricingPage() {
 
         {selectedId && (
           <Card
-            title={detail.data ? `${detail.data.name} — lines` : 'Lines'}
+            title={detail.data ? `${detail.data.name} — lines` : "Lines"}
             action={
               <div className="flex gap-2">
-                <button className="btn-ghost" onClick={() => setAddingPrice((v) => !v)}>
-                  {addingPrice ? 'Cancel' : 'Add a price'}
+                <button
+                  className="btn-ghost"
+                  onClick={() => setAddingPrice((v) => !v)}
+                >
+                  {addingPrice ? "Cancel" : "Add a price"}
                 </button>
-                <button className="btn-ghost" onClick={() => setSelectedId(null)}>
+                <button
+                  className="btn-ghost"
+                  onClick={() => setSelectedId(null)}
+                >
                   Close
                 </button>
               </div>
@@ -350,19 +427,34 @@ export default function PricingPage() {
                 </label>
                 <label className="text-xs text-ink-muted">
                   Unit price
-                  <input name="unitPrice" required type="number" step="0.0001" min="0" className="input mt-1" />
+                  <input
+                    name="unitPrice"
+                    required
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    className="input mt-1"
+                  />
                 </label>
                 <label className="text-xs text-ink-muted">
                   From quantity
-                  <input name="minQuantity" type="number" step="0.0001" min="0" defaultValue="0" className="input mt-1" />
+                  <input
+                    name="minQuantity"
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    defaultValue="0"
+                    className="input mt-1"
+                  />
                 </label>
                 <div className="md:col-span-4">
                   <button className="btn-primary" disabled={busy}>
                     Set price
                   </button>
                   <span className="ml-3 text-xs text-ink-subtle">
-                    A quantity break applies from that quantity upward; several lines on one product are ranked by the
-                    highest break that still qualifies.
+                    A quantity break applies from that quantity upward; several
+                    lines on one product are ranked by the highest break that
+                    still qualifies.
                   </span>
                 </div>
               </form>
@@ -370,7 +462,9 @@ export default function PricingPage() {
 
             {detail.data &&
               (detail.data.items.length === 0 ? (
-                <Empty>This list has no prices yet, so it never wins a quote.</Empty>
+                <Empty>
+                  This list has no prices yet, so it never wins a quote.
+                </Empty>
               ) : (
                 <DataTable
                   rows={detail.data.items}
@@ -378,43 +472,63 @@ export default function PricingPage() {
                   pageSize={20}
                   exportName={`price-list-${detail.data.code}`}
                   columns={[
-                    { key: 'sku', label: 'SKU', value: (i: any) => i.product?.sku ?? '' },
-                    { key: 'product', label: 'Product', value: (i: any) => productLabel(i.product) },
                     {
-                      key: 'unitPrice',
-                      label: 'Unit price',
-                      numeric: true,
-                      align: 'right',
-                      value: (i: any) => Number(i.unitPrice),
-                      render: (i: any) => money(i.unitPrice, detail.data.currency),
+                      key: "sku",
+                      label: "SKU",
+                      value: (i: any) => i.product?.sku ?? "",
                     },
                     {
-                      key: 'minQuantity',
-                      label: 'From qty',
+                      key: "product",
+                      label: "Product",
+                      value: (i: any) => productLabel(i.product),
+                    },
+                    {
+                      key: "unitPrice",
+                      label: "Unit price",
                       numeric: true,
-                      align: 'right',
+                      align: "right",
+                      value: (i: any) => Number(i.unitPrice),
+                      render: (i: any) =>
+                        money(i.unitPrice, detail.data.currency),
+                    },
+                    {
+                      key: "minQuantity",
+                      label: "From qty",
+                      numeric: true,
+                      align: "right",
                       value: (i: any) => Number(i.minQuantity),
                     },
                     {
-                      key: 'window',
-                      label: 'Own window',
+                      key: "window",
+                      label: "Own window",
                       optional: true,
-                      value: (i: any) => i.effectiveFrom ?? '',
+                      value: (i: any) => i.effectiveFrom ?? "",
                       render: (i: any) =>
                         i.effectiveFrom || i.effectiveTo ? (
                           <span className="text-xs">
-                            {i.effectiveFrom ? shortDate(i.effectiveFrom) : 'list start'} →{' '}
-                            {i.effectiveTo ? shortDate(i.effectiveTo) : 'list end'}
+                            {i.effectiveFrom
+                              ? shortDate(i.effectiveFrom)
+                              : "list start"}{" "}
+                            →{" "}
+                            {i.effectiveTo
+                              ? shortDate(i.effectiveTo)
+                              : "list end"}
                           </span>
                         ) : (
-                          <span className="text-xs text-ink-subtle">Follows the list</span>
+                          <span className="text-xs text-ink-subtle">
+                            Follows the list
+                          </span>
                         ),
                     },
                     {
-                      key: 'remove',
-                      label: '',
+                      key: "remove",
+                      label: "",
                       render: (i: any) => (
-                        <button className="btn-ghost" disabled={busy} onClick={() => void removeItem(i)}>
+                        <button
+                          className="btn-ghost"
+                          disabled={busy}
+                          onClick={() => void removeItem(i)}
+                        >
                           Remove
                         </button>
                       ),
@@ -427,12 +541,17 @@ export default function PricingPage() {
 
         <Card title="Explain a price">
           <p className="mb-3 text-xs text-ink-muted">
-            Resolve a price exactly as the till would, and see every candidate that was considered and why it won or lost.
+            Resolve a price exactly as the till would, and see every candidate
+            that was considered and why it won or lost.
           </p>
           <div className="grid gap-3 md:grid-cols-4">
             <label className="text-xs text-ink-muted md:col-span-2">
               Product
-              <select className="input mt-1" value={quoteProduct} onChange={(e) => setQuoteProduct(e.target.value)}>
+              <select
+                className="input mt-1"
+                value={quoteProduct}
+                onChange={(e) => setQuoteProduct(e.target.value)}
+              >
                 <option value="">Choose a product</option>
                 {productRows.map((p: any) => (
                   <option key={p.id} value={p.id}>
@@ -453,7 +572,11 @@ export default function PricingPage() {
             </label>
             <label className="text-xs text-ink-muted">
               Customer group
-              <select className="input mt-1" value={quoteGroup} onChange={(e) => setQuoteGroup(e.target.value)}>
+              <select
+                className="input mt-1"
+                value={quoteGroup}
+                onChange={(e) => setQuoteGroup(e.target.value)}
+              >
                 <option value="">None</option>
                 {(groups.data ?? []).map((g) => (
                   <option key={g.id} value={g.id}>
@@ -463,20 +586,33 @@ export default function PricingPage() {
               </select>
             </label>
           </div>
-          <button className="btn-primary mt-3" disabled={!quoteProduct || busy} onClick={runQuote}>
+          <button
+            className="btn-primary mt-3"
+            disabled={!quoteProduct || busy}
+            onClick={runQuote}
+          >
             Resolve price
           </button>
 
           {quote && (
             <div className="mt-4 rounded-md border border-surface-border p-3">
               <div className="flex flex-wrap items-baseline gap-3">
-                <span className="text-2xl font-semibold num text-ink">{money(quote.unitPrice, quote.currency)}</span>
-                <Pill tone="info">{quote.source.replace(/_/g, ' ').toLowerCase()}</Pill>
-                {quote.priceListName && <span className="text-sm text-ink-muted">{quote.priceListName}</span>}
+                <span className="text-2xl font-semibold num text-ink">
+                  {money(quote.unitPrice, quote.currency)}
+                </span>
+                <Pill tone="info">
+                  {quote.source.replace(/_/g, " ").toLowerCase()}
+                </Pill>
+                {quote.priceListName && (
+                  <span className="text-sm text-ink-muted">
+                    {quote.priceListName}
+                  </span>
+                )}
               </div>
               <div className="mt-1 text-xs text-ink-subtle">
-                Base {money(quote.basePrice, quote.currency)} · tax rate {(Number(quote.taxRate) * 100).toFixed(2)}% ·
-                group discount {(Number(quote.groupDiscount) * 100).toFixed(2)}%
+                Base {money(quote.basePrice, quote.currency)} · tax rate{" "}
+                {(Number(quote.taxRate) * 100).toFixed(2)}% · group discount{" "}
+                {(Number(quote.groupDiscount) * 100).toFixed(2)}%
               </div>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-ink-muted">
                 {quote.explanation.map((line: string, i: number) => (
@@ -498,15 +634,33 @@ export default function PricingPage() {
           >
             <label className="text-xs text-ink-muted">
               Code
-              <input name="code" required className="input mt-1" placeholder="INSURED" />
+              <input
+                name="code"
+                required
+                className="input mt-1"
+                placeholder="INSURED"
+              />
             </label>
             <label className="text-xs text-ink-muted">
               Name
-              <input name="name" required className="input mt-1" placeholder="Insured patients" />
+              <input
+                name="name"
+                required
+                className="input mt-1"
+                placeholder="Insured patients"
+              />
             </label>
             <label className="text-xs text-ink-muted">
               Standing discount (%)
-              <input name="discountPercent" type="number" step="0.01" min="0" max="100" defaultValue="0" className="input mt-1" />
+              <input
+                name="discountPercent"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                defaultValue="0"
+                className="input mt-1"
+              />
             </label>
             <label className="text-xs text-ink-muted">
               Description
@@ -527,23 +681,40 @@ export default function PricingPage() {
               exportName="customer-groups"
               empty="No customer groups yet."
               columns={[
-                { key: 'code', label: 'Code', value: (g: any) => g.code },
-                { key: 'name', label: 'Name', value: (g: any) => g.name },
+                { key: "code", label: "Code", value: (g: any) => g.code },
+                { key: "name", label: "Name", value: (g: any) => g.name },
                 {
-                  key: 'discount',
-                  label: 'Standing discount',
+                  key: "discount",
+                  label: "Standing discount",
                   numeric: true,
-                  align: 'right',
+                  align: "right",
                   value: (g: any) => Number(g.discountPercent),
-                  render: (g: any) => `${(Number(g.discountPercent) * 100).toFixed(2)}%`,
+                  render: (g: any) =>
+                    `${(Number(g.discountPercent) * 100).toFixed(2)}%`,
                 },
-                { key: 'patients', label: 'Patients', numeric: true, align: 'right', value: (g: any) => g._count?.patients ?? 0 },
-                { key: 'lists', label: 'Price lists', numeric: true, align: 'right', value: (g: any) => g._count?.priceLists ?? 0 },
                 {
-                  key: 'active',
-                  label: 'Status',
-                  value: (g: any) => (g.isActive ? 'Active' : 'Inactive'),
-                  render: (g: any) => <Pill tone={g.isActive ? 'ok' : 'neutral'}>{g.isActive ? 'Active' : 'Inactive'}</Pill>,
+                  key: "patients",
+                  label: "Patients",
+                  numeric: true,
+                  align: "right",
+                  value: (g: any) => g._count?.patients ?? 0,
+                },
+                {
+                  key: "lists",
+                  label: "Price lists",
+                  numeric: true,
+                  align: "right",
+                  value: (g: any) => g._count?.priceLists ?? 0,
+                },
+                {
+                  key: "active",
+                  label: "Status",
+                  value: (g: any) => (g.isActive ? "Active" : "Inactive"),
+                  render: (g: any) => (
+                    <Pill tone={g.isActive ? "ok" : "neutral"}>
+                      {g.isActive ? "Active" : "Inactive"}
+                    </Pill>
+                  ),
                 },
               ]}
             />

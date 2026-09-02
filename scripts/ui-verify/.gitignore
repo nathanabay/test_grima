@@ -1,0 +1,4 @@
+# Screenshots are evidence from one run against one dataset, not source. The
+# findings the run produced are what matters, and they are in the commit
+# message and the report.
+screenshots/

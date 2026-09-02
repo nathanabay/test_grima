@@ -1,12 +1,17 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { Shell, PageHeader } from '@/components/Shell';
-import { useApi } from '@/lib/useApi';
-import { api, money, qty, shortDate, tokenStore } from '@/lib/api';
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
-import { Card as Panel, EmptyState, ErrorState, Stat } from '@/components/primitives';
-import { DataTable } from '@/components/DataTable';
+import { useEffect, useState } from "react";
+import { Shell, PageHeader } from "@/components/Shell";
+import { useApi } from "@/lib/useApi";
+import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
+import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card as Panel,
+  EmptyState,
+  ErrorState,
+  Stat,
+} from "@/components/primitives";
+import { DataTable } from "@/components/DataTable";
 
 interface Line {
   productId: string;
@@ -24,31 +29,33 @@ interface Line {
  * decides what the operator is offered.
  */
 const LOSS_TYPES = [
-  { value: 'SHRINKAGE', label: 'Shrinkage (unexplained)' },
-  { value: 'DAMAGE', label: 'Damage' },
-  { value: 'THEFT', label: 'Theft' },
-  { value: 'MISPLACEMENT', label: 'Misplaced stock' },
-  { value: 'EXPIRY', label: 'Expiry' },
-  { value: 'COUNTING_ERROR', label: 'Counting error' },
-  { value: 'SUPPLIER_SHORTAGE', label: 'Supplier shortage' },
-  { value: 'UNKNOWN', label: 'Unknown' },
+  { value: "SHRINKAGE", label: "Shrinkage (unexplained)" },
+  { value: "DAMAGE", label: "Damage" },
+  { value: "THEFT", label: "Theft" },
+  { value: "MISPLACEMENT", label: "Misplaced stock" },
+  { value: "EXPIRY", label: "Expiry" },
+  { value: "COUNTING_ERROR", label: "Counting error" },
+  { value: "SUPPLIER_SHORTAGE", label: "Supplier shortage" },
+  { value: "UNKNOWN", label: "Unknown" },
 ];
 
 export default function AdjustmentsPage() {
   const [branches, setBranches] = useState<any[]>([]);
-  const [branchId, setBranchId] = useState('');
-  const [warehouseId, setWarehouseId] = useState('');
-  const [reason, setReason] = useState('');
+  const [branchId, setBranchId] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
+  const [reason, setReason] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const org = useApi<any>('/admin/organization');
+  const org = useApi<any>("/admin/organization");
   const ledger = useApi<any>(
-    warehouseId ? `/inventory/ledger?warehouseId=${warehouseId}&pageSize=25` : null,
+    warehouseId
+      ? `/inventory/ledger?warehouseId=${warehouseId}&pageSize=25`
+      : null,
     [warehouseId, message],
   );
 
@@ -62,7 +69,7 @@ export default function AdjustmentsPage() {
     const first = allowed[0];
     if (first) {
       setBranchId(first.id);
-      setWarehouseId(first.warehouses[0]?.id ?? '');
+      setWarehouseId(first.warehouses[0]?.id ?? "");
     }
   }, [org.data]);
 
@@ -86,7 +93,7 @@ export default function AdjustmentsPage() {
 
   function addLine(balance: any) {
     if (!balance.batch) {
-      setError('Only batch-level positions can be adjusted.');
+      setError("Only batch-level positions can be adjusted.");
       return;
     }
     if (lines.some((l) => l.batchId === balance.batch.id)) return;
@@ -97,12 +104,12 @@ export default function AdjustmentsPage() {
         batchId: balance.batch.id,
         label: `${balance.product.genericName} ${balance.product.strength} · ${balance.batch.batchNumber}`,
         onHand: Number(balance.onHand),
-        quantityDelta: '',
-        reason: '',
-        lossType: '',
+        quantityDelta: "",
+        reason: "",
+        lossType: "",
       },
     ]);
-    setSearch('');
+    setSearch("");
     setResults([]);
   }
 
@@ -111,33 +118,36 @@ export default function AdjustmentsPage() {
     setError(null);
     try {
       const payload = lines
-        .filter((l) => l.quantityDelta !== '' && Number(l.quantityDelta) !== 0)
+        .filter((l) => l.quantityDelta !== "" && Number(l.quantityDelta) !== 0)
         .map((l) => ({
           productId: l.productId,
           batchId: l.batchId,
           quantityDelta: Number(l.quantityDelta),
           reason: l.reason || undefined,
           // A positive line is stock found, not a loss, and must carry no type.
-          lossType: Number(l.quantityDelta) < 0 ? l.lossType || undefined : undefined,
+          lossType:
+            Number(l.quantityDelta) < 0 ? l.lossType || undefined : undefined,
         }));
       if (!payload.length) {
-        setError('Enter a non-zero adjustment on at least one line.');
+        setError("Enter a non-zero adjustment on at least one line.");
         return;
       }
-      const unclassified = payload.filter((l) => l.quantityDelta < 0 && !l.lossType);
+      const unclassified = payload.filter(
+        (l) => l.quantityDelta < 0 && !l.lossType,
+      );
       if (unclassified.length) {
         setError(
           `${unclassified.length} write-off line(s) need a loss type before they can be posted.`,
         );
         return;
       }
-      const result = await api('/stock-adjustments', {
-        method: 'POST',
+      const result = await api("/stock-adjustments", {
+        method: "POST",
         body: { warehouseId, branchId, reason, items: payload },
       });
       setMessage(`Adjustment ${result.adjustmentNo} posted to the ledger.`);
       setLines([]);
-      setReason('');
+      setReason("");
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -152,9 +162,15 @@ export default function AdjustmentsPage() {
         subtitle="Adjustments are ledger movements, not edits: the original quantity stays in the history forever."
       />
 
-      {error && <div className="mb-3"><ErrorBox message={error} /></div>}
+      {error && (
+        <div className="mb-3">
+          <ErrorBox message={error} />
+        </div>
+      )}
       {message && (
-        <div className="mb-3 rounded-md border border-ok/30 bg-ok-light px-3 py-2 text-sm text-ok">{message}</div>
+        <div className="mb-3 rounded-md border border-ok/30 bg-ok-light px-3 py-2 text-sm text-ok">
+          {message}
+        </div>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -163,35 +179,51 @@ export default function AdjustmentsPage() {
             <div>
               <label className="label">Branch</label>
               <select
+                aria-label="Branch"
                 className="input"
                 value={branchId}
                 onChange={(e) => {
                   setBranchId(e.target.value);
                   const b = branches.find((x) => x.id === e.target.value);
-                  setWarehouseId(b?.warehouses[0]?.id ?? '');
+                  setWarehouseId(b?.warehouses[0]?.id ?? "");
                   setLines([]);
                 }}
               >
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
               <label className="label">Warehouse</label>
               <select
+                aria-label="Warehouse"
                 className="input"
                 value={warehouseId}
-                onChange={(e) => { setWarehouseId(e.target.value); setLines([]); }}
+                onChange={(e) => {
+                  setWarehouseId(e.target.value);
+                  setLines([]);
+                }}
               >
-                {branches.find((b) => b.id === branchId)?.warehouses.map((w: any) => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
+                {branches
+                  .find((b) => b.id === branchId)
+                  ?.warehouses.map((w: any) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
 
           <div className="mt-3">
-            <label className="label">Reason for the adjustment (required)</label>
+            <label className="label">
+              Reason for the adjustment (required)
+            </label>
             <input
+              aria-label="Reason for the adjustment (required)"
               className="input"
               placeholder="e.g. Breakage during handling, verified by warehouse manager"
               value={reason}
@@ -202,6 +234,7 @@ export default function AdjustmentsPage() {
           <div className="mt-3">
             <label className="label">Find the batch to adjust</label>
             <input
+              aria-label="Find the batch to adjust"
               className="input"
               placeholder="Search product name or SKU"
               value={search}
@@ -219,7 +252,9 @@ export default function AdjustmentsPage() {
                       {b.product.genericName} {b.product.strength}
                     </span>
                     <span className="text-xs text-ink-subtle">
-                      {' '}· {b.batch?.batchNumber ?? 'no batch'} · on hand {qty(b.onHand)}
+                      {" "}
+                      · {b.batch?.batchNumber ?? "no batch"} · on hand{" "}
+                      {qty(b.onHand)}
                     </span>
                   </button>
                 ))}
@@ -229,7 +264,17 @@ export default function AdjustmentsPage() {
 
           {lines.length > 0 && (
             <div className="mt-4">
-              <Table head={['Batch', 'On hand', 'Adjust by', 'New', 'Loss type', 'Line reason', '']}>
+              <Table
+                head={[
+                  "Batch",
+                  "On hand",
+                  "Adjust by",
+                  "New",
+                  "Loss type",
+                  "Line reason",
+                  "",
+                ]}
+              >
                 {lines.map((l, i) => {
                   const delta = Number(l.quantityDelta || 0);
                   return (
@@ -244,12 +289,18 @@ export default function AdjustmentsPage() {
                           value={l.quantityDelta}
                           onChange={(e) =>
                             setLines((p) =>
-                              p.map((x, xi) => (xi === i ? { ...x, quantityDelta: e.target.value } : x)),
+                              p.map((x, xi) =>
+                                xi === i
+                                  ? { ...x, quantityDelta: e.target.value }
+                                  : x,
+                              ),
                             )
                           }
                         />
                       </td>
-                      <td className={`td num ${l.onHand + delta < 0 ? 'text-danger font-medium' : ''}`}>
+                      <td
+                        className={`td num ${l.onHand + delta < 0 ? "text-danger font-medium" : ""}`}
+                      >
                         {qty(l.onHand + delta)}
                       </td>
                       <td className="td">
@@ -260,13 +311,19 @@ export default function AdjustmentsPage() {
                             aria-label={`Loss type for ${l.label}`}
                             onChange={(e) =>
                               setLines((p) =>
-                                p.map((x, xi) => (xi === i ? { ...x, lossType: e.target.value } : x)),
+                                p.map((x, xi) =>
+                                  xi === i
+                                    ? { ...x, lossType: e.target.value }
+                                    : x,
+                                ),
                               )
                             }
                           >
                             <option value="">Select a cause…</option>
                             {LOSS_TYPES.map((t) => (
-                              <option key={t.value} value={t.value}>{t.label}</option>
+                              <option key={t.value} value={t.value}>
+                                {t.label}
+                              </option>
                             ))}
                           </select>
                         ) : (
@@ -278,14 +335,20 @@ export default function AdjustmentsPage() {
                           className="input text-xs"
                           value={l.reason}
                           onChange={(e) =>
-                            setLines((p) => p.map((x, xi) => (xi === i ? { ...x, reason: e.target.value } : x)))
+                            setLines((p) =>
+                              p.map((x, xi) =>
+                                xi === i ? { ...x, reason: e.target.value } : x,
+                              ),
+                            )
                           }
                         />
                       </td>
                       <td className="td">
                         <button
                           className="btn-ghost text-xs"
-                          onClick={() => setLines((p) => p.filter((_, xi) => xi !== i))}
+                          onClick={() =>
+                            setLines((p) => p.filter((_, xi) => xi !== i))
+                          }
                         >
                           Remove
                         </button>
@@ -295,10 +358,12 @@ export default function AdjustmentsPage() {
                 })}
               </Table>
 
-              {lines.some((l) => l.onHand + Number(l.quantityDelta || 0) < 0) && (
+              {lines.some(
+                (l) => l.onHand + Number(l.quantityDelta || 0) < 0,
+              ) && (
                 <p className="mt-2 text-xs text-danger">
-                  A negative result will be refused by the ledger unless negative stock is enabled
-                  for this organization.
+                  A negative result will be refused by the ledger unless
+                  negative stock is enabled for this organization.
                 </p>
               )}
 
@@ -307,10 +372,12 @@ export default function AdjustmentsPage() {
                 disabled={busy || !reason.trim()}
                 onClick={submit}
               >
-                {busy ? 'Posting...' : 'Post adjustment'}
+                {busy ? "Posting..." : "Post adjustment"}
               </button>
               {!reason.trim() && (
-                <p className="mt-1 text-xs text-ink-subtle">A reason is required before posting.</p>
+                <p className="mt-1 text-xs text-ink-subtle">
+                  A reason is required before posting.
+                </p>
               )}
             </div>
           )}
@@ -319,33 +386,49 @@ export default function AdjustmentsPage() {
         <Card title="Recent ledger movements">
           {ledger.loading && <Loading />}
           {ledger.data?.data?.length ? (
-            <Table head={['When', 'Type', 'Product', 'In', 'Out', 'Balance', 'Reference']}>
+            <Table
+              head={[
+                "When",
+                "Type",
+                "Product",
+                "In",
+                "Out",
+                "Balance",
+                "Reference",
+              ]}
+            >
               {ledger.data.data.map((t: any) => (
                 <tr key={t.id}>
-                  <td className="td text-xs text-ink-muted">{shortDate(t.occurredAt)}</td>
+                  <td className="td text-xs text-ink-muted">
+                    {shortDate(t.occurredAt)}
+                  </td>
                   <td className="td">
                     <Pill
                       tone={
-                        t.type === 'ADJUSTMENT' || t.type === 'STOCK_COUNT'
-                          ? 'warn'
-                          : t.type === 'PURCHASE_RECEIPT'
-                            ? 'ok'
-                            : 'neutral'
+                        t.type === "ADJUSTMENT" || t.type === "STOCK_COUNT"
+                          ? "warn"
+                          : t.type === "PURCHASE_RECEIPT"
+                            ? "ok"
+                            : "neutral"
                       }
                     >
-                      {t.type.replace(/_/g, ' ')}
+                      {t.type.replace(/_/g, " ")}
                     </Pill>
                   </td>
                   <td className="td text-xs">{t.product.genericName}</td>
-                  <td className="td num">{Number(t.quantityIn) || ''}</td>
-                  <td className="td num">{Number(t.quantityOut) || ''}</td>
+                  <td className="td num">{Number(t.quantityIn) || ""}</td>
+                  <td className="td num">{Number(t.quantityOut) || ""}</td>
                   <td className="td num font-medium">{qty(t.balanceAfter)}</td>
-                  <td className="td text-xs text-ink-muted">{t.referenceNo ?? '-'}</td>
+                  <td className="td text-xs text-ink-muted">
+                    {t.referenceNo ?? "-"}
+                  </td>
                 </tr>
               ))}
             </Table>
           ) : (
-            !ledger.loading && <Empty>No movements recorded in this warehouse.</Empty>
+            !ledger.loading && (
+              <Empty>No movements recorded in this warehouse.</Empty>
+            )
           )}
         </Card>
       </div>
@@ -363,12 +446,18 @@ export default function AdjustmentsPage() {
  * unclassified pile is shown as its own row rather than hidden, because its
  * size is itself the finding.
  */
-function LossAnalysis({ warehouseId, refreshKey }: { warehouseId: string; refreshKey: string | null }) {
+function LossAnalysis({
+  warehouseId,
+  refreshKey,
+}: {
+  warehouseId: string;
+  refreshKey: string | null;
+}) {
   const [days, setDays] = useState(90);
 
   const from = new Date(Date.now() - days * 86_400_000).toISOString();
   const query = new URLSearchParams({ from });
-  if (warehouseId) query.set('warehouseId', warehouseId);
+  if (warehouseId) query.set("warehouseId", warehouseId);
 
   const { data, error, loading, refresh } = useApi<any>(
     `/stock-adjustments/loss-analysis?${query}`,
@@ -386,13 +475,27 @@ function LossAnalysis({ warehouseId, refreshKey }: { warehouseId: string; refres
       {data && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Stat label="Value written off" value={money(data.totalValue)}
-              tone={Number(data.totalValue) > 0 ? 'danger' : 'ok'} sub={`Last ${days} days`} />
-            <Stat label="Write-off lines" value={data.totalLines} sub="Negative adjustment lines" />
+            <Stat
+              label="Value written off"
+              value={money(data.totalValue)}
+              tone={Number(data.totalValue) > 0 ? "danger" : "ok"}
+              sub={`Last ${days} days`}
+            />
+            <Stat
+              label="Write-off lines"
+              value={data.totalLines}
+              sub="Negative adjustment lines"
+            />
             <Stat
               label="Unclassified"
-              value={money(byType.find((t) => t.lossType === 'UNCLASSIFIED')?.value ?? 0)}
-              tone={byType.some((t) => t.lossType === 'UNCLASSIFIED') ? 'warn' : 'ok'}
+              value={money(
+                byType.find((t) => t.lossType === "UNCLASSIFIED")?.value ?? 0,
+              )}
+              tone={
+                byType.some((t) => t.lossType === "UNCLASSIFIED")
+                  ? "warn"
+                  : "ok"
+              }
               sub="Recorded before a cause was required"
             />
           </div>
@@ -401,17 +504,27 @@ function LossAnalysis({ warehouseId, refreshKey }: { warehouseId: string; refres
             title="Loss by cause"
             description="Classification is what turns a shortfall into an action: breakage points at handling, theft at access control, expiry at ordering."
             action={
-              <select className="input w-auto py-1 text-small" aria-label="Period"
-                value={days} onChange={(e) => setDays(Number(e.target.value))}>
-                {[30, 90, 180, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}
+              <select
+                className="input w-auto py-1 text-small"
+                aria-label="Period"
+                value={days}
+                onChange={(e) => setDays(Number(e.target.value))}
+              >
+                {[30, 90, 180, 365].map((d) => (
+                  <option key={d} value={d}>
+                    Last {d} days
+                  </option>
+                ))}
               </select>
             }
             padded={false}
           >
             <div className="p-4">
               {byType.length === 0 ? (
-                <EmptyState title="Nothing has been written off in this period"
-                  body="Write-offs recorded through this screen or through a stock count appear here." />
+                <EmptyState
+                  title="Nothing has been written off in this period"
+                  body="Write-offs recorded through this screen or through a stock count appear here."
+                />
               ) : (
                 <DataTable
                   rows={byType}
@@ -419,17 +532,47 @@ function LossAnalysis({ warehouseId, refreshKey }: { warehouseId: string; refres
                   pageSize={10}
                   exportName="loss-by-cause"
                   searchPlaceholder="Search cause"
-                  rowTone={(r: any) => (r.lossType === 'THEFT' ? 'danger' : null)}
+                  rowTone={(r: any) =>
+                    r.lossType === "THEFT" ? "danger" : null
+                  }
                   columns={[
-                    { key: 'lossType', label: 'Cause', value: (r: any) => r.lossType,
-                      render: (r: any) => r.lossType.replace(/_/g, ' ').toLowerCase().replace(/^./, (c: string) => c.toUpperCase()) },
-                    { key: 'lines', label: 'Lines', numeric: true, value: (r: any) => r.lines },
-                    { key: 'quantity', label: 'Quantity', numeric: true, value: (r: any) => Number(r.quantity),
-                      render: (r: any) => qty(r.quantity) },
-                    { key: 'value', label: 'Value', numeric: true, value: (r: any) => Number(r.value),
-                      render: (r: any) => money(r.value) },
-                    { key: 'share', label: 'Share', numeric: true, value: (r: any) => Number(r.sharePercent),
-                      render: (r: any) => `${r.sharePercent}%` },
+                    {
+                      key: "lossType",
+                      label: "Cause",
+                      value: (r: any) => r.lossType,
+                      render: (r: any) =>
+                        r.lossType
+                          .replace(/_/g, " ")
+                          .toLowerCase()
+                          .replace(/^./, (c: string) => c.toUpperCase()),
+                    },
+                    {
+                      key: "lines",
+                      label: "Lines",
+                      numeric: true,
+                      value: (r: any) => r.lines,
+                    },
+                    {
+                      key: "quantity",
+                      label: "Quantity",
+                      numeric: true,
+                      value: (r: any) => Number(r.quantity),
+                      render: (r: any) => qty(r.quantity),
+                    },
+                    {
+                      key: "value",
+                      label: "Value",
+                      numeric: true,
+                      value: (r: any) => Number(r.value),
+                      render: (r: any) => money(r.value),
+                    },
+                    {
+                      key: "share",
+                      label: "Share",
+                      numeric: true,
+                      value: (r: any) => Number(r.sharePercent),
+                      render: (r: any) => `${r.sharePercent}%`,
+                    },
                   ]}
                 />
               )}
@@ -446,12 +589,26 @@ function LossAnalysis({ warehouseId, refreshKey }: { warehouseId: string; refres
                   exportName="loss-by-product"
                   searchPlaceholder="Search product"
                   columns={[
-                    { key: 'sku', label: 'SKU', value: (r: any) => r.sku },
-                    { key: 'name', label: 'Product', value: (r: any) => r.name },
-                    { key: 'quantity', label: 'Quantity', numeric: true, value: (r: any) => Number(r.quantity),
-                      render: (r: any) => qty(r.quantity) },
-                    { key: 'value', label: 'Value', numeric: true, value: (r: any) => Number(r.value),
-                      render: (r: any) => money(r.value) },
+                    { key: "sku", label: "SKU", value: (r: any) => r.sku },
+                    {
+                      key: "name",
+                      label: "Product",
+                      value: (r: any) => r.name,
+                    },
+                    {
+                      key: "quantity",
+                      label: "Quantity",
+                      numeric: true,
+                      value: (r: any) => Number(r.quantity),
+                      render: (r: any) => qty(r.quantity),
+                    },
+                    {
+                      key: "value",
+                      label: "Value",
+                      numeric: true,
+                      value: (r: any) => Number(r.value),
+                      render: (r: any) => money(r.value),
+                    },
                   ]}
                 />
               </div>

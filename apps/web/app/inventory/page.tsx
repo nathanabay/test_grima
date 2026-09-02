@@ -1,18 +1,26 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Shell, PageHeader } from '@/components/Shell';
-import { useApi } from '@/lib/useApi';
-import { money, qty, shortDate } from '@/lib/api';
-import { BatchStatus, Card, Empty, ErrorBox, ExpiryPill, Loading, Table } from '@/components/ui';
+import { useState } from "react";
+import { Shell, PageHeader } from "@/components/Shell";
+import { useApi } from "@/lib/useApi";
+import { money, qty, shortDate } from "@/lib/api";
+import {
+  BatchStatus,
+  Card,
+  Empty,
+  ErrorBox,
+  ExpiryPill,
+  Loading,
+  Table,
+} from "@/components/ui";
 
 export default function InventoryPage() {
-  const [search, setSearch] = useState('');
-  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
 
   const { data, error, loading } = useApi<any>(
-    `/inventory/balances?pageSize=50&page=${page}${query ? `&search=${encodeURIComponent(query)}` : ''}`,
+    `/inventory/balances?pageSize=50&page=${page}${query ? `&search=${encodeURIComponent(query)}` : ""}`,
   );
 
   return (
@@ -43,8 +51,8 @@ export default function InventoryPage() {
               type="button"
               className="btn-ghost"
               onClick={() => {
-                setSearch('');
-                setQuery('');
+                setSearch("");
+                setQuery("");
                 setPage(1);
               }}
             >
@@ -59,10 +67,14 @@ export default function InventoryPage() {
 
       {data && (
         <Card
-          title={`${data.total.toLocaleString()} stock position${data.total === 1 ? '' : 's'}`}
+          title={`${data.total.toLocaleString()} stock position${data.total === 1 ? "" : "s"}`}
           action={
             <div className="flex items-center gap-2 text-sm">
-              <button className="btn-ghost" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+              <button
+                className="btn-ghost"
+                disabled={page === 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
                 Previous
               </button>
               <span className="text-ink-muted">Page {data.page}</span>
@@ -78,7 +90,17 @@ export default function InventoryPage() {
         >
           {data.data.length ? (
             <Table
-              head={['Product', 'Batch', 'Status', 'Expiry', 'On hand', 'Reserved', 'Available', 'Value', 'Location']}
+              head={[
+                "Product",
+                "Batch",
+                "Status",
+                "Expiry",
+                "On hand",
+                "Reserved",
+                "Available",
+                "Value",
+                "Location",
+              ]}
             >
               {data.data.map((row: any) => (
                 <tr key={row.id}>
@@ -87,16 +109,28 @@ export default function InventoryPage() {
                       {row.product.genericName} {row.product.strength}
                     </div>
                     <div className="text-xs text-ink-subtle">
-                      {row.product.brandName ? `${row.product.brandName} · ` : ''}
+                      {row.product.brandName
+                        ? `${row.product.brandName} · `
+                        : ""}
                       {row.product.sku}
-                      {row.product.isControlled && ' · CONTROLLED'}
-                      {row.product.isColdChain && ' · COLD CHAIN'}
+                      {row.product.isControlled && " · CONTROLLED"}
+                      {row.product.isColdChain && " · COLD CHAIN"}
                     </div>
                   </td>
-                  <td className="td text-ink-muted">{row.batch?.batchNumber ?? '-'}</td>
-                  <td className="td">{row.batch ? <BatchStatus status={row.batch.status} /> : '-'}</td>
+                  <td className="td text-ink-muted">
+                    {row.batch?.batchNumber ?? "-"}
+                  </td>
                   <td className="td">
-                    <div className="text-xs text-ink-muted">{shortDate(row.batch?.expiryDate)}</div>
+                    {row.batch ? (
+                      <BatchStatus status={row.batch.status} />
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className="td">
+                    <div className="text-xs text-ink-muted">
+                      {shortDate(row.batch?.expiryDate)}
+                    </div>
                     <ExpiryPill days={row.daysToExpiry} />
                   </td>
                   <td className="td num">{qty(row.onHand)}</td>

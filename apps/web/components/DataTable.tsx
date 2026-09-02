@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
-import { EmptyState } from './primitives';
+import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { EmptyState } from "./primitives";
 
 export interface Column<T> {
   key: string;
@@ -10,7 +10,7 @@ export interface Column<T> {
   value?: (row: T) => string | number | null | undefined;
   /** What is rendered; falls back to the value. */
   render?: (row: T) => ReactNode;
-  align?: 'left' | 'right' | 'center';
+  align?: "left" | "right" | "center";
   numeric?: boolean;
   /** Hidden by default; the reader can turn it on. */
   optional?: boolean;
@@ -24,7 +24,7 @@ export interface Column<T> {
 export interface BulkAction<T> {
   label: string;
   onRun: (rows: T[]) => void | Promise<void>;
-  tone?: 'primary' | 'danger' | 'ghost';
+  tone?: "primary" | "danger" | "ghost";
   /** Hidden when the reader lacks the permission. */
   disabled?: (rows: T[]) => string | null;
 }
@@ -33,7 +33,7 @@ interface SavedView {
   name: string;
   query: string;
   sortKey: string | null;
-  sortDir: 'asc' | 'desc';
+  sortDir: "asc" | "desc";
   hidden: string[];
 }
 
@@ -53,9 +53,9 @@ export function DataTable<T>({
   rows,
   columns,
   getKey,
-  searchPlaceholder = 'Search',
+  searchPlaceholder = "Search",
   pageSize: initialPageSize = 25,
-  empty = 'Nothing to show',
+  empty = "Nothing to show",
   emptyBody,
   exportName,
   onRowClick,
@@ -85,11 +85,11 @@ export function DataTable<T>({
   /** Server-side total, when the screen paginates on the server. */
   total?: number;
   /** Tints a row that needs attention, e.g. expired stock. */
-  rowTone?: (row: T) => 'danger' | 'warn' | null;
+  rowTone?: (row: T) => "danger" | "warn" | null;
 }) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize);
   const [hidden, setHidden] = useState<Set<string>>(
@@ -105,19 +105,20 @@ export function DataTable<T>({
   useEffect(() => {
     if (!storeKey) return;
     try {
-      setViews(JSON.parse(localStorage.getItem(storeKey) ?? '[]'));
+      setViews(JSON.parse(localStorage.getItem(storeKey) ?? "[]"));
     } catch {
       setViews([]);
     }
   }, [storeKey]);
 
-  const valueOf = useCallback(
-    (row: T, column: Column<T>) => {
-      if (column.value) return column.value(row);
-      return (row as Record<string, unknown>)[column.key] as string | number | null | undefined;
-    },
-    [],
-  );
+  const valueOf = useCallback((row: T, column: Column<T>) => {
+    if (column.value) return column.value(row);
+    return (row as Record<string, unknown>)[column.key] as
+      | string
+      | number
+      | null
+      | undefined;
+  }, []);
 
   const visible = columns.filter((c) => !hidden.has(c.key));
   const searchable = visible.filter((c) => !c.action);
@@ -128,7 +129,11 @@ export function DataTable<T>({
     return rows.filter((row) =>
       searchable.some((column) => {
         const value = valueOf(row, column);
-        return value !== null && value !== undefined && String(value).toLowerCase().includes(term);
+        return (
+          value !== null &&
+          value !== undefined &&
+          String(value).toLowerCase().includes(term)
+        );
       }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -145,13 +150,13 @@ export function DataTable<T>({
       if (left === right) return 0;
       // Empty values sort last whichever direction is chosen, so a column of
       // mostly-blank cells does not bury the rows that have data.
-      if (left === null || left === undefined || left === '') return 1;
-      if (right === null || right === undefined || right === '') return -1;
+      if (left === null || left === undefined || left === "") return 1;
+      if (right === null || right === undefined || right === "") return -1;
 
       const comparison = column.numeric
         ? Number(left) - Number(right)
         : String(left).localeCompare(String(right));
-      return sortDir === 'desc' ? -comparison : comparison;
+      return sortDir === "desc" ? -comparison : comparison;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sortKey, sortDir]);
@@ -167,10 +172,10 @@ export function DataTable<T>({
   );
 
   function toggleSort(key: string) {
-    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
-      setSortDir('asc');
+      setSortDir("asc");
     }
     setPage(1);
   }
@@ -184,7 +189,8 @@ export function DataTable<T>({
     });
   }
 
-  const allOnPageChecked = pageRows.length > 0 && pageRows.every((r) => checked.has(getKey(r)));
+  const allOnPageChecked =
+    pageRows.length > 0 && pageRows.every((r) => checked.has(getKey(r)));
 
   function toggleAllOnPage() {
     setChecked((previous) => {
@@ -199,20 +205,26 @@ export function DataTable<T>({
 
   function exportCsv() {
     const escape = (value: unknown) => {
-      const text = value === null || value === undefined ? '' : String(value);
+      const text = value === null || value === undefined ? "" : String(value);
       // Neutralise anything a spreadsheet would run as a formula.
       const guarded = /^[=+\-@]/.test(text) ? `'${text}` : text;
-      return /[",\n]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
+      return /[",\n]/.test(guarded)
+        ? `"${guarded.replace(/"/g, '""')}"`
+        : guarded;
     };
     const cols = visible.filter((c) => !c.action);
     const source = checkedRows.length ? checkedRows : sorted;
     const lines = [
-      cols.map((c) => escape(c.label)).join(','),
-      ...source.map((row) => cols.map((c) => escape(valueOf(row, c))).join(',')),
+      cols.map((c) => escape(c.label)).join(","),
+      ...source.map((row) =>
+        cols.map((c) => escape(valueOf(row, c))).join(","),
+      ),
     ];
-    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([lines.join("\r\n")], {
+      type: "text/csv;charset=utf-8",
+    });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
     link.download = `${exportName}.csv`;
     link.click();
@@ -221,7 +233,7 @@ export function DataTable<T>({
 
   function saveView() {
     if (!storeKey) return;
-    const name = window.prompt('Name this view');
+    const name = window.prompt("Name this view");
     if (!name?.trim()) return;
     const view: SavedView = {
       name: name.trim(),
@@ -232,7 +244,11 @@ export function DataTable<T>({
     };
     const next = [...views.filter((v) => v.name !== view.name), view];
     setViews(next);
-    try { localStorage.setItem(storeKey, JSON.stringify(next)); } catch { /* not fatal */ }
+    try {
+      localStorage.setItem(storeKey, JSON.stringify(next));
+    } catch {
+      /* not fatal */
+    }
   }
 
   function applyView(view: SavedView) {
@@ -254,7 +270,11 @@ export function DataTable<T>({
   }
 
   const align = (c: Column<T>) =>
-    c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
+    c.align === "right"
+      ? "text-right"
+      : c.align === "center"
+        ? "text-center"
+        : "text-left";
 
   return (
     <div>
@@ -276,7 +296,7 @@ export function DataTable<T>({
             {total !== undefined && total > rows.length
               ? `${sorted.length} of ${total.toLocaleString()}`
               : sorted.length === rows.length
-                ? `${rows.length.toLocaleString()} row${rows.length === 1 ? '' : 's'}`
+                ? `${rows.length.toLocaleString()} row${rows.length === 1 ? "" : "s"}`
                 : `${sorted.length.toLocaleString()} of ${rows.length.toLocaleString()}`}
           </span>
 
@@ -294,11 +314,17 @@ export function DataTable<T>({
                 >
                   <option value="">Saved views…</option>
                   {views.map((v) => (
-                    <option key={v.name} value={v.name}>{v.name}</option>
+                    <option key={v.name} value={v.name}>
+                      {v.name}
+                    </option>
                   ))}
                 </select>
               )}
-              <button type="button" className="btn-ghost btn-sm" onClick={saveView}>
+              <button
+                type="button"
+                className="btn-ghost btn-sm"
+                onClick={saveView}
+              >
                 Save view
               </button>
             </>
@@ -316,18 +342,27 @@ export function DataTable<T>({
               </button>
               {showColumns && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowColumns(false)} aria-hidden />
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowColumns(false)}
+                    aria-hidden
+                  />
                   <div className="absolute right-0 z-20 mt-1 max-h-72 w-56 overflow-y-auto rounded-card border border-border bg-surface-raised p-2 shadow-overlay">
-                    {columns.filter((c) => !c.action).map((column) => (
-                      <label key={column.key} className="flex items-center gap-2 px-1 py-1 text-body">
-                        <input
-                          type="checkbox"
-                          checked={!hidden.has(column.key)}
-                          onChange={() => toggleColumn(column.key)}
-                        />
-                        {column.label}
-                      </label>
-                    ))}
+                    {columns
+                      .filter((c) => !c.action)
+                      .map((column) => (
+                        <label
+                          key={column.key}
+                          className="flex items-center gap-2 px-1 py-1 text-body"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hidden.has(column.key)}
+                            onChange={() => toggleColumn(column.key)}
+                          />
+                          {column.label}
+                        </label>
+                      ))}
                   </div>
                 </>
               )}
@@ -335,8 +370,12 @@ export function DataTable<T>({
           )}
 
           {exportName && (
-            <button type="button" className="btn-ghost btn-sm" onClick={exportCsv}>
-              Export{checkedRows.length ? ` (${checkedRows.length})` : ''}
+            <button
+              type="button"
+              className="btn-ghost btn-sm"
+              onClick={exportCsv}
+            >
+              Export{checkedRows.length ? ` (${checkedRows.length})` : ""}
             </button>
           )}
         </div>
@@ -346,15 +385,24 @@ export function DataTable<T>({
       {bulkActions && checkedRows.length > 0 && (
         <div className="mb-2 flex flex-wrap items-center gap-2 rounded border border-brand/30 bg-brand/8 px-3 py-2">
           <span className="text-body text-ink">
-            <span className="num font-medium">{checkedRows.length}</span> selected
+            <span className="num font-medium">{checkedRows.length}</span>{" "}
+            selected
           </span>
-          <button className="btn-quiet btn-sm" onClick={() => setChecked(new Set())}>
+          <button
+            className="btn-quiet btn-sm"
+            onClick={() => setChecked(new Set())}
+          >
             Clear
           </button>
           <div className="ml-auto flex flex-wrap gap-2">
             {bulkActions.map((a) => {
               const why = a.disabled?.(checkedRows) ?? null;
-              const cls = a.tone === 'danger' ? 'btn-danger' : a.tone === 'primary' ? 'btn-primary' : 'btn-ghost';
+              const cls =
+                a.tone === "danger"
+                  ? "btn-danger"
+                  : a.tone === "primary"
+                    ? "btn-primary"
+                    : "btn-ghost";
               return (
                 <button
                   key={a.label}
@@ -373,8 +421,8 @@ export function DataTable<T>({
 
       {sorted.length === 0 ? (
         <EmptyState
-          title={typeof empty === 'string' ? empty : 'Nothing to show'}
-          body={emptyBody ?? (typeof empty === 'string' ? undefined : empty)}
+          title={typeof empty === "string" ? empty : "Nothing to show"}
+          body={emptyBody ?? (typeof empty === "string" ? undefined : empty)}
         />
       ) : (
         <>
@@ -397,12 +445,22 @@ export function DataTable<T>({
                     return (
                       <th
                         key={column.key}
-                        style={column.width ? { width: column.width } : undefined}
-                        className={`th ${align(column)} ${column.sticky ? 'sticky left-0 z-10 bg-surface-sunken' : ''}`}
-                        aria-sort={isSorted ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        style={
+                          column.width ? { width: column.width } : undefined
+                        }
+                        className={`th ${align(column)} ${column.sticky ? "sticky left-0 z-10 bg-surface-sunken" : ""}`}
+                        aria-sort={
+                          isSorted
+                            ? sortDir === "asc"
+                              ? "ascending"
+                              : "descending"
+                            : "none"
+                        }
                       >
                         {column.action ? (
-                          <span className="sr-only">{column.label || 'Actions'}</span>
+                          <span className="sr-only">
+                            {column.label || "Actions"}
+                          </span>
                         ) : (
                           <button
                             type="button"
@@ -410,8 +468,13 @@ export function DataTable<T>({
                             onClick={() => toggleSort(column.key)}
                           >
                             {column.label}
-                            <span aria-hidden className={isSorted ? 'opacity-100' : 'opacity-25'}>
-                              {isSorted && sortDir === 'desc' ? '↓' : '↑'}
+                            <span
+                              aria-hidden
+                              className={
+                                isSorted ? "opacity-100" : "opacity-25"
+                              }
+                            >
+                              {isSorted && sortDir === "desc" ? "↓" : "↑"}
                             </span>
                           </button>
                         )}
@@ -429,12 +492,15 @@ export function DataTable<T>({
                     <tr
                       key={key}
                       onClick={onRowClick ? () => onRowClick(row) : undefined}
-                      className={`${onRowClick ? 'cursor-pointer' : ''}
-                        ${isSelected ? 'bg-brand/10' : ''}
-                        ${tone === 'danger' ? 'bg-danger/[0.06]' : tone === 'warn' ? 'bg-warn/[0.06]' : ''}`}
+                      className={`${onRowClick ? "cursor-pointer" : ""}
+                        ${isSelected ? "bg-brand/10" : ""}
+                        ${tone === "danger" ? "bg-danger/[0.06]" : tone === "warn" ? "bg-warn/[0.06]" : ""}`}
                     >
                       {bulkActions && (
-                        <td className="td w-9" onClick={(e) => e.stopPropagation()}>
+                        <td
+                          className="td w-9"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <input
                             type="checkbox"
                             checked={checked.has(key)}
@@ -453,10 +519,12 @@ export function DataTable<T>({
                       {visible.map((column) => (
                         <td
                           key={column.key}
-                          className={`td ${align(column)} ${column.numeric ? 'num' : ''}
-                            ${column.sticky ? 'sticky left-0 bg-surface' : ''}`}
+                          className={`td ${align(column)} ${column.numeric ? "num" : ""}
+                            ${column.sticky ? "sticky left-0 bg-surface" : ""}`}
                         >
-                          {column.render ? column.render(row) : (valueOf(row, column) ?? '—')}
+                          {column.render
+                            ? column.render(row)
+                            : (valueOf(row, column) ?? "—")}
                         </td>
                       ))}
                     </tr>
@@ -481,7 +549,9 @@ export function DataTable<T>({
                     aria-label="Rows per page"
                   >
                     {[25, 50, 100, 250].map((n) => (
-                      <option key={n} value={n}>{n}</option>
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
                     ))}
                   </select>
                 </label>

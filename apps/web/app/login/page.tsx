@@ -1,26 +1,26 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { login } from '@/lib/api';
-import { ErrorBox } from '@/components/ui';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { login } from "@/lib/api";
+import { ErrorBox } from "@/components/ui";
 
 const DEMO_ACCOUNTS = [
-  ['admin', 'Super Administrator'],
-  ['manager', 'Pharmacy Administrator'],
-  ['pharmacist', 'Pharmacist'],
-  ['procurement', 'Procurement Officer'],
-  ['warehouse', 'Warehouse Manager'],
-  ['cashier', 'Cashier'],
-  ['qa', 'QA Officer'],
-  ['auditor', 'Auditor (read-only)'],
+  ["admin", "Super Administrator"],
+  ["manager", "Pharmacy Administrator"],
+  ["pharmacist", "Pharmacist"],
+  ["procurement", "Procurement Officer"],
+  ["warehouse", "Warehouse Manager"],
+  ["cashier", "Cashier"],
+  ["qa", "QA Officer"],
+  ["auditor", "Auditor (read-only)"],
 ];
 
 export default function LoginPage() {
   const router = useRouter();
-  const [identifier, setIdentifier] = useState('admin');
-  const [password, setPassword] = useState('PharmaCore#2026');
-  const [mfaCode, setMfaCode] = useState('');
+  const [identifier, setIdentifier] = useState("admin");
+  const [password, setPassword] = useState("PharmaCore#2026");
+  const [mfaCode, setMfaCode] = useState("");
   const [mfaRequired, setMfaRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -31,13 +31,13 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(identifier, password, mfaCode || undefined);
-      router.replace('/dashboard');
+      router.replace("/dashboard");
     } catch (err: any) {
       if (err.body?.error?.mfaRequired || err.body?.mfaRequired) {
         setMfaRequired(true);
-        setError('Enter the code from your authenticator app.');
+        setError("Enter the code from your authenticator app.");
       } else {
-        setError(err.message ?? 'Sign-in failed');
+        setError(err.message ?? "Sign-in failed");
       }
     } finally {
       setBusy(false);
@@ -48,7 +48,9 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="text-2xl font-semibold text-brand-dark">PharmaCore</div>
+          <div className="text-2xl font-semibold text-brand-dark">
+            PharmaCore
+          </div>
           <p className="mt-1 text-sm text-ink-muted">
             Enterprise Pharmacy Inventory &amp; Management
           </p>
@@ -103,7 +105,7 @@ export default function LoginPage() {
           )}
 
           <button className="btn-primary w-full" disabled={busy}>
-            {busy ? 'Signing in...' : 'Sign in'}
+            {busy ? "Signing in..." : "Sign in"}
           </button>
         </form>
 
@@ -112,8 +114,11 @@ export default function LoginPage() {
             Demo accounts
           </div>
           <p className="mt-1 mb-2 text-xs text-ink-subtle">
-            All use the password <code className="rounded bg-surface-sunken px-1">PharmaCore#2026</code>.
-            Each role sees a different subset of the system.
+            All use the password{" "}
+            <code className="rounded bg-surface-sunken px-1">
+              PharmaCore#2026
+            </code>
+            . Each role sees a different subset of the system.
           </p>
           <div className="grid grid-cols-1 gap-1">
             {DEMO_ACCOUNTS.map(([name, role]) => (

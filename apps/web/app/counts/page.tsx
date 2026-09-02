@@ -1,18 +1,34 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { Shell, PageHeader } from '@/components/Shell';
-import { useApi } from '@/lib/useApi';
-import { api, can, money, qty, tokenStore } from '@/lib/api';
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
+import { useEffect, useState } from "react";
+import { Shell, PageHeader } from "@/components/Shell";
+import { useApi } from "@/lib/useApi";
+import { api, can, money, qty, tokenStore } from "@/lib/api";
+import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
 
 const COUNT_TYPES = [
-  { value: 'WAREHOUSE', label: 'Whole warehouse', hint: 'Every position in the selected warehouse' },
-  { value: 'FULL', label: 'Full inventory', hint: 'Every position across the branch' },
-  { value: 'CATEGORY', label: 'By category', hint: 'One therapeutic category' },
-  { value: 'BIN', label: 'Single bin', hint: 'One storage location' },
-  { value: 'CYCLE', label: 'Cycle count', hint: 'The positions counted longest ago' },
-  { value: 'RANDOM', label: 'Random spot check', hint: 'An unbiased random sample' },
+  {
+    value: "WAREHOUSE",
+    label: "Whole warehouse",
+    hint: "Every position in the selected warehouse",
+  },
+  {
+    value: "FULL",
+    label: "Full inventory",
+    hint: "Every position across the branch",
+  },
+  { value: "CATEGORY", label: "By category", hint: "One therapeutic category" },
+  { value: "BIN", label: "Single bin", hint: "One storage location" },
+  {
+    value: "CYCLE",
+    label: "Cycle count",
+    hint: "The positions counted longest ago",
+  },
+  {
+    value: "RANDOM",
+    label: "Random spot check",
+    hint: "An unbiased random sample",
+  },
 ];
 
 export default function CountsPage() {
@@ -21,11 +37,14 @@ export default function CountsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const user = typeof window !== 'undefined' ? tokenStore.user : null;
-  const canCount = can(user, 'inventory.count.CREATE');
+  const user = typeof window !== "undefined" ? tokenStore.user : null;
+  const canCount = can(user, "inventory.count.CREATE");
 
-  const list = useApi<any>('/stock-counts?pageSize=25');
-  const detail = useApi<any>(selectedId ? `/stock-counts/${selectedId}` : null, [selectedId]);
+  const list = useApi<any>("/stock-counts?pageSize=25");
+  const detail = useApi<any>(
+    selectedId ? `/stock-counts/${selectedId}` : null,
+    [selectedId],
+  );
 
   return (
     <Shell>
@@ -34,16 +53,25 @@ export default function CountsPage() {
         subtitle="Counting never writes stock directly — posting a count produces adjustment movements, so every discrepancy stays in the ledger."
         action={
           canCount && (
-            <button className="btn-primary" onClick={() => setCreating((v) => !v)}>
-              {creating ? 'Cancel' : 'New count'}
+            <button
+              className="btn-primary"
+              onClick={() => setCreating((v) => !v)}
+            >
+              {creating ? "Cancel" : "New count"}
             </button>
           )
         }
       />
 
-      {error && <div className="mb-3"><ErrorBox message={error} /></div>}
+      {error && (
+        <div className="mb-3">
+          <ErrorBox message={error} />
+        </div>
+      )}
       {message && (
-        <div className="mb-3 rounded-md border border-ok/30 bg-ok-light px-3 py-2 text-sm text-ok">{message}</div>
+        <div className="mb-3 rounded-md border border-ok/30 bg-ok-light px-3 py-2 text-sm text-ok">
+          {message}
+        </div>
       )}
 
       {creating && (
@@ -52,30 +80,47 @@ export default function CountsPage() {
             setCreating(false);
             setSelectedId(count.id);
             list.refresh();
-            setMessage(`Count ${count.countNo} opened with ${count.items.length} line(s).`);
+            setMessage(
+              `Count ${count.countNo} opened with ${count.items.length} line(s).`,
+            );
           }}
           onError={setError}
         />
       )}
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-2" title={`${list.data?.total ?? 0} counts`}>
+        <Card
+          className="lg:col-span-2"
+          title={`${list.data?.total ?? 0} counts`}
+        >
           {list.loading && <Loading />}
           {list.data?.data?.length ? (
             <div className="space-y-1">
               {list.data.data.map((c: any) => {
-                const counted = c.items.filter((i: any) => i.countedQty !== null).length;
+                const counted = c.items.filter(
+                  (i: any) => i.countedQty !== null,
+                ).length;
                 return (
                   <button
                     key={c.id}
                     onClick={() => setSelectedId(c.id)}
                     className={`w-full rounded-md border p-2 text-left text-sm ${
-                      selectedId === c.id ? 'border-brand bg-brand-light' : 'border-transparent hover:bg-surface-sunken'
+                      selectedId === c.id
+                        ? "border-brand bg-brand-light"
+                        : "border-transparent hover:bg-surface-sunken"
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{c.countNo}</span>
-                      <Pill tone={c.status === 'CLOSED' ? 'ok' : c.status === 'SUBMITTED' ? 'warn' : 'neutral'}>
+                      <Pill
+                        tone={
+                          c.status === "CLOSED"
+                            ? "ok"
+                            : c.status === "SUBMITTED"
+                              ? "warn"
+                              : "neutral"
+                        }
+                      >
                         {c.status}
                       </Pill>
                     </div>
@@ -92,7 +137,11 @@ export default function CountsPage() {
         </Card>
 
         <div className="lg:col-span-3">
-          {!selectedId && <Card><Empty>Select or open a count.</Empty></Card>}
+          {!selectedId && (
+            <Card>
+              <Empty>Select or open a count.</Empty>
+            </Card>
+          )}
           {detail.loading && <Loading />}
           {detail.data && (
             <CountSheet
@@ -118,18 +167,18 @@ function NewCount({
   onCreated: (c: any) => void;
   onError: (m: string) => void;
 }) {
-  const [countType, setCountType] = useState('WAREHOUSE');
+  const [countType, setCountType] = useState("WAREHOUSE");
   const [branches, setBranches] = useState<any[]>([]);
-  const [branchId, setBranchId] = useState('');
-  const [warehouseId, setWarehouseId] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [locationId, setLocationId] = useState('');
+  const [branchId, setBranchId] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [locationId, setLocationId] = useState("");
   const [sampleSize, setSampleSize] = useState(25);
   const [isBlind, setIsBlind] = useState(false);
   const [freeze, setFreeze] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const org = useApi<any>('/admin/organization');
+  const org = useApi<any>("/admin/organization");
 
   useEffect(() => {
     if (!org.data) return;
@@ -141,7 +190,7 @@ function NewCount({
     const first = allowed[0];
     if (first) {
       setBranchId(first.id);
-      setWarehouseId(first.warehouses[0]?.id ?? '');
+      setWarehouseId(first.warehouses[0]?.id ?? "");
     }
   }, [org.data]);
 
@@ -153,15 +202,17 @@ function NewCount({
     setBusy(true);
     try {
       onCreated(
-        await api('/stock-counts', {
-          method: 'POST',
+        await api("/stock-counts", {
+          method: "POST",
           body: {
             warehouseId,
             branchId,
             countType,
-            categoryId: countType === 'CATEGORY' ? categoryId : undefined,
-            locationId: countType === 'BIN' ? locationId : undefined,
-            sampleSize: ['CYCLE', 'RANDOM'].includes(countType) ? sampleSize : undefined,
+            categoryId: countType === "CATEGORY" ? categoryId : undefined,
+            locationId: countType === "BIN" ? locationId : undefined,
+            sampleSize: ["CYCLE", "RANDOM"].includes(countType)
+              ? sampleSize
+              : undefined,
             isBlind,
             freeze,
           },
@@ -179,9 +230,16 @@ function NewCount({
       <div className="grid gap-3 sm:grid-cols-4">
         <div>
           <label className="label">Type</label>
-          <select className="input" value={countType} onChange={(e) => setCountType(e.target.value)}>
+          <select
+            aria-label="Type"
+            className="input"
+            value={countType}
+            onChange={(e) => setCountType(e.target.value)}
+          >
             {COUNT_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
             ))}
           </select>
           <p className="mt-1 text-xs text-ink-subtle">{chosen?.hint}</p>
@@ -190,45 +248,69 @@ function NewCount({
         <div>
           <label className="label">Branch</label>
           <select
+            aria-label="Branch"
             className="input"
             value={branchId}
             onChange={(e) => {
               setBranchId(e.target.value);
               const b = branches.find((x) => x.id === e.target.value);
-              setWarehouseId(b?.warehouses[0]?.id ?? '');
+              setWarehouseId(b?.warehouses[0]?.id ?? "");
             }}
           >
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
           </select>
         </div>
 
         <div>
           <label className="label">Warehouse</label>
-          <select className="input" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
-            {branch?.warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          <select
+            aria-label="Warehouse"
+            className="input"
+            value={warehouseId}
+            onChange={(e) => setWarehouseId(e.target.value)}
+          >
+            {branch?.warehouses.map((w: any) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
           </select>
         </div>
 
-        {countType === 'CATEGORY' && (
+        {countType === "CATEGORY" && (
           <CategoryPicker value={categoryId} onChange={setCategoryId} />
         )}
 
-        {countType === 'BIN' && (
+        {countType === "BIN" && (
           <div>
             <label className="label">Location</label>
-            <select className="input" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+            <select
+              aria-label="Location"
+              className="input"
+              value={locationId}
+              onChange={(e) => setLocationId(e.target.value)}
+            >
               <option value="">Select a bin</option>
               {(warehouse?.locations ?? [])
-                .filter((l: any) => l.level === 'BIN')
-                .map((l: any) => <option key={l.id} value={l.id}>{l.code} — {l.name}</option>)}
+                .filter((l: any) => l.level === "BIN")
+                .map((l: any) => (
+                  <option key={l.id} value={l.id}>
+                    {l.code} — {l.name}
+                  </option>
+                ))}
             </select>
           </div>
         )}
 
-        {['CYCLE', 'RANDOM'].includes(countType) && (
+        {["CYCLE", "RANDOM"].includes(countType) && (
           <div>
             <label className="label">Sample size</label>
             <input
+              aria-label="Sample size"
               type="number"
               min={1}
               max={500}
@@ -241,28 +323,40 @@ function NewCount({
 
         <div className="sm:col-span-2 lg:col-span-3">
           <fieldset className="rounded-card border border-border p-3">
-            <legend className="px-1 text-caption uppercase text-ink-muted">How the count is run</legend>
+            <legend className="px-1 text-caption uppercase text-ink-muted">
+              How the count is run
+            </legend>
             <label className="flex items-start gap-2 text-small">
-              <input type="checkbox" className="mt-0.5" checked={isBlind}
-                onChange={(e) => setIsBlind(e.target.checked)} />
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={isBlind}
+                onChange={(e) => setIsBlind(e.target.checked)}
+              />
               <span>
                 <span className="text-ink">Blind count</span>
                 <span className="block text-caption text-ink-subtle">
-                  The counter does not see what the system expects. The figures are masked on the
-                  server, not merely hidden here, and are revealed once the sheet is submitted or to
-                  a supervisor who has to judge the variance.
+                  The counter does not see what the system expects. The figures
+                  are masked on the server, not merely hidden here, and are
+                  revealed once the sheet is submitted or to a supervisor who
+                  has to judge the variance.
                 </span>
               </span>
             </label>
             <label className="mt-2 flex items-start gap-2 text-small">
-              <input type="checkbox" className="mt-0.5" checked={freeze}
-                onChange={(e) => setFreeze(e.target.checked)} />
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={freeze}
+                onChange={(e) => setFreeze(e.target.checked)}
+              />
               <span>
                 <span className="text-ink">Freeze the counted stock</span>
                 <span className="block text-caption text-ink-subtle">
-                  No movement may touch these positions until the count is posted or unfrozen, so the
-                  number written on the sheet is still true when it is keyed in. Selling and
-                  dispensing elsewhere in the warehouse is unaffected.
+                  No movement may touch these positions until the count is
+                  posted or unfrozen, so the number written on the sheet is
+                  still true when it is keyed in. Selling and dispensing
+                  elsewhere in the warehouse is unaffected.
                 </span>
               </span>
             </label>
@@ -272,10 +366,15 @@ function NewCount({
         <div className="flex items-end">
           <button
             className="btn-primary w-full"
-            disabled={busy || !warehouseId || (countType === 'CATEGORY' && !categoryId) || (countType === 'BIN' && !locationId)}
+            disabled={
+              busy ||
+              !warehouseId ||
+              (countType === "CATEGORY" && !categoryId) ||
+              (countType === "BIN" && !locationId)
+            }
             onClick={submit}
           >
-            {busy ? 'Opening...' : 'Open count'}
+            {busy ? "Opening..." : "Open count"}
           </button>
         </div>
       </div>
@@ -283,9 +382,15 @@ function NewCount({
   );
 }
 
-function CategoryPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function CategoryPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
   // Categories are derived from the product search, which every role can read.
-  const { data } = useApi<any>('/products?pageSize=200');
+  const { data } = useApi<any>("/products?pageSize=200");
   const categories = new Map<string, string>();
   for (const p of data?.data ?? []) {
     if (p.category) categories.set(p.categoryId, p.category.name);
@@ -293,10 +398,17 @@ function CategoryPicker({ value, onChange }: { value: string; onChange: (v: stri
   return (
     <div>
       <label className="label">Category</label>
-      <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+      <select
+        aria-label="Category"
+        className="input"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
         <option value="">Select a category</option>
         {Array.from(categories.entries()).map(([id, name]) => (
-          <option key={id} value={id}>{name}</option>
+          <option key={id} value={id}>
+            {name}
+          </option>
         ))}
       </select>
     </div>
@@ -316,18 +428,18 @@ function CountSheet({
 }) {
   const [entries, setEntries] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
-  const [scanCode, setScanCode] = useState('');
-  const [scanQty, setScanQty] = useState('');
+  const [scanCode, setScanCode] = useState("");
+  const [scanQty, setScanQty] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const closed = count.status === 'CLOSED';
+  const closed = count.status === "CLOSED";
   const counted = count.items.filter((i: any) => i.countedQty !== null).length;
 
   async function toggleFreeze() {
     setBusy(true);
     try {
       await api(`/stock-counts/${count.id}/freeze`, {
-        method: 'POST',
+        method: "POST",
         body: { freeze: !count.isFrozen },
       });
       onChanged();
@@ -340,13 +452,20 @@ function CountSheet({
 
   async function saveAll() {
     setBusy(true);
-    onError('');
+    onError("");
     try {
       const lines = Object.entries(entries)
-        .filter(([, v]) => v !== '')
-        .map(([itemId, v]) => ({ itemId, countedQty: Number(v), reason: reasons[itemId] }));
+        .filter(([, v]) => v !== "")
+        .map(([itemId, v]) => ({
+          itemId,
+          countedQty: Number(v),
+          reason: reasons[itemId],
+        }));
       if (!lines.length) return;
-      await api(`/stock-counts/${count.id}/record`, { method: 'POST', body: { lines } });
+      await api(`/stock-counts/${count.id}/record`, {
+        method: "POST",
+        body: { lines },
+      });
       setEntries({});
       onChanged();
       onMessage(`${lines.length} line(s) recorded.`);
@@ -359,16 +478,16 @@ function CountSheet({
 
   async function scanLine() {
     setBusy(true);
-    onError('');
+    onError("");
     try {
       await api(`/stock-counts/${count.id}/scan`, {
-        method: 'POST',
+        method: "POST",
         body: { code: scanCode, countedQty: Number(scanQty) },
       });
-      setScanCode('');
-      setScanQty('');
+      setScanCode("");
+      setScanQty("");
       onChanged();
-      onMessage('Counted line recorded from scan.');
+      onMessage("Counted line recorded from scan.");
     } catch (e: any) {
       onError(e.message);
     } finally {
@@ -377,13 +496,20 @@ function CountSheet({
   }
 
   async function post() {
-    if (!window.confirm('Posting writes adjustment movements to the ledger for every variance. Continue?')) return;
+    if (
+      !window.confirm(
+        "Posting writes adjustment movements to the ledger for every variance. Continue?",
+      )
+    )
+      return;
     setBusy(true);
-    onError('');
+    onError("");
     try {
-      await api(`/stock-counts/${count.id}/post`, { method: 'POST' });
+      await api(`/stock-counts/${count.id}/post`, { method: "POST" });
       onChanged();
-      onMessage(`Count ${count.countNo} posted; variances written to the ledger.`);
+      onMessage(
+        `Count ${count.countNo} posted; variances written to the ledger.`,
+      );
     } catch (e: any) {
       onError(e.message);
     } finally {
@@ -404,11 +530,21 @@ function CountSheet({
       action={
         !closed && (
           <div className="flex gap-2">
-            <button className="btn-ghost" disabled={busy} onClick={() => void toggleFreeze()}>
-              {count.isFrozen ? 'Unfreeze stock' : 'Freeze stock'}
+            <button
+              className="btn-ghost"
+              disabled={busy}
+              onClick={() => void toggleFreeze()}
+            >
+              {count.isFrozen ? "Unfreeze stock" : "Freeze stock"}
             </button>
-            <button className="btn-ghost" disabled={busy} onClick={saveAll}>Save entries</button>
-            <button className="btn-primary" disabled={busy || counted < count.items.length} onClick={post}>
+            <button className="btn-ghost" disabled={busy} onClick={saveAll}>
+              Save entries
+            </button>
+            <button
+              className="btn-primary"
+              disabled={busy || counted < count.items.length}
+              onClick={post}
+            >
               Post count
             </button>
           </div>
@@ -417,14 +553,14 @@ function CountSheet({
     >
       {count.isFrozen && (
         <div className="mb-3 rounded-md border border-info/30 bg-info/5 px-3 py-2 text-sm text-info">
-          Stock on this count is frozen. Any movement touching a counted position is refused until
-          the count is posted or unfrozen.
+          Stock on this count is frozen. Any movement touching a counted
+          position is refused until the count is posted or unfrozen.
         </div>
       )}
       {count.blindMasked && (
         <div className="mb-3 rounded-md border border-warn/30 bg-warn-light px-3 py-2 text-sm text-warn">
-          Blind count: the expected quantities are withheld until the sheet is submitted. Record what
-          is physically on the shelf.
+          Blind count: the expected quantities are withheld until the sheet is
+          submitted. Record what is physically on the shelf.
         </div>
       )}
 
@@ -439,9 +575,11 @@ function CountSheet({
               onChange={(e) => setScanCode(e.target.value)}
               onKeyDown={(e) => {
                 // A wedge scanner sends Enter after the code; move to quantity.
-                if (e.key === 'Enter') {
+                if (e.key === "Enter") {
                   e.preventDefault();
-                  (document.getElementById('scan-qty') as HTMLInputElement)?.focus();
+                  (
+                    document.getElementById("scan-qty") as HTMLInputElement
+                  )?.focus();
                 }
               }}
             />
@@ -453,56 +591,93 @@ function CountSheet({
               value={scanQty}
               onChange={(e) => setScanQty(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && scanCode && scanQty) {
+                if (e.key === "Enter" && scanCode && scanQty) {
                   e.preventDefault();
                   void scanLine();
                 }
               }}
             />
-            <button className="btn-ghost" disabled={busy || !scanCode || !scanQty} onClick={scanLine}>
+            <button
+              className="btn-ghost"
+              disabled={busy || !scanCode || !scanQty}
+              onClick={scanLine}
+            >
               Record
             </button>
           </div>
         </div>
       )}
 
-      <Table head={['Product', 'Batch', 'System', 'Counted', 'Variance', 'Value', 'Reason']}>
+      <Table
+        head={[
+          "Product",
+          "Batch",
+          "System",
+          "Counted",
+          "Variance",
+          "Value",
+          "Reason",
+        ]}
+      >
         {count.items.map((i: any) => {
           const variance = Number(i.varianceQty);
-          const entered = entries[i.id] ?? (i.countedQty !== null ? String(i.countedQty) : '');
+          const entered =
+            entries[i.id] ??
+            (i.countedQty !== null ? String(i.countedQty) : "");
           return (
-            <tr key={i.id} className={i.requiresApproval ? 'bg-warn-light' : ''}>
+            <tr
+              key={i.id}
+              className={i.requiresApproval ? "bg-warn-light" : ""}
+            >
               <td className="td text-xs">{i.productId.slice(0, 8)}</td>
-              <td className="td text-xs text-ink-muted">{i.batchId ? i.batchId.slice(0, 8) : '-'}</td>
+              <td className="td text-xs text-ink-muted">
+                {i.batchId ? i.batchId.slice(0, 8) : "-"}
+              </td>
               <td className="td num">
-                {i.systemQty === null ? <span className="text-ink-subtle">hidden</span> : qty(i.systemQty)}
+                {i.systemQty === null ? (
+                  <span className="text-ink-subtle">hidden</span>
+                ) : (
+                  qty(i.systemQty)
+                )}
               </td>
               <td className="td">
                 {closed ? (
-                  <span className="num">{i.countedQty !== null ? qty(i.countedQty) : '-'}</span>
+                  <span className="num">
+                    {i.countedQty !== null ? qty(i.countedQty) : "-"}
+                  </span>
                 ) : (
                   <input
                     className="input w-24 num"
                     type="number"
                     value={entered}
-                    onChange={(e) => setEntries((p) => ({ ...p, [i.id]: e.target.value }))}
+                    onChange={(e) =>
+                      setEntries((p) => ({ ...p, [i.id]: e.target.value }))
+                    }
                   />
                 )}
               </td>
-              <td className={`td num ${variance !== 0 ? 'font-medium text-danger' : 'text-ink-subtle'}`}>
-                {i.countedQty !== null ? qty(variance) : '-'}
+              <td
+                className={`td num ${variance !== 0 ? "font-medium text-danger" : "text-ink-subtle"}`}
+              >
+                {i.countedQty !== null ? qty(variance) : "-"}
               </td>
-              <td className="td num">{i.countedQty !== null ? money(i.varianceValue) : '-'}</td>
+              <td className="td num">
+                {i.countedQty !== null ? money(i.varianceValue) : "-"}
+              </td>
               <td className="td">
                 {i.requiresApproval && !closed ? (
                   <input
                     className="input text-xs"
                     placeholder="Explanation required"
-                    value={reasons[i.id] ?? i.reason ?? ''}
-                    onChange={(e) => setReasons((p) => ({ ...p, [i.id]: e.target.value }))}
+                    value={reasons[i.id] ?? i.reason ?? ""}
+                    onChange={(e) =>
+                      setReasons((p) => ({ ...p, [i.id]: e.target.value }))
+                    }
                   />
                 ) : (
-                  <span className="text-xs text-ink-muted">{i.reason ?? ''}</span>
+                  <span className="text-xs text-ink-muted">
+                    {i.reason ?? ""}
+                  </span>
                 )}
               </td>
             </tr>
@@ -512,8 +687,8 @@ function CountSheet({
 
       {count.items.some((i: any) => i.requiresApproval) && (
         <p className="mt-3 text-xs text-warn">
-          Highlighted lines exceed the variance threshold: they need a written explanation and
-          supervisor approval before the count can be posted.
+          Highlighted lines exceed the variance threshold: they need a written
+          explanation and supervisor approval before the count can be posted.
         </p>
       )}
     </Card>

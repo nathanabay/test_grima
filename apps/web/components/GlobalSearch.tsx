@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
 
 interface Hit {
   type: string;
@@ -24,21 +24,21 @@ interface Result {
 }
 
 const TYPE_LABELS: Record<string, string> = {
-  product: 'Product',
-  batch: 'Batch',
-  serial: 'Serial',
-  supplier: 'Supplier',
-  purchase_order: 'Purchase order',
-  goods_receipt: 'Goods receipt',
-  transfer: 'Transfer',
-  prescription: 'Prescription',
-  patient: 'Patient',
-  sale: 'Sale',
-  invoice: 'Invoice',
-  return: 'Return',
-  recall: 'Recall',
-  incident: 'Incident',
-  user: 'User',
+  product: "Product",
+  batch: "Batch",
+  serial: "Serial",
+  supplier: "Supplier",
+  purchase_order: "Purchase order",
+  goods_receipt: "Goods receipt",
+  transfer: "Transfer",
+  prescription: "Prescription",
+  patient: "Patient",
+  sale: "Sale",
+  invoice: "Invoice",
+  return: "Return",
+  recall: "Recall",
+  incident: "Incident",
+  user: "User",
 };
 
 /**
@@ -49,7 +49,7 @@ const TYPE_LABELS: Record<string, string> = {
  */
 export function GlobalSearch() {
   const router = useRouter();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -65,7 +65,9 @@ export function GlobalSearch() {
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        setResult(await api<Result>(`/search?q=${encodeURIComponent(query)}&limit=5`));
+        setResult(
+          await api<Result>(`/search?q=${encodeURIComponent(query)}&limit=5`),
+        );
         setHighlight(0);
       } catch {
         setResult(null);
@@ -78,31 +80,34 @@ export function GlobalSearch() {
 
   useEffect(() => {
     function onClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
         setOpen(false);
       }
     }
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
   // "/" focuses search from anywhere, the way every other tool does it.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement;
-      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName);
-      if (event.key === '/' && !typing) {
+      const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName);
+      if (event.key === "/" && !typing) {
         event.preventDefault();
-        document.getElementById('global-search')?.focus();
+        document.getElementById("global-search")?.focus();
       }
     }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
   function go(hit: Hit) {
     setOpen(false);
-    setQuery('');
+    setQuery("");
     setResult(null);
     router.push(hit.linkUrl);
   }
@@ -122,15 +127,15 @@ export function GlobalSearch() {
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
-          if (e.key === 'ArrowDown') {
+          if (e.key === "ArrowDown") {
             e.preventDefault();
             setHighlight((h) => Math.min(h + 1, hits.length - 1));
-          } else if (e.key === 'ArrowUp') {
+          } else if (e.key === "ArrowUp") {
             e.preventDefault();
             setHighlight((h) => Math.max(h - 1, 0));
-          } else if (e.key === 'Enter' && hits[highlight]) {
+          } else if (e.key === "Enter" && hits[highlight]) {
             go(hits[highlight]);
-          } else if (e.key === 'Escape') {
+          } else if (e.key === "Escape") {
             setOpen(false);
           }
         }}
@@ -146,7 +151,9 @@ export function GlobalSearch() {
           role="listbox"
           className="absolute z-40 mt-1 max-h-96 w-full overflow-y-auto rounded-md border border-surface-border bg-surface shadow-lg"
         >
-          {loading && <div className="px-3 py-3 text-sm text-ink-muted">Searching…</div>}
+          {loading && (
+            <div className="px-3 py-3 text-sm text-ink-muted">Searching…</div>
+          )}
 
           {!loading && hits.length === 0 && (
             <div className="px-3 py-3 text-sm text-ink-muted">
@@ -155,8 +162,8 @@ export function GlobalSearch() {
                 <div className="mt-1 text-xs text-ink-subtle">
                   {/* Said plainly, so a user who expected a result understands why. */}
                   {result.skipped.length} record type
-                  {result.skipped.length === 1 ? ' was' : 's were'} not searched because your role
-                  does not include them.
+                  {result.skipped.length === 1 ? " was" : "s were"} not searched
+                  because your role does not include them.
                 </div>
               )}
             </div>
@@ -169,7 +176,9 @@ export function GlobalSearch() {
               role="option"
               aria-selected={index === highlight}
               className={`flex w-full items-start gap-3 border-b border-surface-border px-3 py-2 text-left last:border-0 ${
-                index === highlight ? 'bg-brand-light' : 'hover:bg-surface-sunken'
+                index === highlight
+                  ? "bg-brand-light"
+                  : "hover:bg-surface-sunken"
               }`}
               onMouseEnter={() => setHighlight(index)}
               onClick={() => go(hit)}
@@ -178,8 +187,12 @@ export function GlobalSearch() {
                 {TYPE_LABELS[hit.type] ?? hit.type}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-ink">{hit.title}</span>
-                <span className="block truncate text-xs text-ink-muted">{hit.subtitle}</span>
+                <span className="block truncate text-sm text-ink">
+                  {hit.title}
+                </span>
+                <span className="block truncate text-xs text-ink-muted">
+                  {hit.subtitle}
+                </span>
               </span>
               {hit.badge && (
                 <span className="shrink-0 rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] font-medium text-ink-muted">
