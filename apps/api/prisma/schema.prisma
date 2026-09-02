@@ -1,0 +1,1802 @@
+// PharmaCore — Enterprise Pharmacy Inventory & Management System
+// Datasource: PostgreSQL. All primary keys are UUIDs (§47).
+//
+// CONVENTION: actor columns (createdById, approvedById, ...) are plain UUID
+// columns rather than Prisma relations. Adding relations for every audit
+// column would require 80+ back-relation fields on User for no query benefit;
+// referential integrity for actors is enforced at the service layer, and every
+// mutation is mirrored into audit_logs (§42).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  LOCKED
+  DISABLED
+}
+
+enum PermissionAction {
+  CREATE
+  READ
+  EDIT
+  DELETE
+  APPROVE
+  REJECT
+  CANCEL
+  PRINT
+  EXPORT
+  IMPORT
+}
+
+enum BatchStatus {
+  AVAILABLE
+  QUARANTINED
+  RELEASED
+  BLOCKED
+  DAMAGED
+  EXPIRED
+  RECALLED
+  RETURNED
+  DESTROYED
+}
+
+enum TransactionType {
+  PURCHASE_RECEIPT
+  SALE
+  DISPENSING
+  TRANSFER_OUT
+  TRANSFER_IN
+  RETURN_IN
+  RETURN_OUT
+  ADJUSTMENT
+  DAMAGE
+  EXPIRY
+  RECALL
+  DISPOSAL
+  STOCK_COUNT
+  RESERVATION
+  RESERVATION_RELEASE
+}
+
+enum StorageCondition {
+  ROOM_TEMPERATURE
+  COOL
+  REFRIGERATED
+  FROZEN
+  CONTROLLED_ROOM_TEMPERATURE
+}
+
+enum PrescriptionStatus {
+  NEW
+  UNDER_REVIEW
+  APPROVED
+  PARTIALLY_DISPENSED
+  DISPENSED
+  REJECTED
+  CANCELLED
+}
+
+enum DocumentStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+  CLOSED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SUBMITTED
+  PROCUREMENT_REVIEW
+  FINANCE_REVIEW
+  APPROVED
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+  CLOSED
+}
+
+enum TransferStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PICKING
+  DISPATCHED
+  IN_TRANSIT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+enum ReturnType {
+  CUSTOMER
+  SUPPLIER
+  BRANCH
+}
+
+enum ReturnDisposition {
+  PENDING_INSPECTION
+  RESTOCK
+  QUARANTINE
+  RETURN_SUPPLIER
+  DESTROY
+}
+
+enum RecallSeverity {
+  CLASS_I
+  CLASS_II
+  CLASS_III
+}
+
+enum RecallStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum RecallTaskStatus {
+  PENDING
+  IN_PROGRESS
+  RECOVERED
+  NOT_RECOVERABLE
+  CLOSED
+}
+
+enum QuarantineReason {
+  QUALITY_INVESTIGATION
+  DAMAGED_PACKAGING
+  TEMPERATURE_EXCURSION
+  SUSPECTED_COUNTERFEIT
+  RECALL
+  DOCUMENTATION_ISSUE
+  SHORT_SHELF_LIFE
+  REGULATORY_HOLD
+}
+
+enum ExcursionDisposition {
+  PENDING
+  RELEASED
+  QUARANTINED
+  RETURNED
+  DESTROYED
+}
+
+enum QualityIncidentType {
+  DAMAGED_PRODUCT
+  TEMPERATURE_EXCURSION
+  SUSPECTED_COUNTERFEIT
+  SUPPLIER_QUALITY_ISSUE
+  INCORRECT_SHIPMENT
+  PACKAGING_DEFECT
+  RECALL
+  STORAGE_VIOLATION
+}
+
+enum QualityIncidentStatus {
+  REPORTED
+  INVESTIGATING
+  ROOT_CAUSE_IDENTIFIED
+  CORRECTIVE_ACTION
+  PREVENTIVE_ACTION
+  VERIFICATION
+  CLOSED
+}
+
+enum SaleStatus {
+  DRAFT
+  HELD
+  COMPLETED
+  VOIDED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE_MONEY
+  INSURANCE
+  BANK_TRANSFER
+  CREDIT
+}
+
+enum CountType {
+  FULL
+  CYCLE
+  CATEGORY
+  WAREHOUSE
+  BIN
+  RANDOM
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  TELEGRAM
+  WHATSAPP
+  PUSH
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum ValuationMethod {
+  FIFO
+  WEIGHTED_AVERAGE
+}
+
+enum DisposalMethod {
+  INCINERATION
+  RETURN_TO_SUPPLIER
+  LICENSED_WASTE_CONTRACTOR
+  ENCAPSULATION
+  LANDFILL_AUTHORIZED
+}
+
+// ============================================================
+// ORGANIZATION / LOCATIONS (§18, §33)
+// ============================================================
+
+model Organization {
+  id                 String          @id @default(uuid()) @db.Uuid
+  name               String
+  legalName          String?
+  taxId              String?
+  licenseNumber      String?
+  country            String          @default("ET")
+  currency           String          @default("ETB")
+  timezone           String          @default("Africa/Addis_Ababa")
+  dateFormat         String          @default("dd/MM/yyyy")
+  defaultLocale      String          @default("en")
+  logoUrl            String?
+  addressLine        String?
+  city               String?
+  phone              String?
+  email              String?
+  valuationMethod    ValuationMethod @default(WEIGHTED_AVERAGE)
+  allowNegativeStock Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  branches Branch[]
+  settings SystemSetting[]
+
+  @@map("organizations")
+}
+
+model Branch {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  code           String   @unique
+  name           String
+  isHeadOffice   Boolean  @default(false)
+  licenseNumber  String?
+  phone          String?
+  email          String?
+  addressLine    String?
+  city           String?
+  latitude       Float?
+  longitude      Float?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  warehouses   Warehouse[]
+
+  @@index([organizationId])
+  @@map("branches")
+}
+
+model Warehouse {
+  id           String   @id @default(uuid()) @db.Uuid
+  branchId     String   @db.Uuid
+  code         String   @unique
+  name         String
+  isColdRoom   Boolean  @default(false)
+  isQuarantine Boolean  @default(false)
+  minTempC     Decimal? @db.Decimal(6, 2)
+  maxTempC     Decimal? @db.Decimal(6, 2)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  branch    Branch              @relation(fields: [branchId], references: [id])
+  locations WarehouseLocation[]
+  balances  InventoryBalance[]
+  sensors   TemperatureSensor[]
+
+  @@index([branchId])
+  @@map("warehouses")
+}
+
+// Self-referencing hierarchy: Room -> Zone -> Rack -> Shelf -> Bin (§18)
+model WarehouseLocation {
+  id          String   @id @default(uuid()) @db.Uuid
+  warehouseId String   @db.Uuid
+  parentId    String?  @db.Uuid
+  code        String
+  name        String
+  level       String // ROOM | ZONE | RACK | SHELF | BIN
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  warehouse Warehouse           @relation(fields: [warehouseId], references: [id])
+  parent    WarehouseLocation?  @relation("LocationTree", fields: [parentId], references: [id])
+  children  WarehouseLocation[] @relation("LocationTree")
+  balances  InventoryBalance[]
+
+  @@unique([warehouseId, code])
+  @@index([parentId])
+  @@map("warehouse_locations")
+}
+
+// ============================================================
+// USERS / RBAC (§4)
+// ============================================================
+
+model User {
+  id                 String     @id @default(uuid()) @db.Uuid
+  email              String     @unique
+  username           String     @unique
+  phone              String?
+  passwordHash       String
+  fullName           String
+  status             UserStatus @default(ACTIVE)
+  mfaEnabled         Boolean    @default(false)
+  mfaSecret          String?
+  mustChangePassword Boolean    @default(false)
+  passwordChangedAt  DateTime?
+  lastLoginAt        DateTime?
+  failedAttempts     Int        @default(0)
+  lockedUntil        DateTime?
+  licenseNumber      String? // pharmacist registration number
+  homeBranchId       String?    @db.Uuid
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  roles    UserRole[]
+  sessions Session[]
+  scopes   UserScope[]
+
+  @@index([status])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id       String           @id @default(uuid()) @db.Uuid
+  module   String
+  resource String
+  action   PermissionAction
+  code     String           @unique // e.g. inventory.batch.APPROVE
+
+  roles RolePermission[]
+
+  @@unique([module, resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  // Optional constraints (§4): limit an approval to an amount ceiling,
+  // a product category, or an approval level.
+  maxAmount         Decimal? @db.Decimal(18, 4)
+  productCategoryId String?  @db.Uuid
+  approvalLevel     Int?
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+// Branch / warehouse scoping (§4). No rows for a user = organization-wide.
+model UserScope {
+  id          String  @id @default(uuid()) @db.Uuid
+  userId      String  @db.Uuid
+  branchId    String? @db.Uuid
+  warehouseId String? @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, branchId, warehouseId])
+  @@index([userId])
+  @@map("user_scopes")
+}
+
+model Session {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  refreshHash String
+  userAgent   String?
+  ipAddress   String?
+  deviceLabel String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model LoginAttempt {
+  id         String   @id @default(uuid()) @db.Uuid
+  identifier String
+  successful Boolean
+  ipAddress  String?
+  userAgent  String?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([identifier, createdAt])
+  @@map("login_attempts")
+}
+
+// ============================================================
+// PRODUCT / DRUG MASTER (§5, §6)
+// ============================================================
+
+model Manufacturer {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  country   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  products Product[]
+
+  @@map("manufacturers")
+}
+
+model ProductCategory {
+  id       String  @id @default(uuid()) @db.Uuid
+  code     String  @unique
+  name     String
+  parentId String? @db.Uuid
+
+  parent   ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children ProductCategory[] @relation("CategoryTree")
+  products Product[]
+
+  @@map("product_categories")
+}
+
+model Product {
+  id                  String  @id @default(uuid()) @db.Uuid
+  sku                 String  @unique
+  gtin                String? @unique
+  genericName         String
+  brandName           String?
+  activeIngredient    String
+  strength            String
+  dosageForm          String
+  routeOfAdmin        String?
+  manufacturerId      String? @db.Uuid
+  marketingAuthHolder String?
+  countryOfOrigin     String?
+  categoryId          String? @db.Uuid
+  therapeuticClass    String?
+  atcCode             String?
+
+  // Units (§6) — inventory is always kept in baseUnit.
+  baseUnit         String  @default("TABLET")
+  purchaseUnitId   String? @db.Uuid
+  dispensingUnitId String? @db.Uuid
+  packSize         Int     @default(1)
+
+  // Regulatory / handling flags (§5)
+  requiresPrescription      Boolean          @default(false)
+  isControlled              Boolean          @default(false)
+  controlledSchedule        String?
+  isColdChain               Boolean          @default(false)
+  isRefrigerated            Boolean          @default(false)
+  isHazardous               Boolean          @default(false)
+  isHighAlert               Boolean          @default(false)
+  lightSensitive            Boolean          @default(false)
+  humidityRestricted        Boolean          @default(false)
+  storageCondition          StorageCondition @default(ROOM_TEMPERATURE)
+  minTempC                  Decimal?         @db.Decimal(6, 2)
+  maxTempC                  Decimal?         @db.Decimal(6, 2)
+  minShelfLifeDaysOnReceipt Int              @default(180)
+
+  // Planning (§12)
+  reorderLevel        Decimal @default(0) @db.Decimal(18, 4)
+  safetyStock         Decimal @default(0) @db.Decimal(18, 4)
+  maximumStock        Decimal @default(0) @db.Decimal(18, 4)
+  leadTimeDays        Int     @default(14)
+  preferredSupplierId String? @db.Uuid
+
+  // Pricing (§32)
+  purchaseCost     Decimal  @default(0) @db.Decimal(18, 4)
+  averageCost      Decimal  @default(0) @db.Decimal(18, 4)
+  lastPurchaseCost Decimal  @default(0) @db.Decimal(18, 4)
+  retailPrice      Decimal  @default(0) @db.Decimal(18, 4)
+  wholesalePrice   Decimal  @default(0) @db.Decimal(18, 4)
+  insurancePrice   Decimal? @db.Decimal(18, 4)
+  taxRate          Decimal  @default(0) @db.Decimal(6, 4)
+
+  imageUrl       String?
+  patientInfoUrl String?
+  notes          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdById    String?  @db.Uuid
+
+  manufacturer  Manufacturer?          @relation(fields: [manufacturerId], references: [id])
+  category      ProductCategory?       @relation(fields: [categoryId], references: [id])
+  units         ProductUnit[]
+  barcodes      ProductBarcode[]
+  batches       Batch[]
+  balances      InventoryBalance[]
+  transactions  InventoryTransaction[]
+  priceHistory  PriceHistory[]
+  supplierLinks SupplierProduct[]
+
+  @@index([genericName])
+  @@index([brandName])
+  @@index([isControlled])
+  @@index([isActive])
+  @@map("products")
+}
+
+// 1 carton = 20 boxes = 200 strips = 2000 tablets (§6)
+model ProductUnit {
+  id             String  @id @default(uuid()) @db.Uuid
+  productId      String  @db.Uuid
+  code           String // CARTON | BOX | STRIP | TABLET ...
+  name           String
+  factorToBase   Decimal @db.Decimal(18, 6) // how many base units in one of these
+  isBaseUnit     Boolean @default(false)
+  isPurchaseUnit Boolean @default(false)
+  isDispenseUnit Boolean @default(false)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, code])
+  @@map("product_units")
+}
+
+model ProductBarcode {
+  id        String  @id @default(uuid()) @db.Uuid
+  productId String  @db.Uuid
+  barcode   String
+  symbology String  @default("EAN13") // EAN13 | UPC | CODE128 | GS1_DATAMATRIX
+  unitCode  String? // barcode may identify a carton rather than a tablet
+  isPrimary Boolean @default(false)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([barcode, symbology])
+  @@index([productId])
+  @@map("product_barcodes")
+}
+
+model PriceHistory {
+  id            String   @id @default(uuid()) @db.Uuid
+  productId     String   @db.Uuid
+  branchId      String?  @db.Uuid
+  priceType     String // RETAIL | WHOLESALE | INSURANCE | PROMOTIONAL | PURCHASE
+  oldValue      Decimal  @db.Decimal(18, 4)
+  newValue      Decimal  @db.Decimal(18, 4)
+  reason        String?
+  effectiveFrom DateTime @default(now())
+  changedById   String?  @db.Uuid
+  createdAt     DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, createdAt])
+  @@map("price_history")
+}
+
+// ============================================================
+// SUPPLIERS (§13)
+// ============================================================
+
+model Supplier {
+  id                String    @id @default(uuid()) @db.Uuid
+  code              String    @unique
+  companyName       String
+  contactName       String?
+  phone             String?
+  email             String?
+  addressLine       String?
+  city              String?
+  country           String?
+  taxId             String?
+  licenseNumber     String?
+  licenseExpiry     DateTime?
+  paymentTerms      String? // NET30 ...
+  currency          String    @default("ETB")
+  leadTimeDays      Int       @default(14)
+  minimumOrderValue Decimal   @default(0) @db.Decimal(18, 4)
+  bankName          String?
+  bankAccount       String?
+  isActive          Boolean   @default(true)
+  isApproved        Boolean   @default(false)
+
+  // Rolling KPIs (§13), recomputed by the supplier scoring job
+  onTimeDeliveryRate Decimal @default(0) @db.Decimal(6, 4)
+  avgLeadTimeDays    Decimal @default(0) @db.Decimal(8, 2)
+  rejectionRate      Decimal @default(0) @db.Decimal(6, 4)
+  shortShipmentRate  Decimal @default(0) @db.Decimal(6, 4)
+  qualityIncidents   Int     @default(0)
+  returnRate         Decimal @default(0) @db.Decimal(6, 4)
+  supplierScore      Decimal @default(0) @db.Decimal(6, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products       SupplierProduct[]
+  purchaseOrders PurchaseOrder[]
+  quotations     SupplierQuotation[]
+  batches        Batch[]
+
+  @@map("suppliers")
+}
+
+model SupplierProduct {
+  id           String  @id @default(uuid()) @db.Uuid
+  supplierId   String  @db.Uuid
+  productId    String  @db.Uuid
+  supplierSku  String?
+  unitPrice    Decimal @db.Decimal(18, 4)
+  moq          Decimal @default(1) @db.Decimal(18, 4)
+  leadTimeDays Int?
+  isPreferred  Boolean @default(false)
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, productId])
+  @@map("supplier_products")
+}
+
+// ============================================================
+// BATCH / LOT (§7)
+// ============================================================
+
+model Batch {
+  id                String            @id @default(uuid()) @db.Uuid
+  batchNumber       String
+  lotNumber         String?
+  productId         String            @db.Uuid
+  supplierId        String?           @db.Uuid
+  manufacturerName  String?
+  manufacturingDate DateTime?
+  expiryDate        DateTime
+  receivedDate      DateTime          @default(now())
+  receivedQuantity  Decimal           @db.Decimal(18, 4) // in base units
+  purchaseCost      Decimal           @default(0) @db.Decimal(18, 4) // per base unit
+  status            BatchStatus       @default(QUARANTINED)
+  quarantineReason  QuarantineReason?
+  qualityNotes      String?
+  releasedById      String?           @db.Uuid
+  releasedAt        DateTime?
+  supplierInvoiceNo String?
+  purchaseOrderId   String?           @db.Uuid
+  goodsReceiptId    String?           @db.Uuid
+  parentBatchId     String?           @db.Uuid // genealogy: repack / split
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  product      Product   @relation(fields: [productId], references: [id])
+  supplier     Supplier? @relation(fields: [supplierId], references: [id])
+  parentBatch  Batch?    @relation("BatchGenealogy", fields: [parentBatchId], references: [id])
+  childBatches Batch[]   @relation("BatchGenealogy")
+
+  balances     InventoryBalance[]
+  transactions InventoryTransaction[]
+  serials      SerialNumber[]
+  recallLinks  RecallBatch[]
+
+  @@unique([productId, batchNumber])
+  @@index([expiryDate])
+  @@index([status])
+  @@index([productId, status, expiryDate]) // FEFO lookup path (§8)
+  @@map("batches")
+}
+
+model SerialNumber {
+  id        String   @id @default(uuid()) @db.Uuid
+  batchId   String   @db.Uuid
+  serial    String
+  status    String   @default("IN_STOCK") // IN_STOCK | DISPENSED | RECALLED | DESTROYED
+  createdAt DateTime @default(now())
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, serial])
+  @@index([serial])
+  @@map("serial_numbers")
+}
+
+// ============================================================
+// INVENTORY LEDGER (§19, §48)
+// ============================================================
+
+// Immutable. Never updated, never deleted. Balances are reconstructable
+// by summing quantityIn - quantityOut over any slice of this table.
+model InventoryTransaction {
+  id          String          @id @default(uuid()) @db.Uuid
+  occurredAt  DateTime        @default(now())
+  type        TransactionType
+  productId   String          @db.Uuid
+  batchId     String?         @db.Uuid
+  serialId    String?         @db.Uuid
+  warehouseId String          @db.Uuid
+  locationId  String?         @db.Uuid
+  branchId    String          @db.Uuid
+
+  quantityIn   Decimal @default(0) @db.Decimal(18, 4)
+  quantityOut  Decimal @default(0) @db.Decimal(18, 4)
+  balanceAfter Decimal @db.Decimal(18, 4) // running balance for this product+batch+warehouse
+  unitCost     Decimal @default(0) @db.Decimal(18, 4)
+
+  referenceType  String? // PURCHASE_ORDER | GRN | SALE | DISPENSING | TRANSFER | ...
+  referenceId    String? @db.Uuid
+  referenceNo    String?
+  idempotencyKey String? @unique // §48 duplicate protection
+
+  reason        String?
+  performedById String?  @db.Uuid
+  createdAt     DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+  batch   Batch?  @relation(fields: [batchId], references: [id])
+
+  @@index([productId, warehouseId, occurredAt])
+  @@index([batchId])
+  @@index([referenceType, referenceId])
+  @@index([occurredAt])
+  @@map("inventory_transactions")
+}
+
+// Materialized cache of the ledger, kept in the same transaction as the
+// ledger write and guarded by SELECT ... FOR UPDATE (§48).
+model InventoryBalance {
+  id          String  @id @default(uuid()) @db.Uuid
+  productId   String  @db.Uuid
+  batchId     String? @db.Uuid
+  warehouseId String  @db.Uuid
+  locationId  String? @db.Uuid
+  branchId    String  @db.Uuid
+
+  onHand   Decimal @default(0) @db.Decimal(18, 4)
+  reserved Decimal @default(0) @db.Decimal(18, 4)
+  // available = onHand - reserved (computed in queries; never stored stale)
+
+  lastMovementAt DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  product   Product            @relation(fields: [productId], references: [id])
+  batch     Batch?             @relation(fields: [batchId], references: [id])
+  warehouse Warehouse          @relation(fields: [warehouseId], references: [id])
+  location  WarehouseLocation? @relation(fields: [locationId], references: [id])
+
+  @@unique([productId, batchId, warehouseId, locationId])
+  @@index([warehouseId])
+  @@index([branchId])
+  @@index([productId])
+  @@map("inventory_balances")
+}
+
+model StockReservation {
+  id            String    @id @default(uuid()) @db.Uuid
+  productId     String    @db.Uuid
+  batchId       String    @db.Uuid
+  warehouseId   String    @db.Uuid
+  quantity      Decimal   @db.Decimal(18, 4)
+  referenceType String
+  referenceId   String    @db.Uuid
+  expiresAt     DateTime?
+  releasedAt    DateTime?
+  createdById   String?   @db.Uuid
+  createdAt     DateTime  @default(now())
+
+  @@index([referenceType, referenceId])
+  @@index([batchId])
+  @@map("stock_reservations")
+}
+
+// ============================================================
+// PROCUREMENT (§11, §14, §15)
+// ============================================================
+
+model PurchaseRequest {
+  id              String         @id @default(uuid()) @db.Uuid
+  requestNo       String         @unique
+  branchId        String         @db.Uuid
+  status          DocumentStatus @default(DRAFT)
+  requestedById   String?        @db.Uuid
+  department      String?
+  reason          String?
+  requiredBy      DateTime?
+  approvedById    String?        @db.Uuid
+  approvedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  items PurchaseRequestItem[]
+  rfqs  Rfq[]
+
+  @@index([status])
+  @@map("purchase_requests")
+}
+
+model PurchaseRequestItem {
+  id                String  @id @default(uuid()) @db.Uuid
+  purchaseRequestId String  @db.Uuid
+  productId         String  @db.Uuid
+  requestedQty      Decimal @db.Decimal(18, 4)
+  currentStock      Decimal @default(0) @db.Decimal(18, 4)
+  reorderLevel      Decimal @default(0) @db.Decimal(18, 4)
+  forecastDemand    Decimal @default(0) @db.Decimal(18, 4)
+  notes             String?
+
+  request PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_request_items")
+}
+
+model Rfq {
+  id                String         @id @default(uuid()) @db.Uuid
+  rfqNo             String         @unique
+  purchaseRequestId String?        @db.Uuid
+  status            DocumentStatus @default(DRAFT)
+  issuedAt          DateTime?
+  closesAt          DateTime?
+  createdById       String?        @db.Uuid
+  createdAt         DateTime       @default(now())
+
+  request    PurchaseRequest?    @relation(fields: [purchaseRequestId], references: [id])
+  items      RfqItem[]
+  quotations SupplierQuotation[]
+
+  @@map("rfqs")
+}
+
+model RfqItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  rfqId     String  @db.Uuid
+  productId String  @db.Uuid
+  quantity  Decimal @db.Decimal(18, 4)
+
+  rfq Rfq @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+
+  @@map("rfq_items")
+}
+
+model SupplierQuotation {
+  id           String    @id @default(uuid()) @db.Uuid
+  quotationNo  String    @unique
+  rfqId        String    @db.Uuid
+  supplierId   String    @db.Uuid
+  validUntil   DateTime?
+  currency     String    @default("ETB")
+  freightCost  Decimal   @default(0) @db.Decimal(18, 4)
+  discountPct  Decimal   @default(0) @db.Decimal(6, 4)
+  paymentTerms String?
+  deliveryDays Int?
+  // Weighted evaluation result (§14) — never auto-selects on price alone.
+  landedCost   Decimal   @default(0) @db.Decimal(18, 4)
+  score        Decimal   @default(0) @db.Decimal(6, 2)
+  isSelected   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  rfq      Rfq                     @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  supplier Supplier                @relation(fields: [supplierId], references: [id])
+  items    SupplierQuotationItem[]
+
+  @@unique([rfqId, supplierId])
+  @@map("supplier_quotations")
+}
+
+model SupplierQuotationItem {
+  id                   String  @id @default(uuid()) @db.Uuid
+  quotationId          String  @db.Uuid
+  productId            String  @db.Uuid
+  unitPrice            Decimal @db.Decimal(18, 4)
+  taxRate              Decimal @default(0) @db.Decimal(6, 4)
+  discountPct          Decimal @default(0) @db.Decimal(6, 4)
+  moq                  Decimal @default(1) @db.Decimal(18, 4)
+  offeredShelfLifeDays Int?
+
+  quotation SupplierQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@map("supplier_quotation_items")
+}
+
+model PurchaseOrder {
+  id            String              @id @default(uuid()) @db.Uuid
+  poNo          String              @unique
+  supplierId    String              @db.Uuid
+  branchId      String              @db.Uuid
+  warehouseId   String              @db.Uuid
+  quotationId   String?             @db.Uuid
+  status        PurchaseOrderStatus @default(DRAFT)
+  orderDate     DateTime?
+  expectedDate  DateTime?
+  currency      String              @default("ETB")
+  subtotal      Decimal             @default(0) @db.Decimal(18, 4)
+  taxTotal      Decimal             @default(0) @db.Decimal(18, 4)
+  freightCost   Decimal             @default(0) @db.Decimal(18, 4)
+  discountTotal Decimal             @default(0) @db.Decimal(18, 4)
+  grandTotal    Decimal             @default(0) @db.Decimal(18, 4)
+  notes         String?
+  createdById   String?             @db.Uuid
+  approvedById  String?             @db.Uuid
+  approvedAt    DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  supplier Supplier            @relation(fields: [supplierId], references: [id])
+  items    PurchaseOrderItem[]
+  receipts GoodsReceipt[]
+
+  @@index([status])
+  @@index([supplierId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String  @id @default(uuid()) @db.Uuid
+  purchaseOrderId String  @db.Uuid
+  productId       String  @db.Uuid
+  orderedQty      Decimal @db.Decimal(18, 4) // base units
+  receivedQty     Decimal @default(0) @db.Decimal(18, 4)
+  unitPrice       Decimal @db.Decimal(18, 4)
+  taxRate         Decimal @default(0) @db.Decimal(6, 4)
+  discountPct     Decimal @default(0) @db.Decimal(6, 4)
+  lineTotal       Decimal @default(0) @db.Decimal(18, 4)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_order_items")
+}
+
+model GoodsReceipt {
+  id                String         @id @default(uuid()) @db.Uuid
+  grnNo             String         @unique
+  purchaseOrderId   String?        @db.Uuid
+  supplierId        String         @db.Uuid
+  warehouseId       String         @db.Uuid
+  branchId          String         @db.Uuid
+  supplierInvoiceNo String?
+  receivedAt        DateTime       @default(now())
+  status            DocumentStatus @default(DRAFT)
+  receivedById      String?        @db.Uuid
+  inspectedById     String?        @db.Uuid
+  notes             String?
+  createdAt         DateTime       @default(now())
+
+  purchaseOrder PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id])
+  items         GoodsReceiptItem[]
+
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id                String    @id @default(uuid()) @db.Uuid
+  goodsReceiptId    String    @db.Uuid
+  productId         String    @db.Uuid
+  batchId           String?   @db.Uuid
+  batchNumber       String
+  expiryDate        DateTime
+  manufacturingDate DateTime?
+  receivedQty       Decimal   @db.Decimal(18, 4)
+  acceptedQty       Decimal   @default(0) @db.Decimal(18, 4)
+  rejectedQty       Decimal   @default(0) @db.Decimal(18, 4)
+  unitCost          Decimal   @db.Decimal(18, 4)
+  locationId        String?   @db.Uuid
+  // Receiving exceptions raised automatically (§15)
+  flags             String[]  @default([])
+  rejectionReason   String?
+
+  goodsReceipt GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+
+  @@map("goods_receipt_items")
+}
+
+// ============================================================
+// TRANSFERS / COUNTS / ADJUSTMENTS (§20, §21)
+// ============================================================
+
+model StockTransfer {
+  id               String         @id @default(uuid()) @db.Uuid
+  transferNo       String         @unique
+  fromWarehouseId  String         @db.Uuid
+  toWarehouseId    String         @db.Uuid
+  fromBranchId     String         @db.Uuid
+  toBranchId       String         @db.Uuid
+  status           TransferStatus @default(DRAFT)
+  reason           String?
+  requestedById    String?        @db.Uuid
+  approvedById     String?        @db.Uuid
+  dispatchedById   String?        @db.Uuid
+  receivedById     String?        @db.Uuid
+  vehicleOrCourier String?
+  dispatchedAt     DateTime?
+  receivedAt       DateTime?
+  isRecallMovement Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  items StockTransferItem[]
+
+  @@index([status])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  transferId     String  @db.Uuid
+  productId      String  @db.Uuid
+  batchId        String  @db.Uuid
+  requestedQty   Decimal @db.Decimal(18, 4)
+  dispatchedQty  Decimal @default(0) @db.Decimal(18, 4)
+  receivedQty    Decimal @default(0) @db.Decimal(18, 4)
+  varianceReason String?
+
+  transfer StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  @@map("stock_transfer_items")
+}
+
+model StockCount {
+  id           String         @id @default(uuid()) @db.Uuid
+  countNo      String         @unique
+  warehouseId  String         @db.Uuid
+  branchId     String         @db.Uuid
+  countType    CountType      @default(CYCLE)
+  status       DocumentStatus @default(DRAFT)
+  scheduledAt  DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  countedById  String?        @db.Uuid
+  approvedById String?        @db.Uuid
+  createdAt    DateTime       @default(now())
+
+  items StockCountItem[]
+
+  @@map("stock_counts")
+}
+
+model StockCountItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  stockCountId     String   @db.Uuid
+  productId        String   @db.Uuid
+  batchId          String?  @db.Uuid
+  locationId       String?  @db.Uuid
+  systemQty        Decimal  @db.Decimal(18, 4)
+  countedQty       Decimal? @db.Decimal(18, 4)
+  varianceQty      Decimal  @default(0) @db.Decimal(18, 4)
+  varianceValue    Decimal  @default(0) @db.Decimal(18, 4)
+  requiresApproval Boolean  @default(false)
+  reason           String?
+
+  stockCount StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+
+  @@map("stock_count_items")
+}
+
+model StockAdjustment {
+  id           String         @id @default(uuid()) @db.Uuid
+  adjustmentNo String         @unique
+  warehouseId  String         @db.Uuid
+  branchId     String         @db.Uuid
+  status       DocumentStatus @default(DRAFT)
+  reason       String
+  createdById  String?        @db.Uuid
+  approvedById String?        @db.Uuid
+  approvedAt   DateTime?
+  createdAt    DateTime       @default(now())
+
+  items StockAdjustmentItem[]
+
+  @@map("stock_adjustments")
+}
+
+model StockAdjustmentItem {
+  id            String  @id @default(uuid()) @db.Uuid
+  adjustmentId  String  @db.Uuid
+  productId     String  @db.Uuid
+  batchId       String  @db.Uuid
+  quantityDelta Decimal @db.Decimal(18, 4) // signed
+  reason        String?
+
+  adjustment StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+
+  @@map("stock_adjustment_items")
+}
+
+// ============================================================
+// PATIENTS / PRESCRIPTIONS / DISPENSING (§23, §24, §25)
+// ============================================================
+
+model Patient {
+  id                    String    @id @default(uuid()) @db.Uuid
+  patientCode           String    @unique
+  fullName              String
+  dateOfBirth           DateTime?
+  sex                   String?
+  phone                 String?
+  addressLine           String?
+  city                  String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  allergies             String?
+  notes                 String?
+  isActive              Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  prescriptions Prescription[]
+  sales         Sale[]
+
+  @@index([fullName])
+  @@index([phone])
+  @@map("patients")
+}
+
+model Prescription {
+  id                String             @id @default(uuid()) @db.Uuid
+  prescriptionNo    String             @unique
+  patientId         String             @db.Uuid
+  branchId          String             @db.Uuid
+  prescriberName    String
+  prescriberLicense String?
+  facilityName      String?
+  prescriptionDate  DateTime
+  status            PrescriptionStatus @default(NEW)
+  reviewedById      String?            @db.Uuid
+  reviewedAt        DateTime?
+  rejectionReason   String?
+  documentUrl       String?
+  refillsAllowed    Int                @default(0)
+  refillsUsed       Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  patient     Patient            @relation(fields: [patientId], references: [id])
+  items       PrescriptionItem[]
+  dispensings Dispensing[]
+
+  @@index([status])
+  @@index([patientId])
+  @@map("prescriptions")
+}
+
+model PrescriptionItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  prescriptionId String  @db.Uuid
+  productId      String  @db.Uuid
+  strength       String?
+  dosage         String?
+  frequency      String?
+  durationDays   Int?
+  prescribedQty  Decimal @db.Decimal(18, 4)
+  dispensedQty   Decimal @default(0) @db.Decimal(18, 4)
+  instructions   String?
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@map("prescription_items")
+}
+
+model Dispensing {
+  id             String   @id @default(uuid()) @db.Uuid
+  dispensingNo   String   @unique
+  prescriptionId String?  @db.Uuid
+  patientId      String?  @db.Uuid
+  branchId       String   @db.Uuid
+  warehouseId    String   @db.Uuid
+  pharmacistId   String   @db.Uuid
+  dispensedAt    DateTime @default(now())
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  prescription Prescription?    @relation(fields: [prescriptionId], references: [id])
+  items        DispensingItem[]
+
+  @@index([patientId])
+  @@map("dispensings")
+}
+
+model DispensingItem {
+  id                     String  @id @default(uuid()) @db.Uuid
+  dispensingId           String  @db.Uuid
+  productId              String  @db.Uuid
+  batchId                String  @db.Uuid
+  quantity               Decimal @db.Decimal(18, 4)
+  unitPrice              Decimal @default(0) @db.Decimal(18, 4)
+  // FEFO override audit (§8)
+  fefoRecommendedBatchId String? @db.Uuid
+  overrideReason         String?
+  overrideById           String? @db.Uuid
+
+  dispensing Dispensing @relation(fields: [dispensingId], references: [id], onDelete: Cascade)
+
+  @@map("dispensing_items")
+}
+
+// ============================================================
+// SALES / POS / CASH (§22, §46)
+// ============================================================
+
+model CashSession {
+  id             String    @id @default(uuid()) @db.Uuid
+  sessionNo      String    @unique
+  branchId       String    @db.Uuid
+  cashierId      String    @db.Uuid
+  openedAt       DateTime  @default(now())
+  closedAt       DateTime?
+  openingCash    Decimal   @db.Decimal(18, 4)
+  cashSales      Decimal   @default(0) @db.Decimal(18, 4)
+  refunds        Decimal   @default(0) @db.Decimal(18, 4)
+  cashExpenses   Decimal   @default(0) @db.Decimal(18, 4)
+  expectedCash   Decimal   @default(0) @db.Decimal(18, 4)
+  actualCash     Decimal?  @db.Decimal(18, 4)
+  variance       Decimal   @default(0) @db.Decimal(18, 4)
+  varianceReason String?
+  isOpen         Boolean   @default(true)
+
+  sales Sale[]
+
+  @@index([branchId, isOpen])
+  @@map("cash_sessions")
+}
+
+model Sale {
+  id             String     @id @default(uuid()) @db.Uuid
+  saleNo         String     @unique
+  branchId       String     @db.Uuid
+  warehouseId    String     @db.Uuid
+  cashSessionId  String?    @db.Uuid
+  patientId      String?    @db.Uuid
+  prescriptionId String?    @db.Uuid
+  cashierId      String     @db.Uuid
+  status         SaleStatus @default(DRAFT)
+  subtotal       Decimal    @default(0) @db.Decimal(18, 4)
+  discountTotal  Decimal    @default(0) @db.Decimal(18, 4)
+  taxTotal       Decimal    @default(0) @db.Decimal(18, 4)
+  grandTotal     Decimal    @default(0) @db.Decimal(18, 4)
+  costTotal      Decimal    @default(0) @db.Decimal(18, 4) // COGS for margin reporting
+  soldAt         DateTime?
+  voidedAt       DateTime?
+  voidReason     String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id])
+  patient     Patient?     @relation(fields: [patientId], references: [id])
+  items       SaleItem[]
+  payments    Payment[]
+
+  @@index([branchId, soldAt])
+  @@index([status])
+  @@map("sales")
+}
+
+model SaleItem {
+  id                     String  @id @default(uuid()) @db.Uuid
+  saleId                 String  @db.Uuid
+  productId              String  @db.Uuid
+  batchId                String  @db.Uuid
+  quantity               Decimal @db.Decimal(18, 4)
+  unitPrice              Decimal @db.Decimal(18, 4)
+  unitCost               Decimal @default(0) @db.Decimal(18, 4)
+  discountPct            Decimal @default(0) @db.Decimal(6, 4)
+  taxRate                Decimal @default(0) @db.Decimal(6, 4)
+  lineTotal              Decimal @db.Decimal(18, 4)
+  fefoRecommendedBatchId String? @db.Uuid
+  overrideReason         String?
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@map("sale_items")
+}
+
+model Payment {
+  id         String        @id @default(uuid()) @db.Uuid
+  saleId     String        @db.Uuid
+  method     PaymentMethod
+  amount     Decimal       @db.Decimal(18, 4)
+  reference  String?
+  receivedAt DateTime      @default(now())
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// ============================================================
+// RETURNS (§26)
+// ============================================================
+
+model ReturnDocument {
+  id              String         @id @default(uuid()) @db.Uuid
+  returnNo        String         @unique
+  type            ReturnType
+  branchId        String         @db.Uuid
+  warehouseId     String         @db.Uuid
+  saleId          String?        @db.Uuid
+  dispensingId    String?        @db.Uuid
+  purchaseOrderId String?        @db.Uuid
+  supplierId      String?        @db.Uuid
+  patientId       String?        @db.Uuid
+  status          DocumentStatus @default(DRAFT)
+  reason          String
+  createdById     String?        @db.Uuid
+  inspectedById   String?        @db.Uuid
+  inspectedAt     DateTime?
+  createdAt       DateTime       @default(now())
+
+  items ReturnItem[]
+
+  @@map("returns")
+}
+
+model ReturnItem {
+  id               String            @id @default(uuid()) @db.Uuid
+  returnId         String            @db.Uuid
+  productId        String            @db.Uuid
+  batchId          String            @db.Uuid
+  quantity         Decimal           @db.Decimal(18, 4)
+  condition        String? // SEALED | OPENED | DAMAGED | TEMPERATURE_COMPROMISED
+  disposition      ReturnDisposition @default(PENDING_INSPECTION)
+  dispositionNotes String?
+
+  returnDocument ReturnDocument @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@map("return_items")
+}
+
+// ============================================================
+// RECALLS (§27)
+// ============================================================
+
+model Recall {
+  id                  String         @id @default(uuid()) @db.Uuid
+  recallNo            String         @unique
+  productId           String?        @db.Uuid
+  manufacturerName    String?
+  severity            RecallSeverity
+  status              RecallStatus   @default(OPEN)
+  recallDate          DateTime       @default(now())
+  reason              String
+  regulatoryReference String?
+  instructions        String?
+  serialRangeFrom     String?
+  serialRangeTo       String?
+  closedAt            DateTime?
+  createdById         String?        @db.Uuid
+  createdAt           DateTime       @default(now())
+
+  batches RecallBatch[]
+  tasks   RecallTask[]
+
+  @@map("recalls")
+}
+
+model RecallBatch {
+  id       String @id @default(uuid()) @db.Uuid
+  recallId String @db.Uuid
+  batchId  String @db.Uuid
+
+  // Snapshot taken at activation (§27)
+  quantityInStockAtActivation Decimal      @default(0) @db.Decimal(18, 4)
+  quantityDispensedHistorical Decimal      @default(0) @db.Decimal(18, 4)
+  quantityRecovered           Decimal      @default(0) @db.Decimal(18, 4)
+  quantityReturned            Decimal      @default(0) @db.Decimal(18, 4)
+  quantityDestroyed           Decimal      @default(0) @db.Decimal(18, 4)
+  previousBatchStatus         BatchStatus?
+
+  recall Recall @relation(fields: [recallId], references: [id], onDelete: Cascade)
+  batch  Batch  @relation(fields: [batchId], references: [id])
+
+  @@unique([recallId, batchId])
+  @@map("recall_batches")
+}
+
+model RecallTask {
+  id                String           @id @default(uuid()) @db.Uuid
+  recallId          String           @db.Uuid
+  batchId           String           @db.Uuid
+  branchId          String           @db.Uuid
+  warehouseId       String?          @db.Uuid
+  // Either a stock-holding task or a patient-notification task
+  taskType          String // BLOCK_STOCK | NOTIFY_PATIENT | RETURN_TO_SUPPLIER | DESTROY
+  patientId         String?          @db.Uuid
+  dispensingId      String?          @db.Uuid
+  quantity          Decimal          @default(0) @db.Decimal(18, 4)
+  quantityRecovered Decimal          @default(0) @db.Decimal(18, 4)
+  status            RecallTaskStatus @default(PENDING)
+  assignedToId      String?          @db.Uuid
+  notes             String?
+  completedAt       DateTime?
+  createdAt         DateTime         @default(now())
+
+  recall Recall @relation(fields: [recallId], references: [id], onDelete: Cascade)
+
+  @@index([recallId, status])
+  @@map("recall_tasks")
+}
+
+// ============================================================
+// COLD CHAIN / QUALITY / DISPOSAL (§29, §30, §31, §64)
+// ============================================================
+
+model TemperatureSensor {
+  id                  String    @id @default(uuid()) @db.Uuid
+  code                String    @unique
+  name                String
+  warehouseId         String    @db.Uuid
+  locationId          String?   @db.Uuid
+  minTempC            Decimal   @db.Decimal(6, 2)
+  maxTempC            Decimal   @db.Decimal(6, 2)
+  maxExcursionMinutes Int       @default(15)
+  isActive            Boolean   @default(true)
+  lastReadingAt       DateTime?
+  createdAt           DateTime  @default(now())
+
+  warehouse  Warehouse              @relation(fields: [warehouseId], references: [id])
+  logs       TemperatureLog[]
+  excursions TemperatureExcursion[]
+
+  @@map("temperature_sensors")
+}
+
+model TemperatureLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  sensorId    String   @db.Uuid
+  temperature Decimal  @db.Decimal(6, 2)
+  humidity    Decimal? @db.Decimal(6, 2)
+  recordedAt  DateTime @default(now())
+  isBreach    Boolean  @default(false)
+
+  sensor TemperatureSensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+
+  @@index([sensorId, recordedAt])
+  @@map("temperature_logs")
+}
+
+model TemperatureExcursion {
+  id               String               @id @default(uuid()) @db.Uuid
+  excursionNo      String               @unique
+  sensorId         String               @db.Uuid
+  startedAt        DateTime
+  endedAt          DateTime?
+  durationMinutes  Int                  @default(0)
+  minTempC         Decimal              @db.Decimal(6, 2)
+  maxTempC         Decimal              @db.Decimal(6, 2)
+  affectedBatchIds String[]             @default([])
+  affectedQuantity Decimal              @default(0) @db.Decimal(18, 4)
+  investigation    String?
+  correctiveAction String?
+  disposition      ExcursionDisposition @default(PENDING)
+  decidedById      String?              @db.Uuid
+  decidedAt        DateTime?
+  createdAt        DateTime             @default(now())
+
+  sensor TemperatureSensor @relation(fields: [sensorId], references: [id])
+
+  @@index([disposition])
+  @@map("temperature_excursions")
+}
+
+model QualityIncident {
+  id               String                @id @default(uuid()) @db.Uuid
+  incidentNo       String                @unique
+  type             QualityIncidentType
+  status           QualityIncidentStatus @default(REPORTED)
+  productId        String?               @db.Uuid
+  batchId          String?               @db.Uuid
+  supplierId       String?               @db.Uuid
+  branchId         String?               @db.Uuid
+  description      String
+  rootCause        String?
+  correctiveAction String?
+  preventiveAction String?
+  verification     String?
+  reportedById     String?               @db.Uuid
+  assignedToId     String?               @db.Uuid
+  closedAt         DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([status])
+  @@map("quality_incidents")
+}
+
+model Disposal {
+  id             String         @id @default(uuid()) @db.Uuid
+  disposalNo     String         @unique
+  branchId       String         @db.Uuid
+  warehouseId    String         @db.Uuid
+  status         DocumentStatus @default(DRAFT)
+  method         DisposalMethod
+  reason         String
+  approvedById   String?        @db.Uuid
+  approvedAt     DateTime?
+  disposedAt     DateTime?
+  witnessName    String?
+  certificateNo  String?
+  certificateUrl String?
+  totalCostValue Decimal        @default(0) @db.Decimal(18, 4)
+  createdById    String?        @db.Uuid
+  createdAt      DateTime       @default(now())
+
+  items DisposalItem[]
+
+  @@map("disposals")
+}
+
+model DisposalItem {
+  id         String  @id @default(uuid()) @db.Uuid
+  disposalId String  @db.Uuid
+  productId  String  @db.Uuid
+  batchId    String  @db.Uuid
+  quantity   Decimal @db.Decimal(18, 4)
+  unitCost   Decimal @default(0) @db.Decimal(18, 4)
+  reason     String?
+
+  disposal Disposal @relation(fields: [disposalId], references: [id], onDelete: Cascade)
+
+  @@map("disposal_items")
+}
+
+// ============================================================
+// CONTROLLED MEDICINES REGISTER (§28)
+// ============================================================
+
+// Append-only. Corrections create a reversal row referencing the original.
+model ControlledRegisterEntry {
+  id             String   @id @default(uuid()) @db.Uuid
+  entryNo        Int      @default(autoincrement())
+  productId      String   @db.Uuid
+  batchId        String   @db.Uuid
+  branchId       String   @db.Uuid
+  entryType      String // RECEIPT | DISPENSE | RETURN | DESTRUCTION | REVERSAL | ADJUSTMENT
+  quantityIn     Decimal  @default(0) @db.Decimal(18, 4)
+  quantityOut    Decimal  @default(0) @db.Decimal(18, 4)
+  runningBalance Decimal  @db.Decimal(18, 4)
+  prescriptionId String?  @db.Uuid
+  prescriberName String?
+  patientId      String?  @db.Uuid
+  performedById  String   @db.Uuid
+  witnessedById  String?  @db.Uuid
+  reversalOfId   String?  @db.Uuid
+  reversalReason String?
+  occurredAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@index([productId, branchId, occurredAt])
+  @@map("controlled_register_entries")
+}
+
+// ============================================================
+// WORKFLOW / APPROVALS (§43)
+// ============================================================
+
+model WorkflowDefinition {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique
+  name         String
+  documentType String // PURCHASE_ORDER | STOCK_TRANSFER | DISPOSAL | ADJUSTMENT
+  steps        Json // [{ step: 1, name, requiredPermission, minAmount, maxAmount }]
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  instances WorkflowInstance[]
+
+  @@map("workflow_definitions")
+}
+
+model WorkflowInstance {
+  id           String         @id @default(uuid()) @db.Uuid
+  definitionId String         @db.Uuid
+  documentType String
+  documentId   String         @db.Uuid
+  currentStep  Int            @default(1)
+  status       DocumentStatus @default(SUBMITTED)
+  amount       Decimal?       @db.Decimal(18, 4)
+  branchId     String?        @db.Uuid
+  createdAt    DateTime       @default(now())
+  completedAt  DateTime?
+
+  definition WorkflowDefinition @relation(fields: [definitionId], references: [id])
+  actions    ApprovalAction[]
+
+  @@unique([documentType, documentId])
+  @@map("workflow_instances")
+}
+
+model ApprovalAction {
+  id         String   @id @default(uuid()) @db.Uuid
+  instanceId String   @db.Uuid
+  step       Int
+  action     String // APPROVE | REJECT | RETURN
+  actorId    String   @db.Uuid
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  instance WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@map("approval_actions")
+}
+
+// ============================================================
+// PLATFORM: AUDIT, NOTIFICATIONS, DOCUMENTS, SETTINGS
+// ============================================================
+
+// Tamper-evident: each row carries a hash chained to the previous row (§42).
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  sequence      Int      @default(autoincrement())
+  userId        String?  @db.Uuid
+  userLabel     String?
+  ipAddress     String?
+  userAgent     String?
+  module        String
+  action        String
+  entityType    String?
+  entityId      String?
+  previousValue Json?
+  newValue      Json?
+  reason        String?
+  branchId      String?  @db.Uuid
+  previousHash  String?
+  hash          String
+  createdAt     DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+  @@index([module, action])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id            String               @id @default(uuid()) @db.Uuid
+  userId        String?              @db.Uuid
+  roleCode      String?
+  branchId      String?              @db.Uuid
+  channel       NotificationChannel  @default(IN_APP)
+  severity      NotificationSeverity @default(INFO)
+  eventType     String
+  title         String
+  body          String
+  linkUrl       String?
+  payload       Json?
+  readAt        DateTime?
+  sentAt        DateTime?
+  deliveryError String?
+  createdAt     DateTime             @default(now())
+
+  @@index([userId, readAt])
+  @@index([eventType])
+  @@map("notifications")
+}
+
+model NotificationRule {
+  id        String                @id @default(uuid()) @db.Uuid
+  eventType String
+  channels  NotificationChannel[]
+  roleCodes String[]              @default([])
+  branchId  String?               @db.Uuid
+  threshold Json?
+  isActive  Boolean               @default(true)
+  createdAt DateTime              @default(now())
+
+  @@unique([eventType, branchId])
+  @@map("notification_rules")
+}
+
+model Document {
+  id           String    @id @default(uuid()) @db.Uuid
+  entityType   String // SUPPLIER | PRODUCT | PURCHASE_ORDER | GRN | PRESCRIPTION | RECALL | DISPOSAL
+  entityId     String    @db.Uuid
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String
+  expiresAt    DateTime? // supplier licence expiry alerts (§44)
+  uploadedById String?   @db.Uuid
+  createdAt    DateTime  @default(now())
+
+  @@index([entityType, entityId])
+  @@map("documents")
+}
+
+model SystemSetting {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  key            String
+  value          Json
+  updatedById    String?  @db.Uuid
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+  @@map("system_settings")
+}
+
+model BackupRecord {
+  id           String    @id @default(uuid()) @db.Uuid
+  fileName     String
+  sizeBytes    BigInt    @default(0)
+  status       String // SUCCESS | FAILED | RUNNING
+  encrypted    Boolean   @default(true)
+  checksum     String?
+  verifiedAt   DateTime?
+  errorMessage String?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  @@index([startedAt])
+  @@map("backup_records")
+}
+
+model IdempotencyKey {
+  key       String   @id
+  scope     String
+  resultId  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}

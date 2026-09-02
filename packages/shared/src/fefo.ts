@@ -1,0 +1,172 @@
+/**
+ * FEFO allocation engine (§8) - First Expiry, First Out.
+ *
+ * Pure and side-effect free so it can be exhaustively unit tested and reused by
+ * the API, the POS screen and the transfer planner. The caller supplies
+ * candidate batches; this module decides which ones may be used and in what
+ * order, and never mutates anything.
+ */
+
+export type AllocatableBatchStatus =
+  | 'AVAILABLE'
+  | 'QUARANTINED'
+  | 'RELEASED'
+  | 'BLOCKED'
+  | 'DAMAGED'
+  | 'EXPIRED'
+  | 'RECALLED'
+  | 'RETURNED'
+  | 'DESTROYED';
+
+/** Only these two statuses represent stock that may leave the shelf (§7, §8). */
+export const ALLOCATABLE_STATUSES: AllocatableBatchStatus[] = ['AVAILABLE', 'RELEASED'];
+
+export interface FefoCandidate {
+  batchId: string;
+  batchNumber: string;
+  expiryDate: Date;
+  status: AllocatableBatchStatus;
+  /** On-hand minus already-reserved, in base units. */
+  availableQuantity: number;
+  warehouseId: string;
+  locationId?: string | null;
+  unitCost?: number;
+}
+
+export interface FefoAllocationLine {
+  batchId: string;
+  batchNumber: string;
+  expiryDate: Date;
+  quantity: number;
+  warehouseId: string;
+  locationId?: string | null;
+  unitCost: number;
+}
+
+export interface FefoResult {
+  /** Batches to draw from, nearest valid expiry first. */
+  allocations: FefoAllocationLine[];
+  allocatedQuantity: number;
+  /** Requested minus allocated. Greater than zero means insufficient stock. */
+  shortfall: number;
+  fullyAllocated: boolean;
+  /** Batches excluded from consideration, with the reason (audit + UI). */
+  excluded: Array<{ batchId: string; batchNumber: string; reason: string }>;
+}
+
+export interface FefoOptions {
+  now?: Date;
+  /**
+   * Refuse batches whose remaining shelf life is below this. Used when
+   * dispensing a course of treatment that must outlive the pack.
+   */
+  minRemainingDays?: number;
+  /** Restrict to a single warehouse. */
+  warehouseId?: string;
+}
+
+function exclusionReason(
+  candidate: FefoCandidate,
+  now: Date,
+  minRemainingDays: number | undefined,
+): string | null {
+  if (!ALLOCATABLE_STATUSES.includes(candidate.status)) {
+    return `Batch status is ${candidate.status} and cannot be allocated`;
+  }
+  if (candidate.expiryDate.getTime() < now.getTime()) {
+    return `Batch expired on ${candidate.expiryDate.toISOString().slice(0, 10)}`;
+  }
+  if (minRemainingDays !== undefined) {
+    const remaining = Math.floor(
+      (candidate.expiryDate.getTime() - now.getTime()) / 86400000,
+    );
+    if (remaining < minRemainingDays) {
+      return `Only ${remaining} days of shelf life remain (minimum ${minRemainingDays})`;
+    }
+  }
+  if (candidate.availableQuantity <= 0) {
+    return 'No available quantity (all on-hand stock is reserved or zero)';
+  }
+  return null;
+}
+
+/**
+ * Order candidates by nearest valid expiry. Ties break on smaller remaining
+ * quantity so partially-drawn batches are emptied and closed out first.
+ */
+export function sortFefo(candidates: FefoCandidate[]): FefoCandidate[] {
+  return [...candidates].sort((a, b) => {
+    const byExpiry = a.expiryDate.getTime() - b.expiryDate.getTime();
+    if (byExpiry !== 0) return byExpiry;
+    return a.availableQuantity - b.availableQuantity;
+  });
+}
+
+export function allocateFefo(
+  requestedQuantity: number,
+  candidates: FefoCandidate[],
+  options: FefoOptions = {},
+): FefoResult {
+  const now = options.now ?? new Date();
+  const excluded: FefoResult['excluded'] = [];
+
+  if (requestedQuantity <= 0) {
+    throw new Error('Requested quantity must be greater than zero');
+  }
+
+  const eligible: FefoCandidate[] = [];
+  for (const candidate of candidates) {
+    if (options.warehouseId && candidate.warehouseId !== options.warehouseId) continue;
+    const reason = exclusionReason(candidate, now, options.minRemainingDays);
+    if (reason) {
+      excluded.push({
+        batchId: candidate.batchId,
+        batchNumber: candidate.batchNumber,
+        reason,
+      });
+    } else {
+      eligible.push(candidate);
+    }
+  }
+
+  const allocations: FefoAllocationLine[] = [];
+  let remaining = requestedQuantity;
+
+  for (const candidate of sortFefo(eligible)) {
+    if (remaining <= 0) break;
+    const take = Math.min(candidate.availableQuantity, remaining);
+    if (take <= 0) continue;
+    allocations.push({
+      batchId: candidate.batchId,
+      batchNumber: candidate.batchNumber,
+      expiryDate: candidate.expiryDate,
+      quantity: take,
+      warehouseId: candidate.warehouseId,
+      locationId: candidate.locationId ?? null,
+      unitCost: candidate.unitCost ?? 0,
+    });
+    remaining -= take;
+  }
+
+  const allocatedQuantity = requestedQuantity - remaining;
+  return {
+    allocations,
+    allocatedQuantity,
+    shortfall: remaining,
+    fullyAllocated: remaining <= 0,
+    excluded,
+  };
+}
+
+/** The single batch FEFO recommends, used to detect manual overrides (§8). */
+export function recommendBatch(
+  candidates: FefoCandidate[],
+  options: FefoOptions = {},
+): FefoCandidate | null {
+  const now = options.now ?? new Date();
+  const eligible = candidates.filter((c) => {
+    if (options.warehouseId && c.warehouseId !== options.warehouseId) return false;
+    return exclusionReason(c, now, options.minRemainingDays) === null;
+  });
+  return sortFefo(eligible)[0] ?? null;
+}

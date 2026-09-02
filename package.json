@@ -1,0 +1,19 @@
+{
+  "name": "pharmacore",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PharmaCore \u2014 Enterprise Pharmacy Inventory & Management System",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "test": "pnpm --filter @pharmacore/api test",
+    "db:migrate": "pnpm --filter @pharmacore/api prisma migrate dev",
+    "db:push": "pnpm --filter @pharmacore/api prisma db push",
+    "db:seed": "pnpm --filter @pharmacore/api seed",
+    "db:studio": "pnpm --filter @pharmacore/api prisma studio",
+    "test:e2e": "node scripts/e2e-workflow.mjs"
+  }
+}

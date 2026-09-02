@@ -1,0 +1,19 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+allowBuilds:
+  '@nestjs/core': set this to true or false
+  '@prisma/client': set this to true or false
+  '@prisma/engines': set this to true or false
+  argon2: set this to true or false
+  prisma: set this to true or false
+
+# These packages have legitimate build steps: argon2 compiles a native binding,
+# Prisma generates its client and downloads query engines, Nest prints a notice.
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@prisma/client'
+  - '@prisma/engines'
+  - argon2
+  - prisma

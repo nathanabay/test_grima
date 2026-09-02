@@ -1,0 +1,186 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { daysUntil } from '@pharmacore/shared';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { BatchService } from '../inventory/batch.service';
+import { SuppliersService } from '../procurement/suppliers.service';
+import { ProcurementService } from '../procurement/procurement.service';
+import { NotificationsService } from '../notifications/notifications.service';
+
+/**
+ * Rule engine and scheduled jobs (§58).
+ *
+ * Each rule reads live data and emits notifications or state changes. Nothing
+ * here places an order or disposes of stock on its own - those stay human
+ * decisions (§12, §29).
+ */
+@Injectable()
+export class RulesService {
+  private readonly logger = new Logger(RulesService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly batches: BatchService,
+    private readonly suppliers: SuppliersService,
+    private readonly procurement: ProcurementService,
+    private readonly notifications: NotificationsService,
+  ) {}
+
+  /** IF expiry < threshold THEN alert the inventory manager. */
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async expiryAlerts(): Promise<{ alerted: number }> {
+    const horizon = new Date(Date.now() + 90 * 86_400_000);
+    const balances = await this.prisma.inventoryBalance.findMany({
+      where: {
+        onHand: { gt: 0 },
+        batch: {
+          expiryDate: { lte: horizon, gt: new Date() },
+          status: { in: ['AVAILABLE', 'RELEASED'] },
+        },
+      },
+      include: {
+        batch: true,
+        product: { select: { genericName: true, strength: true, averageCost: true, baseUnit: true } },
+      },
+    });
+
+    let alerted = 0;
+    for (const b of balances) {
+      if (!b.batch) continue;
+      const days = daysUntil(b.batch.expiryDate);
+      const severity = days <= 30 ? 'CRITICAL' : days <= 60 ? 'WARNING' : 'INFO';
+      const value = Number(b.onHand) * Number(b.product.averageCost);
+
+      await this.notifications.emit({
+        eventType: 'EXPIRY_APPROACHING',
+        severity,
+        title: `${severity === 'CRITICAL' ? 'URGENT' : 'Notice'}: ${b.product.genericName} ${b.product.strength} expires in ${days} days`,
+        body:
+          `Batch ${b.batch.batchNumber}\n` +
+          `Quantity: ${b.onHand.toString()} ${b.product.baseUnit}\n` +
+          `Expires: ${b.batch.expiryDate.toISOString().slice(0, 10)} (${days} days)\n` +
+          `Stock value at risk: ${value.toFixed(2)}\n` +
+          `Recommended action: ${
+            days <= 30 ? 'TRANSFER / RETURN TO SUPPLIER / QUARANTINE' : 'PROMOTE / PLAN REDISTRIBUTION'
+          }`,
+        branchId: b.branchId,
+        roleCodes: ['WAREHOUSE_MANAGER', 'PHARMACY_ADMIN', 'BRANCH_MANAGER'],
+        linkUrl: `/inventory/expiry?batchId=${b.batchId}`,
+        payload: { batchId: b.batchId, daysRemaining: days, valueAtRisk: value },
+      });
+      alerted += 1;
+    }
+
+    this.logger.log(`Expiry alert rule: ${alerted} position(s) alerted`);
+    return { alerted };
+  }
+
+  /** Move expired stock out of available inventory. */
+  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  async expirySweep() {
+    const result = await this.batches.processExpiredBatches();
+    if (result.batchesExpired > 0) {
+      await this.notifications.emit({
+        eventType: 'EXPIRED_STOCK',
+        severity: 'WARNING',
+        title: `${result.batchesExpired} batch(es) expired overnight`,
+        body:
+          `${result.quantityRemoved} units worth ${result.valueRemoved.toFixed(2)} were removed ` +
+          `from available stock and marked EXPIRED. They now need a disposal decision.`,
+        roleCodes: ['QA_OFFICER', 'WAREHOUSE_MANAGER'],
+        linkUrl: '/inventory/expiry',
+      });
+    }
+    this.logger.log(`Expiry sweep: ${result.batchesExpired} batch(es) expired`);
+    return result;
+  }
+
+  /** IF stock <= reorder level THEN create a replenishment recommendation. */
+  @Cron(CronExpression.EVERY_DAY_AT_6AM)
+  async lowStockAlerts() {
+    const recommendations = await this.procurement.replenishmentRecommendations();
+    if (!recommendations.length) return { alerted: 0 };
+
+    const critical = recommendations.filter((r) => r.available <= 0);
+
+    await this.notifications.emit({
+      eventType: 'LOW_STOCK',
+      severity: critical.length ? 'CRITICAL' : 'WARNING',
+      title: `${recommendations.length} product(s) at or below the reorder point`,
+      body:
+        (critical.length ? `${critical.length} are completely out of stock.\n\n` : '') +
+        recommendations
+          .slice(0, 15)
+          .map((r) => `${r.productName}: ${r.available} available, suggest ordering ${r.suggestedQuantity}`)
+          .join('\n'),
+      roleCodes: ['PROCUREMENT_OFFICER', 'PHARMACY_ADMIN'],
+      linkUrl: '/procurement/replenishment',
+    });
+
+    this.logger.log(`Low stock rule: ${recommendations.length} recommendation(s)`);
+    return { alerted: recommendations.length };
+  }
+
+  /** IF supplier delivery late THEN update the supplier performance score. */
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async supplierScores() {
+    const result = await this.suppliers.recomputeAllScores();
+
+    const late = await this.prisma.purchaseOrder.findMany({
+      where: {
+        status: { in: ['ORDERED', 'PARTIALLY_RECEIVED'] },
+        expectedDate: { lt: new Date() },
+      },
+      include: { supplier: { select: { companyName: true } } },
+    });
+
+    for (const po of late) {
+      const daysLate = po.expectedDate
+        ? Math.floor((Date.now() - po.expectedDate.getTime()) / 86_400_000)
+        : 0;
+      await this.notifications.emit({
+        eventType: 'SUPPLIER_DELAY',
+        severity: daysLate > 7 ? 'CRITICAL' : 'WARNING',
+        title: `${po.supplier.companyName} is ${daysLate} day(s) late on ${po.poNo}`,
+        body: `Purchase order ${po.poNo} was expected on ${po.expectedDate?.toISOString().slice(0, 10)}.`,
+        branchId: po.branchId,
+        roleCodes: ['PROCUREMENT_OFFICER'],
+        linkUrl: `/procurement/purchase-orders/${po.id}`,
+      });
+    }
+
+    this.logger.log(`Supplier scoring: ${result.updated} supplier(s), ${late.length} late order(s)`);
+    return { ...result, lateOrders: late.length };
+  }
+
+  /** Supplier licence and document expiry alerts (§44). */
+  @Cron(CronExpression.EVERY_DAY_AT_7AM)
+  async documentExpiryAlerts() {
+    const soon = new Date(Date.now() + 60 * 86_400_000);
+
+    const [suppliers, documents] = await Promise.all([
+      this.prisma.supplier.findMany({
+        where: { isActive: true, licenseExpiry: { lte: soon } },
+        select: { id: true, companyName: true, licenseExpiry: true },
+      }),
+      this.prisma.document.findMany({
+        where: { expiresAt: { lte: soon } },
+        select: { id: true, fileName: true, entityType: true, entityId: true, expiresAt: true },
+      }),
+    ]);
+
+    for (const s of suppliers) {
+      const days = s.licenseExpiry ? daysUntil(s.licenseExpiry) : 0;
+      await this.notifications.emit({
+        eventType: 'DOCUMENT_EXPIRY',
+        severity: days < 0 ? 'CRITICAL' : 'WARNING',
+        title: `${s.companyName} licence ${days < 0 ? 'has expired' : `expires in ${days} days`}`,
+        body: `Supplier licence expiry: ${s.licenseExpiry?.toISOString().slice(0, 10)}. Obtain a renewed licence before the next order.`,
+        roleCodes: ['PROCUREMENT_OFFICER', 'QA_OFFICER'],
+        linkUrl: `/suppliers/${s.id}`,
+      });
+    }
+
+    return { suppliers: suppliers.length, documents: documents.length };
+  }
+}
