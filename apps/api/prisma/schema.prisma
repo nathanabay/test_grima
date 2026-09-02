@@ -2925,6 +2925,72 @@ model SavedReport {
   @@map("saved_reports")
 }
 
+/// A file being imported, and its progress through validate → preview → apply
+/// (§59).
+///
+/// Every row is kept with its original values and its outcome, so an import can
+/// be explained afterwards, the failed rows can be downloaded and corrected,
+/// and what was created can be undone.
+model ImportBatch {
+  id             String    @id @default(uuid()) @db.Uuid
+  reference      String    @unique
+  /// Key from the import catalogue: products, suppliers, patients, barcodes,
+  /// price_list, opening_stock.
+  entityType     String
+  fileName       String
+  /// UPLOADED | VALIDATED | IMPORTING | COMPLETED | PARTIAL | FAILED |
+  /// ROLLED_BACK
+  status         String    @default("UPLOADED")
+  /// Uploaded column name -> target field.
+  mapping        Json      @default("{}")
+  delimiter      String    @default(",")
+  totalRows      Int       @default(0)
+  validRows      Int       @default(0)
+  errorRows      Int       @default(0)
+  importedRows   Int       @default(0)
+  failedRows     Int       @default(0)
+  rolledBackRows Int       @default(0)
+  /// Whole-file problems: a missing required column, an unreadable file.
+  fileErrors     Json      @default("[]")
+  errorSummary   Json      @default("[]")
+  createdById    String?   @db.Uuid
+  validatedAt    DateTime?
+  importedAt     DateTime?
+  rolledBackAt   DateTime?
+  rollbackReason String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  rows ImportRow[]
+
+  @@index([entityType, status])
+  @@map("import_batches")
+}
+
+model ImportRow {
+  id        String  @id @default(uuid()) @db.Uuid
+  batchId   String  @db.Uuid
+  rowNumber Int
+  /// The cells exactly as uploaded, so an error file can reproduce them.
+  raw       Json
+  /// The values after mapping and coercion.
+  mapped    Json?
+  /// PENDING | VALID | INVALID | IMPORTED | FAILED | SKIPPED | ROLLED_BACK
+  status    String  @default("PENDING")
+  /// [{ field, message }]
+  errors    Json    @default("[]")
+  /// What this row created or updated, so it can be undone.
+  entityId  String? @db.Uuid
+  /// CREATED | UPDATED — an update is not undone by deleting the record.
+  action    String?
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@map("import_rows")
+}
+
 model IdempotencyKey {
   key       String   @id
   scope     String

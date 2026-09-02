@@ -288,6 +288,7 @@ async function main(): Promise<void> {
       price_history, product_barcodes, product_units, products,
       product_categories, manufacturers,
       job_runs, fhir_exchanges, api_keys, saved_reports,
+      import_rows, import_batches,
       integration_deliveries, integration_endpoints,
       automation_escalations, automation_runs, automation_rules,
       finance_note_lines, finance_notes, cost_consumptions, cost_layers,
