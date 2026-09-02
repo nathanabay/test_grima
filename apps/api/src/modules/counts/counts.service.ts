@@ -6,6 +6,7 @@ import { AuthenticatedUser } from '../../common/decorators';
 import { ScopeService } from '../../common/guards/scope.service';
 import { LedgerService } from '../inventory/ledger.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
+import { ScanningService } from '../scanning/scanning.service';
 
 /** Variance above this needs a supervisor to approve the adjustment (§21). */
 const SUPERVISOR_THRESHOLD_UNITS = 10;
@@ -26,24 +27,100 @@ export class CountsService {
     private readonly audit: AuditService,
     private readonly docNumbers: DocumentNumberService,
     private readonly scope: ScopeService,
+    private readonly scanning: ScanningService,
   ) {}
 
-  /** Open a count and snapshot the system quantities at that moment. */
+  /**
+   * Open a count and snapshot the system quantities at that moment (§21).
+   *
+   * The scope depends on the count type, so every declared type is actually
+   * usable rather than being an enum value with no behaviour behind it:
+   *
+   *   FULL      every position in the branch
+   *   WAREHOUSE every position in one warehouse
+   *   CATEGORY  one product category within a warehouse
+   *   BIN       one storage location
+   *   CYCLE     the positions least recently counted (rolling coverage)
+   *   RANDOM    an unbiased sample, for spot checks
+   */
   async create(
-    data: { warehouseId: string; branchId: string; countType: CountType; productIds?: string[]; locationId?: string },
+    data: {
+      warehouseId: string;
+      branchId: string;
+      countType: CountType;
+      productIds?: string[];
+      locationId?: string;
+      categoryId?: string;
+      sampleSize?: number;
+    },
     user: AuthenticatedUser,
   ) {
     // §4: counts are restricted to warehouses within the user's scope.
     this.scope.assertBranch(user, data.branchId);
     await this.scope.assertWarehouse(user, data.warehouseId);
 
-    const balances = await this.prisma.inventoryBalance.findMany({
-      where: {
-        warehouseId: data.warehouseId,
-        ...(data.productIds?.length ? { productId: { in: data.productIds } } : {}),
-        ...(data.locationId ? { locationId: data.locationId } : {}),
-      },
+    const where: Prisma.InventoryBalanceWhereInput = {
+      // A FULL count covers the branch; every other type is warehouse-scoped.
+      ...(data.countType === CountType.FULL
+        ? { branchId: data.branchId }
+        : { warehouseId: data.warehouseId }),
+      ...(data.productIds?.length ? { productId: { in: data.productIds } } : {}),
+    };
+
+    if (data.countType === CountType.BIN) {
+      if (!data.locationId) {
+        throw new BadRequestException('A bin count needs a storage location');
+      }
+      where.locationId = data.locationId;
+    } else if (data.locationId) {
+      where.locationId = data.locationId;
+    }
+
+    if (data.countType === CountType.CATEGORY) {
+      if (!data.categoryId) {
+        throw new BadRequestException('A category count needs a product category');
+      }
+      where.product = { categoryId: data.categoryId };
+    }
+
+    let balances = await this.prisma.inventoryBalance.findMany({
+      where,
+      // Least recently counted first, which is what makes a cycle count roll.
+      orderBy: [{ lastMovementAt: 'asc' }],
     });
+
+    if (data.countType === CountType.CYCLE) {
+      const size = data.sampleSize ?? 50;
+      // Positions never counted, or counted longest ago, come first.
+      const counted = await this.prisma.stockCountItem.findMany({
+        where: { stockCount: { warehouseId: data.warehouseId, status: DocumentStatus.CLOSED } },
+        select: { productId: true, batchId: true, stockCount: { select: { completedAt: true } } },
+      });
+      const lastCounted = new Map<string, number>();
+      for (const c of counted) {
+        const key = `${c.productId}:${c.batchId ?? ''}`;
+        const at = c.stockCount.completedAt?.getTime() ?? 0;
+        if (at > (lastCounted.get(key) ?? 0)) lastCounted.set(key, at);
+      }
+      balances = balances
+        .sort(
+          (a, b) =>
+            (lastCounted.get(`${a.productId}:${a.batchId ?? ''}`) ?? 0) -
+            (lastCounted.get(`${b.productId}:${b.batchId ?? ''}`) ?? 0),
+        )
+        .slice(0, size);
+    }
+
+    if (data.countType === CountType.RANDOM) {
+      const size = data.sampleSize ?? 25;
+      // Fisher-Yates over a copy: an unbiased sample, unlike sort(() => 0.5 - random()).
+      const pool = [...balances];
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      balances = pool.slice(0, size);
+    }
 
     if (!balances.length) {
       throw new BadRequestException('No stock positions match this count scope');
@@ -72,6 +149,59 @@ export class CountsService {
         include: { items: true },
       });
     });
+  }
+
+  /**
+   * Record a counted quantity from a scan (§21). Resolves the scanned code to a
+   * line on this count, so a counter never types a product or batch id.
+   */
+  async recordByScan(
+    id: string,
+    input: { code: string; countedQty: number; reason?: string },
+    user: AuthenticatedUser,
+  ) {
+    const resolution = await this.scanning.resolve(input.code);
+    if (!resolution.product) {
+      throw new BadRequestException(
+        `Scanned code does not match any product in the drug master`,
+      );
+    }
+
+    const count = await this.prisma.stockCount.findUniqueOrThrow({
+      where: { id },
+      include: { items: true },
+    });
+
+    // Prefer the exact batch when the pack carried a GS1 batch number.
+    const candidates = count.items.filter((i) => i.productId === resolution.product!.id);
+    if (!candidates.length) {
+      throw new BadRequestException(
+        `${resolution.product.genericName} is not in the scope of count ${count.countNo}`,
+      );
+    }
+
+    let line = candidates[0];
+    if (resolution.batch) {
+      const exact = candidates.find((i) => i.batchId === resolution.batch!.id);
+      if (exact) line = exact;
+      else {
+        throw new BadRequestException(
+          `Batch ${resolution.batch.batchNumber} is not on count ${count.countNo}. ` +
+            `Found stock that is not on the count sheet — record it as an adjustment instead.`,
+        );
+      }
+    } else if (candidates.length > 1) {
+      throw new BadRequestException(
+        `${resolution.product.genericName} has ${candidates.length} batches on this count. ` +
+          `Scan the GS1 DataMatrix so the batch is identified, or select the line manually.`,
+      );
+    }
+
+    return this.recordCounts(
+      id,
+      [{ itemId: line.id, countedQty: input.countedQty, reason: input.reason }],
+      user,
+    );
   }
 
   /** Record counted quantities and compute the variances. */

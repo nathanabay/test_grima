@@ -33,6 +33,8 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { href: '/scan', label: 'Scan Station', permission: 'inventory.balance.READ' },
       { href: '/inventory/expiry', label: 'Expiry Management', permission: 'inventory.expiry.READ' },
       { href: '/batches', label: 'Batches & Quarantine', permission: 'inventory.batch.READ' },
+      { href: '/counts', label: 'Stock Counts', permission: 'inventory.count.READ' },
+      { href: '/adjustments', label: 'Adjustments', permission: 'inventory.adjustment.CREATE' },
     ],
   },
   {

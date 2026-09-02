@@ -27,12 +27,37 @@ export class CountsController {
 
   @Post('stock-counts')
   @RequirePermissions('inventory.count.CREATE')
-  @ApiOperation({ summary: 'Open a count and snapshot system quantities' })
+  @ApiOperation({
+    summary:
+      'Open a count and snapshot system quantities. Scope depends on countType: ' +
+      'FULL (branch), WAREHOUSE, CATEGORY (needs categoryId), BIN (needs locationId), ' +
+      'CYCLE and RANDOM (both accept sampleSize).',
+  })
   create(
-    @Body() body: { warehouseId: string; branchId: string; countType: CountType; productIds?: string[]; locationId?: string },
+    @Body()
+    body: {
+      warehouseId: string;
+      branchId: string;
+      countType: CountType;
+      productIds?: string[];
+      locationId?: string;
+      categoryId?: string;
+      sampleSize?: number;
+    },
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.counts.create(body, user);
+  }
+
+  @Post('stock-counts/:id/scan')
+  @RequirePermissions('inventory.count.EDIT')
+  @ApiOperation({ summary: 'Record a counted quantity by scanning the pack (§21)' })
+  scan(
+    @Param('id') id: string,
+    @Body() body: { code: string; countedQty: number; reason?: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.counts.recordByScan(id, body, user);
   }
 
   @Post('stock-counts/:id/record')
