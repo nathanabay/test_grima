@@ -143,24 +143,46 @@ scripts/           end-to-end workflow verification
 
 Reported honestly rather than left to be discovered:
 
-- **Reporting exports.** Report *data* is served by the analytics endpoints, but
-  PDF/Excel/CSV generation and the printable document templates (§41, §63) are
-  not implemented.
-- **Offline PWA mode** (§51) — no service worker or sync queue.
-- **File uploads.** The `documents` table and expiry alerting exist, but there is
-  no upload endpoint or storage backend (§44).
+- **Per-page translation.** Navigation and app chrome are fully translated into
+  English, Amharic and Afaan Oromo, and the Administration screen shows live
+  coverage. Individual page copy (headings, table labels, button text inside
+  screens) is not yet extracted into the catalogues, so those strings render in
+  English whatever locale is selected.
+- **GS1 DataMatrix rendering.** Label printing emits GS1-128, which carries the
+  same Application Identifiers and scans on the same readers. DataMatrix needs
+  Reed-Solomon ECC200 encoding; rather than ship something that scans
+  inconsistently, it is omitted and the limitation is stated on the label sheet.
+  A QR code is never substituted, per §62/§73.
 - **External notification delivery.** In-app notifications are written and read;
   the email/SMS/Telegram/WhatsApp adapters are deliberately inert stubs that log
-  and return rather than faking a delivery (§35).
-- **Backup automation** (§55) — `backup_records` is modelled, but no scheduled
-  dump or restore procedure runs.
-- **Localization** (§66) — UI strings are not yet extracted into message
-  catalogues, though currency, timezone and date format are configurable.
-- **AI assistant** (§59), which the specification itself marks optional.
-- **Workflow engine.** `workflow_definitions` / `workflow_instances` are
-  modelled and seeded, but approvals currently run through hard-coded state
-  machines per document type rather than the configurable engine (§43).
-- **Web coverage.** The API exposes every module; the web app covers the
-  dashboard, command centre, inventory, expiry, batches, POS, prescriptions,
-  procurement, recalls and cold chain. Transfers, counts, returns, disposal,
-  supplier CRUD and administration are API-only so far.
+  and return rather than reporting a delivery that did not happen (§35).
+- **Automated restore.** Backups are taken, encrypted, verified and pruned, and
+  a backup can be decrypted to a file. Restoring is deliberately left as an
+  operator action at the console with the service stopped — overwriting a live
+  pharmaceutical database from an HTTP endpoint is not a button worth having.
+- **Clinical decision support** (drug interactions, allergy and dose checking).
+  §24 asks for these only as optional external integrations, and explicitly
+  warns against inventing clinical recommendations, so the dispensing checks
+  cover product, strength, quantity, batch, expiry, prescription requirement and
+  stock only.
+- **AI assistant** (§59), which the specification marks optional.
+- **Offline coverage.** The service worker caches the shell and read APIs and
+  queues writes, but only the screens listed in its precache list open fully
+  offline. Queued writes require explicit human review before sending.
+
+## Verifying the compliance-critical behaviour
+
+These are the guarantees worth checking first, and the commands that prove them:
+
+```bash
+pnpm test                      # 82 unit + integration tests
+pnpm test:e2e                  # 60-check §72 workflow
+pnpm test:e2e:procurement      # 22-check procurement, receiving and AP
+pnpm test:e2e:capa             # CAPA ratchet and approval segregation
+```
+
+Between them these prove: two pharmacists cannot both dispense the last units;
+expired, recalled and quarantined stock cannot leave the shelf; the audit chain
+detects a rewritten row; an invoice billing for rejected stock is caught; one
+person cannot approve two steps of the same document; and a tampered backup
+fails verification instead of restoring corrupted data.

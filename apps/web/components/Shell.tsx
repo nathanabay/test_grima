@@ -38,6 +38,7 @@ const NAV: Array<{ groupKey: string; items: NavItem[] }> = [
       { href: '/batches', labelKey: 'nav.batches', permission: 'inventory.batch.READ' },
       { href: '/counts', labelKey: 'nav.counts', permission: 'inventory.count.READ' },
       { href: '/adjustments', labelKey: 'nav.adjustments', permission: 'inventory.adjustment.CREATE' },
+      { href: '/transfers', labelKey: 'nav.transfers', permission: 'inventory.transfer.READ' },
     ],
   },
   {
@@ -48,6 +49,7 @@ const NAV: Array<{ groupKey: string; items: NavItem[] }> = [
       { href: '/procurement', labelKey: 'nav.procurement', permission: 'procurement.purchase_order.READ' },
       { href: '/receiving', labelKey: 'nav.receiving', permission: 'inventory.goods_receipt.CREATE' },
       { href: '/invoices', labelKey: 'nav.invoices', permission: 'finance.invoice.READ' },
+      { href: '/approvals', labelKey: 'nav.approvals' },
     ],
   },
   {
@@ -55,6 +57,17 @@ const NAV: Array<{ groupKey: string; items: NavItem[] }> = [
     items: [
       { href: '/recalls', labelKey: 'nav.recalls', permission: 'quality.recall.READ' },
       { href: '/cold-chain', labelKey: 'nav.coldChain', permission: 'quality.cold_chain.READ' },
+      { href: '/returns', labelKey: 'nav.returns', permission: 'quality.return.READ' },
+      { href: '/quality', labelKey: 'nav.quality', permission: 'quality.incident.READ' },
+      { href: '/disposal', labelKey: 'nav.disposal', permission: 'quality.disposal.READ' },
+    ],
+  },
+  {
+    groupKey: 'nav.group.administration',
+    items: [
+      { href: '/reports', labelKey: 'nav.reports', permission: 'analytics.report.READ' },
+      { href: '/import', labelKey: 'nav.import', permission: 'catalog.product.IMPORT' },
+      { href: '/admin', labelKey: 'nav.admin', permission: 'admin.user.READ' },
     ],
   },
 ];

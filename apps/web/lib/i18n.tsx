@@ -70,6 +70,7 @@ const en: Catalogue = {
   'nav.reports': 'Reports',
   'nav.admin': 'Administration',
   'nav.backups': 'Backups',
+  'nav.import': 'Data Import',
 
   'auth.signIn': 'Sign in',
   'auth.signingIn': 'Signing in...',
@@ -140,6 +141,7 @@ const am: Catalogue = {
   'nav.reports': 'ሪፖርቶች',
   'nav.admin': 'አስተዳደር',
   'nav.backups': 'ምትኬዎች',
+  'nav.import': 'ውሂብ ማስመጣት',
 
   'auth.signIn': 'ግባ',
   'auth.signingIn': 'በመግባት ላይ...',
@@ -201,6 +203,7 @@ const om: Catalogue = {
   'nav.reports': 'Gabaasota',
   'nav.admin': 'Bulchiinsa',
   'nav.backups': 'Kuusaa Deebii',
+  'nav.import': 'Daataa Galchuu',
 
   'auth.signIn': 'Seeni',
   'auth.signingIn': 'Seenaa jira...',
