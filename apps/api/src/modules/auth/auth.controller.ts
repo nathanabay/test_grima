@@ -16,7 +16,7 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('login')
   @ApiOperation({ summary: 'Authenticate with email/username/phone, password and optional MFA code' })
   login(@Body() dto: LoginDto, @Req() req: any) {

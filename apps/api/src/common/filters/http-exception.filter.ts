@@ -26,6 +26,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status = exception.getStatus();
       const body = exception.getResponse();
       message = typeof body === 'string' ? body : (body as any).message ?? body;
+
+      // The throttler's default text is meaningless to an operator.
+      if (status === HttpStatus.TOO_MANY_REQUESTS) {
+        message =
+          'Too many attempts from this location. Please wait a minute and try again.';
+      }
     } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       code = exception.code;
       if (exception.code === 'P2002') {
