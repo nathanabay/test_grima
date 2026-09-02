@@ -18,6 +18,7 @@ loadEnv(__dirname);
 import { PrismaClient, Prisma, BatchStatus, PaymentMethod } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { DEFAULT_ACCOUNTS } from '../src/modules/accounting/chart-of-accounts';
+import { DEFAULT_AUTOMATION_RULES } from '../src/modules/automation/default-rules';
 import {
   DEFAULT_ROLES,
   RESOURCE_CATALOG,
@@ -287,6 +288,7 @@ async function main(): Promise<void> {
       price_history, product_barcodes, product_units, products,
       product_categories, manufacturers,
       job_runs, integration_deliveries, integration_endpoints,
+      automation_escalations, automation_runs, automation_rules,
       finance_note_lines, finance_notes, cost_consumptions, cost_layers,
       journal_lines, journal_entries, accounts, accounting_periods,
       shipment_package_lines, shipment_packages, warehouse_tasks, pick_waves, docks,
@@ -327,6 +329,25 @@ async function main(): Promise<void> {
     },
   });
   console.log(`  Created ${DEFAULT_ACCOUNTS.length} ledger accounts and an open period`);
+
+  // ---- Automation rules (§58) ----
+  // The specification's own examples, seeded as system rules an administrator
+  // can retune or switch off but not delete.
+  await prisma.automationRule.createMany({
+    data: DEFAULT_AUTOMATION_RULES.map((r) => ({
+      code: r.code,
+      name: r.name,
+      description: r.description,
+      triggerType: r.triggerType,
+      conditions: r.conditions as any,
+      actions: r.actions as any,
+      escalations: r.escalations as any,
+      priority: r.priority,
+      cooldownHours: r.cooldownHours,
+      isSystem: true,
+    })),
+  });
+  console.log(`  Created ${DEFAULT_AUTOMATION_RULES.length} automation rules`);
 
   // ---- Business units and regions (§33) ----
   const retailUnit = await prisma.businessUnit.create({

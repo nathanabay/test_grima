@@ -2178,6 +2178,15 @@ model QualityIncident {
   incidentNo       String                @unique
   type             QualityIncidentType
   status           QualityIncidentStatus @default(REPORTED)
+  /// Short heading. The description carries the detail.
+  title            String?
+  /// LOW | MEDIUM | HIGH | CRITICAL
+  severity         String                @default("MEDIUM")
+  /// What raised this incident: AUTOMATION | EXCURSION | RECEIVING | MANUAL.
+  /// Kept so an automatically raised incident is traceable to its rule and is
+  /// not opened again on the next run.
+  sourceType       String?
+  sourceId         String?
   productId        String?               @db.Uuid
   batchId          String?               @db.Uuid
   supplierId       String?               @db.Uuid
@@ -2194,6 +2203,7 @@ model QualityIncident {
   updatedAt        DateTime              @updatedAt
 
   @@index([status])
+  @@index([sourceType, sourceId])
   @@map("quality_incidents")
 }
 
@@ -2700,6 +2710,102 @@ model AccountingPeriod {
 
   @@index([startDate, endDate])
   @@map("accounting_periods")
+}
+
+// ============================================================
+// AUTOMATION (§58)
+//
+// TRIGGER -> CONDITION -> ACTION -> ESCALATION, configured by an administrator
+// rather than written in code. The actions available are deliberately limited
+// to ones that are safe to take without a human: notify, flag, hold, raise an
+// incident, request an approval. Nothing here places an order, disposes of
+// stock or approves anything (§12, §29).
+// ============================================================
+
+model AutomationRule {
+  id            String  @id @default(uuid()) @db.Uuid
+  code          String  @unique
+  name          String
+  description   String?
+  /// What the rule looks at: BATCH_EXPIRY | STOCK_LEVEL | TEMPERATURE_EXCURSION |
+  /// PURCHASE_ORDER_OVERDUE | STOCK_VARIANCE | CONTROLLED_VARIANCE |
+  /// SUPPLIER_LICENCE | QUARANTINED_STOCK | FAILED_QUALITY_INSPECTION
+  triggerType   String
+  /// { match: 'ALL' | 'ANY', conditions: [{ field, operator, value }] }
+  conditions    Json    @default("{\"match\":\"ALL\",\"conditions\":[]}")
+  /// [{ type, params }] — executed in order for every matching subject.
+  actions       Json    @default("[]")
+  /// [{ afterHours, actions }] — run if the subject still matches later.
+  escalations   Json    @default("[]")
+  /// Restrict the rule to one branch. Null means the whole organization.
+  branchId      String? @db.Uuid
+  isActive      Boolean @default(true)
+  /// Higher runs first when several rules share a trigger.
+  priority      Int     @default(50)
+  /// Suppress a repeat action on the same subject inside this window.
+  cooldownHours Int     @default(24)
+  isSystem      Boolean @default(false)
+
+  lastRunAt      DateTime?
+  lastMatchCount Int       @default(0)
+  createdById    String?   @db.Uuid
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  runs            AutomationRun[]
+  escalationQueue AutomationEscalation[]
+
+  @@index([triggerType, isActive])
+  @@map("automation_rules")
+}
+
+model AutomationRun {
+  id              String    @id @default(uuid()) @db.Uuid
+  ruleId          String    @db.Uuid
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  durationMs      Int?
+  subjectsScanned Int       @default(0)
+  matched         Int       @default(0)
+  actionsRun      Int       @default(0)
+  suppressed      Int       @default(0)
+  failed          Int       @default(0)
+  /// MANUAL | SCHEDULED | PREVIEW
+  trigger         String    @default("SCHEDULED")
+  errorMessage    String?
+  /// A sample of what matched, so a run can be explained without re-running it.
+  sample          Json?
+
+  rule AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, startedAt])
+  @@map("automation_runs")
+}
+
+/// One action already taken against one subject, so a rule does not re-notify
+/// about the same batch every hour, and so escalation has something to chase.
+model AutomationEscalation {
+  id           String    @id @default(uuid()) @db.Uuid
+  ruleId       String    @db.Uuid
+  /// BATCH | BALANCE | EXCURSION | PURCHASE_ORDER | COUNT | REGISTER | SUPPLIER
+  subjectType  String
+  subjectId    String
+  /// Which escalation step has been reached; 0 is the original action.
+  level        Int       @default(0)
+  firstActedAt DateTime  @default(now())
+  lastActedAt  DateTime  @default(now())
+  /// When the next escalation step becomes due. Null when there is none left.
+  nextDueAt    DateTime?
+  /// OPEN | ESCALATED | RESOLVED
+  status       String    @default("OPEN")
+  resolvedAt   DateTime?
+  notes        String?
+
+  rule AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, subjectType, subjectId])
+  @@index([status, nextDueAt])
+  @@map("automation_escalations")
 }
 
 model IdempotencyKey {

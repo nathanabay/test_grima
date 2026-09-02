@@ -9,6 +9,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { JobRunnerService } from './job-runner.service';
 import { PostingService } from '../accounting/posting.service';
+import { AutomationService } from '../automation/automation.service';
 
 /**
  * Rule engine and scheduled jobs (§58).
@@ -30,6 +31,7 @@ export class RulesService implements OnModuleInit {
     private readonly integrations: IntegrationsService,
     private readonly runner: JobRunnerService,
     private readonly posting: PostingService,
+    private readonly automation: AutomationService,
   ) {}
 
   /**
@@ -71,6 +73,14 @@ export class RulesService implements OnModuleInit {
       description: 'Raises replenishment recommendations for stock at or below its reorder point.',
       schedule: 'Daily at 06:00',
       run: () => this.runLowStockAlerts(),
+    });
+    this.runner.register({
+      key: 'automation.runAll',
+      label: 'Automation rules',
+      description:
+        'Evaluates every active rule and takes its configured actions, escalating what stays unresolved.',
+      schedule: 'Hourly',
+      run: () => this.automation.runAll(),
     });
     this.runner.register({
       key: 'accounting.postPending',
@@ -318,5 +328,10 @@ export class RulesService implements OnModuleInit {
   @Cron(CronExpression.EVERY_HOUR)
   async postToLedgerCron() {
     return this.runner.execute('accounting.postPending');
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async automationCron() {
+    return this.runner.execute('automation.runAll');
   }
 }

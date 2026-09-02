@@ -35,6 +35,7 @@ import { BackupModule } from './modules/backup/backup.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { WarehouseModule } from './modules/warehouse/warehouse.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
+import { AutomationModule } from './modules/automation/automation.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
@@ -74,6 +75,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     PlatformModule,
     WarehouseModule,
     AccountingModule,
+    AutomationModule,
   ],
   providers: [
     // Global: authenticate, then authorize, then rate-limit. Routes opt out of

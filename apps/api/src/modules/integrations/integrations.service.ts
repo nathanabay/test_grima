@@ -36,6 +36,10 @@ export const INTEGRATION_EVENTS = [
   'purchase_order.approved',
   'invoice.matched',
   'quality.incident',
+  /// Emitted by the automation engine. The rule code travels in the payload
+  /// rather than in the event name, so a typo in a rule cannot create an event
+  /// nobody is subscribed to.
+  'automation.rule_matched',
 ] as const;
 
 export type IntegrationEvent = (typeof INTEGRATION_EVENTS)[number];

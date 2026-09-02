@@ -40,6 +40,7 @@ export const RESOURCE_CATALOG: ResourceDefinition[] = [
   { module: 'admin', resource: 'warehouse', label: 'Warehouses', actions: CRUD },
   { module: 'admin', resource: 'setting', label: 'System Settings', actions: ['READ', 'EDIT'] },
   { module: 'admin', resource: 'backup', label: 'Backups', actions: ['READ', 'CREATE'] },
+  { module: 'admin', resource: 'automation', label: 'Automation Rules', actions: CRUD },
 
   { module: 'catalog', resource: 'product', label: 'Drug Master', actions: [...CRUD, 'IMPORT', 'EXPORT'] },
   { module: 'catalog', resource: 'price', label: 'Pricing', actions: ['READ', 'EDIT', 'APPROVE'] },
