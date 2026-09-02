@@ -307,10 +307,11 @@ export class HealthService {
       backups,
       iot,
       errors,
-      this.channelCheck('email', 'Email delivery', 'SMTP_URL', '/admin'),
+      this.channelCheck('email', 'Email delivery', 'EMAIL_API_URL', '/admin'),
       this.channelCheck('sms', 'SMS delivery', 'SMS_PROVIDER_URL', '/admin'),
       this.channelCheck('telegram', 'Telegram delivery', 'TELEGRAM_BOT_TOKEN', '/admin'),
       this.channelCheck('whatsapp', 'WhatsApp delivery', 'WHATSAPP_TOKEN', '/admin'),
+      this.channelCheck('push', 'Web push delivery', 'PUSH_API_URL', '/admin'),
       this.channelCheck('payments', 'Payment gateway', 'PAYMENT_PROVIDER_URL', '/admin'),
     ];
 

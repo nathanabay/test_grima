@@ -590,7 +590,10 @@ export const FEATURE_FLAGS: FeatureFlagDefinition[] = [
     label: 'Email notification delivery',
     description: 'Sends notifications by email.',
     default: false,
-    requires: 'SMTP_URL',
+    // The same variable the email adapter actually reads. Naming a different
+    // one here would leave this flag permanently unavailable to an operator
+    // who has configured email correctly.
+    requires: 'EMAIL_API_URL',
   },
   {
     key: 'feature.smsNotifications',

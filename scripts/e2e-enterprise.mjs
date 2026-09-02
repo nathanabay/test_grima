@@ -13,7 +13,20 @@ async function login(identifier) {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ identifier, password: 'PharmaCore#2026' }),
   });
-  return (await r.json()).accessToken;
+  const body = await r.json();
+  if (!body.accessToken) {
+    // Say what actually went wrong. Running every suite back to back trips the
+    // login throttle, and a script that dies later on `undefined.length` sends
+    // whoever reads the output looking for a bug that is not there.
+    console.error(
+      `\nCould not sign in as ${identifier}: HTTP ${r.status} — ${body.error ?? 'no token returned'}`,
+    );
+    if (r.status === 429) {
+      console.error('The login throttle is doing its job. Wait a minute and run this suite again.');
+    }
+    process.exit(1);
+  }
+  return body.accessToken;
 }
 function client(token) {
   return async (method, path, body) => {
@@ -394,6 +407,50 @@ check('a job can be run on demand and reports its real status',
 
 const cashierJobs = await cashier('POST', '/admin/jobs/supplier.scores/run');
 check('a cashier cannot run background jobs', cashierJobs.status === 403);
+
+// ============================================================
+console.log('\nPAYMENT CAPTURE (no gateway is connected)');
+// ============================================================
+
+const till = client(await login('cashier'));
+const cashierMe = (await till('GET', '/auth/me')).body;
+const org = (await admin('GET', '/admin/organization')).body;
+const tillBranch = org.branches.find((b) => b.id === cashierMe.branchIds[0]) ?? org.branches[0];
+const tillWarehouse = tillBranch.warehouses[0];
+const otc = (await till('GET', `/pos/search?q=Paracetamol&warehouseId=${tillWarehouse.id}`)).body
+  .find((p) => !p.requiresPrescription && !p.isControlled && Number(p.available) > 5);
+
+const cardNoRef = await till('POST', '/pos/checkout', {
+  branchId: tillBranch.id,
+  warehouseId: tillWarehouse.id,
+  lines: [{ productId: otc.id, quantity: 1 }],
+  payments: [{ method: 'CARD', amount: 1000 }],
+});
+check('a card payment with no terminal reference is refused',
+  cardNoRef.status === 400 && /reference/i.test(cardNoRef.body.error ?? ''),
+  `HTTP ${cardNoRef.status}: ${cardNoRef.body.error}`);
+
+const cardWithRef = await till('POST', '/pos/checkout', {
+  branchId: tillBranch.id,
+  warehouseId: tillWarehouse.id,
+  lines: [{ productId: otc.id, quantity: 1 }],
+  payments: [{ method: 'CARD', amount: 1000, reference: `E2E-TERM-${Date.now()}` }],
+});
+check('a card payment carrying its reference is accepted', cardWithRef.ok,
+  cardWithRef.body?.saleNo ?? cardWithRef.body?.error);
+
+if (cardWithRef.ok) {
+  const drain = (await admin('POST', '/accounting/post-pending', { limit: 200 })).body;
+  check('a sale tendered over its total still posts', drain.failed === 0,
+    drain.errors.map((e) => e.error).join('; ') || 'nothing failed');
+  const entry = (await admin('GET', '/accounting/journal?pageSize=20')).body.data
+    .find((e) => e.description.includes(cardWithRef.body.saleNo));
+  check('the tender is capped at the sale total, so change is not posted as an asset',
+    !!entry && num(entry.totalDebit) === num(cardWithRef.body.grandTotal),
+    entry
+      ? `posted ${entry.totalDebit} for a ${cardWithRef.body.grandTotal} sale tendered with 1000`
+      : 'the sale did not reach the ledger');
+}
 
 // ============================================================
 console.log('\nAUDIT');

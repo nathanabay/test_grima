@@ -310,13 +310,33 @@ export class PosService {
           );
         }
 
+        // No payment gateway is integrated (§35: the interface exists, the
+        // connection does not). A card or mobile-money payment is therefore
+        // captured on a separate terminal and recorded here after the fact,
+        // which is how a pharmacy with a standalone card machine actually
+        // works — but it means this system has no confirmation of its own.
+        //
+        // The reference from that terminal is what makes the payment
+        // reconcilable, so it is required rather than optional. Accepting a
+        // card payment with nothing to trace it by would be recording a
+        // settlement that cannot be checked against anything.
         for (const payment of input.payments) {
+          const needsReference =
+            payment.method !== PaymentMethod.CASH && payment.method !== PaymentMethod.CREDIT;
+          if (needsReference && !payment.reference?.trim()) {
+            throw new BadRequestException(
+              `A ${payment.method.toLowerCase().replace('_', ' ')} payment needs the reference from ` +
+                'the terminal or transfer that took it. No payment gateway is connected, so this ' +
+                'system cannot confirm the settlement itself.',
+            );
+          }
+
           await tx.payment.create({
             data: {
               saleId: created.id,
               method: payment.method,
               amount: new Prisma.Decimal(payment.amount),
-              reference: payment.reference ?? null,
+              reference: payment.reference?.trim() || null,
             },
           });
         }

@@ -12,7 +12,7 @@ refuses the movement — not because a button is hidden.
 | API      | NestJS 10, one module per business domain                  |
 | Database | PostgreSQL via Prisma 5 — 60+ tables, UUID keys            |
 | Web      | Next.js 15 (App Router), React 18, Tailwind                |
-| Shared   | `@pharmacore/shared` — FEFO, GS1, units, expiry, forecasting|
+| Shared   | `@pharmacore/shared` — FEFO, GS1, units, expiry, forecasting, automation conditions, CSV |
 | Monorepo | pnpm workspaces                                            |
 
 ## Running it
@@ -23,10 +23,15 @@ Requires Node 20+, pnpm and a local PostgreSQL.
 pnpm install
 createdb pharmacore
 cp .env.example .env          # then set DATABASE_URL for your Postgres user
-pnpm --filter @pharmacore/api prisma migrate dev
-pnpm db:seed
+pnpm --filter @pharmacore/api prisma migrate deploy
+pnpm db:seed                   # development only: it truncates every table first
 pnpm dev                       # API on :4000, web on :3000
 ```
+
+`pnpm db:seed` writes the demo data and then finishes it **through the real
+services** — posting the ledger, raising warehouse work, running the automation
+rules — so what the demo shows is what the code produces rather than rows
+written to look right. See [docs/deployment.md](docs/deployment.md).
 
 Open http://localhost:3000. OpenAPI docs are at http://localhost:4000/api/docs.
 
@@ -37,10 +42,23 @@ see RBAC working:
 `admin`, `manager`, `pharmacist`, `technician`, `procurement`, `warehouse`,
 `storekeeper`, `cashier`, `finance`, `qa`, `auditor`, `branchmgr`
 
+## Documentation
+
+| Document | Covers |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | Shape, the one-authority-per-rule table, ledger, audit, scope |
+| [docs/configuration.md](docs/configuration.md) | Environment variables and the settings catalogue |
+| [docs/deployment.md](docs/deployment.md) | Install, migrations, deployment, health, scaling |
+| [docs/permissions.md](docs/permissions.md) | Permission model, roles, segregation of duties |
+| [docs/accounting.md](docs/accounting.md) | FEFO vs valuation, posting, reversal, reconciliation |
+| [docs/automation.md](docs/automation.md) | Trigger → condition → action → escalation |
+| [docs/integrations.md](docs/integrations.md) | API keys, webhooks, FHIR, notification channels |
+| [docs/disaster-recovery.md](docs/disaster-recovery.md) | Backup verification and restore procedure |
+
 ## Verification
 
 ```bash
-pnpm test          # 70 unit + integration tests
+pnpm test          # 238 unit + integration tests
 pnpm test:e2e      # 60-check workflow against a running API
 ```
 
@@ -104,21 +122,60 @@ An append-only register with a running balance. Corrections append a REVERSAL
 row pointing at the entry they cancel; nothing is ever edited or deleted.
 Reconciliation reports variances rather than fixing them.
 
+### Configuration, not constants (§65)
+
+Every operational threshold — expiry horizons, approval limits, discount
+ceilings, temperature tolerances, count variance limits — is declared in
+`settings.catalog.ts` with a type, a default, bounds and an explanation, and is
+edited at **Administration → System configuration**. Resolution is database
+override → environment → default; a value outside its bounds is refused with the
+reason rather than clamped. A feature flag whose environment dependency is
+missing stays off however it is set, and says which variable is missing.
+
+### Accounting independent of picking (§32)
+
+FEFO decides which physical pack leaves the shelf; the configured valuation
+method (FIFO layers or weighted average) decides what it cost. Neither reads the
+other's input. Posting runs as a background job so a ledger problem never stops
+a pharmacist working, and a posted entry is corrected by reversal, never edited.
+See [docs/accounting.md](docs/accounting.md).
+
+### Automation as data (§58)
+
+`TRIGGER → CONDITION → ACTION → ESCALATION`, configured by an administrator, with
+no expression language — a stored expression evaluated at runtime is an
+injection surface that cannot be explained back to its author. Six actions, all
+of them things the system can really do; a rule may quarantine a batch, never
+release one. Every rule can be previewed: what it would match, the rendered
+message it would send, per-condition detail, and near misses that explain a rule
+that is quieter than expected. See [docs/automation.md](docs/automation.md).
+
 ## Layout
 
 ```
 apps/api/          NestJS API
-  prisma/          schema (60+ models), migration, demo seed
-  src/common/      Prisma (with row locking), audit, guards, decorators
-  src/modules/     auth, admin, catalog, inventory, scanning, procurement,
-                   receiving, transfers, dispensing, patients, pos, quality,
-                   coldchain, recalls, counts, analytics, notifications, jobs
+  prisma/          schema (100+ models), migrations, demo seed
+  src/common/      Prisma (with row locking), audit, config, guards, decorators
+  src/modules/     auth, admin, platform, catalog, inventory, warehouse,
+                   scanning, procurement, receiving, transfers, dispensing,
+                   patients, pos, quality, coldchain, recalls, counts,
+                   accounting, automation, intelligence, integrations, fhir,
+                   imports, analytics, reports, notifications, workflow,
+                   documents, backup, jobs
+  src/scripts/     demo finaliser (posts the ledger through the real services)
   test/            unit + integration specs
-apps/web/          Next.js app (dashboard, command centre, inventory, expiry,
-                   batches, POS, prescriptions, procurement, recalls, cold chain)
+apps/web/          Next.js app — 43 pages: dashboard with the health score,
+                   command centre, inventory, expiry, batches, warehouse
+                   operations, POS, prescriptions, patients, procurement,
+                   receiving, invoices, pricing, accounting, recalls, cold
+                   chain, quality, disposal, forecasting, reports, report
+                   builder, automation, imports, integrations, configuration,
+                   system health and jobs, administration
 packages/shared/   FEFO, GS1 parsing, unit conversion, expiry, forecasting,
-                   ABC/XYZ, permission catalogue and default roles
-scripts/           end-to-end workflow verification
+                   ABC/XYZ, automation conditions, CSV, permission catalogue
+scripts/           end-to-end verification suites
+docs/              architecture, configuration, deployment, permissions,
+                   accounting, automation, integrations, disaster recovery
 ```
 
 ## Deliberate design decisions
@@ -146,16 +203,36 @@ Reported honestly rather than left to be discovered:
 - **Per-page translation.** Navigation and app chrome are translated into
   English, Amharic and Afaan Oromo, with live coverage shown in Administration.
   Individual page copy is not yet extracted into the catalogues, so those
-  strings render in English whatever locale is selected.
+  strings render in English whatever locale is selected. The mechanism is in
+  place; what is missing is the extraction pass over each page's text.
+- **Ethiopian calendar display.** Dates are stored in UTC and rendered in the
+  configured timezone with the configured format. The Gregorian↔Ethiopian
+  conversion is exposed as a setting but the interface does not yet render
+  Ethiopian dates, so selecting it changes nothing visible rather than showing
+  an approximate conversion.
 - **GS1 DataMatrix rendering.** Labels emit GS1-128, which carries the same
   Application Identifiers and scans on the same readers. DataMatrix needs
   Reed-Solomon ECC200; rather than ship something that scans inconsistently it
   is omitted and the limitation is stated on the label sheet. A QR code is never
   substituted, per §62/§73.
-- **External notification delivery.** In-app notifications work end to end. The
-  email/SMS/Telegram/WhatsApp adapters are inert stubs that log and return
-  rather than reporting a delivery that did not happen (§35). Outbound
-  **webhooks are fully implemented** (§53) with HMAC signing and retry.
+- **External notification delivery needs credentials, not code.** The email,
+  SMS, Telegram, WhatsApp and web-push adapters each make a real HTTP call to
+  their provider and record what actually happened. With no credentials
+  configured the channel is disabled and its notifications are recorded as
+  undelivered **with the missing variable named** — a delivery that did not
+  happen is never reported as sent (§35). Outbound webhooks are complete (§53)
+  with HMAC signing and retry. SMTP itself is not spoken: email goes to a
+  provider's JSON HTTP API, which is how SendGrid, Mailgun and Postmark work.
+- **No payment gateway is connected.** The till takes cash, and records card,
+  mobile-money, bank-transfer and insurance payments **after the fact**, from
+  the reference on the separate terminal that actually took them — which is how
+  a pharmacy with a standalone card machine works. That reference is required,
+  because a card payment with nothing to trace it by cannot be reconciled
+  against anything. What the system never does is confirm an electronic payment
+  itself: there is no adapter behind `PAYMENT_PROVIDER_URL`, and the
+  `feature.paymentGateway` flag stays unavailable until one is written. To add
+  one: implement the provider call, record its response on the `Payment` row,
+  and gate it on that flag.
 - **Automated restore.** Backups are taken, encrypted, verified and pruned, and
   can be decrypted to a file. Restoring is an operator procedure at the console
   — see [docs/disaster-recovery.md](docs/disaster-recovery.md).
@@ -173,14 +250,26 @@ Reported honestly rather than left to be discovered:
 These are the guarantees worth checking first, and the commands that prove them:
 
 ```bash
-pnpm test                      # 82 unit + integration tests
+pnpm test                      # 238 unit + integration tests
 pnpm test:e2e                  # 60-check §72 workflow
-pnpm test:e2e:procurement      # 22-check procurement, receiving and AP
+pnpm test:e2e:procurement      # procurement, receiving and AP
 pnpm test:e2e:capa             # CAPA ratchet and approval segregation
+pnpm test:e2e:pos              # till, shift reconciliation, damage
+pnpm test:e2e:warehouse        # capacity, put-away, picking, packing, dispatch
+pnpm test:e2e:enterprise       # configuration, pricing, accounting, automation,
+                               # integration security, FHIR, reports, health
 ```
+
+The end-to-end suites need a seeded database and a running API
+(`pnpm db:seed && node apps/api/dist/src/main.js`).
 
 Between them these prove: two pharmacists cannot both dispense the last units;
 expired, recalled and quarantined stock cannot leave the shelf; the audit chain
 detects a rewritten row; an invoice billing for rejected stock is caught; one
-person cannot approve two steps of the same document; and a tampered backup
-fails verification instead of restoring corrupted data.
+person cannot approve two steps of the same document; a tampered backup fails
+verification instead of restoring corrupted data; a setting outside its declared
+bounds is refused; the trial balance balances and a posted entry can only be
+corrected by reversal; an API key cannot be granted a permission its creator
+lacks and stops working the moment it is revoked; a report column needing a
+permission is withheld and named rather than silently dropped; and an
+unconfigured channel reports itself unconfigured instead of healthy.
