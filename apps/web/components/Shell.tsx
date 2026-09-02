@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { AuthUser, api, can, logout, tokenStore } from '@/lib/api';
 import { LanguagePicker, useI18n } from '@/lib/i18n';
 import { OfflineBar } from '@/components/OfflineBar';
+import { GlobalSearch } from '@/components/GlobalSearch';
 
 interface NavItem {
   href: string;
@@ -35,6 +36,7 @@ const NAV: Array<{ groupKey: string; items: NavItem[] }> = [
       { href: '/inventory', labelKey: 'nav.inventory', permission: 'inventory.balance.READ' },
       { href: '/scan', labelKey: 'nav.scan', permission: 'inventory.balance.READ' },
       { href: '/inventory/expiry', labelKey: 'nav.expiry', permission: 'inventory.expiry.READ' },
+      { href: '/warehouse', labelKey: 'nav.warehouse', permission: 'inventory.task.READ' },
       { href: '/batches', labelKey: 'nav.batches', permission: 'inventory.batch.READ' },
       { href: '/counts', labelKey: 'nav.counts', permission: 'inventory.count.READ' },
       { href: '/adjustments', labelKey: 'nav.adjustments', permission: 'inventory.adjustment.CREATE' },
@@ -51,6 +53,8 @@ const NAV: Array<{ groupKey: string; items: NavItem[] }> = [
       { href: '/procurement', labelKey: 'nav.procurement', permission: 'procurement.purchase_order.READ' },
       { href: '/receiving', labelKey: 'nav.receiving', permission: 'inventory.goods_receipt.CREATE' },
       { href: '/invoices', labelKey: 'nav.invoices', permission: 'finance.invoice.READ' },
+      { href: '/pricing', labelKey: 'nav.pricing', permission: 'catalog.price.READ' },
+      { href: '/accounting', labelKey: 'nav.accounting', permission: 'finance.account.READ' },
       { href: '/approvals', labelKey: 'nav.approvals' },
     ],
   },
@@ -70,9 +74,14 @@ const NAV: Array<{ groupKey: string; items: NavItem[] }> = [
     items: [
       { href: '/forecast', labelKey: 'nav.forecast', permission: 'analytics.forecast.READ' },
       { href: '/reports', labelKey: 'nav.reports', permission: 'analytics.report.READ' },
+      { href: '/reports/builder', labelKey: 'nav.reportBuilder', permission: 'analytics.report.READ' },
+      { href: '/automation', labelKey: 'nav.automation', permission: 'admin.setting.READ' },
       { href: '/notifications', labelKey: 'nav.notifications' },
       { href: '/import', labelKey: 'nav.import', permission: 'catalog.product.IMPORT' },
       { href: '/admin', labelKey: 'nav.admin', permission: 'admin.user.READ' },
+      { href: '/admin/settings', labelKey: 'nav.settings', permission: 'admin.setting.READ' },
+      { href: '/admin/integrations', labelKey: 'nav.integrations', permission: 'admin.setting.READ' },
+      { href: '/admin/jobs', labelKey: 'nav.jobs', permission: 'admin.setting.READ' },
     ],
   },
 ];
@@ -184,6 +193,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       <main className="flex-1 min-w-0 p-4 lg:p-6">
         <OfflineBar />
+        <div className="mb-4 max-w-xl">
+          <GlobalSearch />
+        </div>
         {children}
       </main>
     </div>
