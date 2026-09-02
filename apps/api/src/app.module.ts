@@ -27,6 +27,7 @@ import { CommonServicesModule } from './modules/common-services/common-services.
 import { JobsModule } from './modules/jobs/jobs.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { DocumentsModule } from './modules/documents/documents.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     CountsModule,
     AnalyticsModule,
     ReportsModule,
+    DocumentsModule,
     JobsModule,
   ],
   providers: [

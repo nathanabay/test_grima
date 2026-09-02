@@ -20,9 +20,17 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     ],
   },
   {
+    group: 'Catalogue',
+    items: [
+      { href: '/products', label: 'Drug Master', permission: 'catalog.product.READ' },
+      { href: '/suppliers', label: 'Suppliers', permission: 'procurement.supplier.READ' },
+    ],
+  },
+  {
     group: 'Inventory',
     items: [
       { href: '/inventory', label: 'Stock Balances', permission: 'inventory.balance.READ' },
+      { href: '/scan', label: 'Scan Station', permission: 'inventory.balance.READ' },
       { href: '/inventory/expiry', label: 'Expiry Management', permission: 'inventory.expiry.READ' },
       { href: '/batches', label: 'Batches & Quarantine', permission: 'inventory.batch.READ' },
     ],
