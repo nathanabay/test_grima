@@ -1,106 +1,89 @@
 'use client';
 
 import { ReactNode } from 'react';
+import {
+  Card as BaseCard,
+  EmptyState,
+  ErrorState,
+  Loading as BaseLoading,
+  Skeleton,
+  Stat as BaseStat,
+} from './primitives';
+import { StatusBadge, SeverityBadge, ExpiryBadge, StatusTone, toneFor } from './status';
 
-export function Card({
-  title,
-  action,
-  children,
-  className = '',
-}: {
+/**
+ * Compatibility surface for the pages written before the design system existed.
+ *
+ * Each of these now delegates to the shared primitives and the one status map,
+ * so every screen picked up the new tokens, dark mode, density and consistent
+ * status colours without forty separate rewrites. New screens should import
+ * from `primitives` and `status` directly — this file exists so the old ones
+ * are not left behind on a palette nothing else uses.
+ */
+
+export { Skeleton };
+
+/** Old tone names mapped onto the semantic ones. */
+const LEGACY_TONE: Record<string, StatusTone> = {
+  neutral: 'neutral',
+  ok: 'available',
+  warn: 'near',
+  danger: 'out',
+  info: 'info',
+  brand: 'info',
+};
+
+export function Card(props: {
   title?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
-  return (
-    <section className={`card ${className}`}>
-      {(title || action) && (
-        <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-surface-border">
-          <h2 className="text-sm font-semibold text-ink">{title}</h2>
-          {action}
-        </header>
-      )}
-      <div className="p-4">{children}</div>
-    </section>
-  );
+  return <BaseCard {...props} />;
 }
-
-const TONES = {
-  neutral: 'bg-slate-100 text-slate-700',
-  ok: 'bg-ok-light text-ok',
-  warn: 'bg-warn-light text-warn',
-  danger: 'bg-danger-light text-danger',
-  info: 'bg-info-light text-info',
-  brand: 'bg-brand-light text-brand-dark',
-} as const;
 
 export function Pill({
   children,
   tone = 'neutral',
 }: {
   children: ReactNode;
-  tone?: keyof typeof TONES;
+  tone?: keyof typeof LEGACY_TONE;
 }) {
-  return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${TONES[tone]}`}>
-      {children}
-    </span>
-  );
+  return <StatusBadge tone={LEGACY_TONE[tone] ?? 'neutral'}>{children}</StatusBadge>;
 }
 
-/** Batch status -> colour, so unusable stock is obvious at a glance. */
+/** Batch status → colour, from the single product-wide map. */
 export function BatchStatus({ status }: { status: string }) {
-  const tone: keyof typeof TONES =
-    status === 'AVAILABLE' || status === 'RELEASED'
-      ? 'ok'
-      : status === 'QUARANTINED'
-        ? 'warn'
-        : status === 'EXPIRED' || status === 'RECALLED' || status === 'DESTROYED'
-          ? 'danger'
-          : 'neutral';
-  return <Pill tone={tone}>{status}</Pill>;
+  return <StatusBadge status={status} />;
 }
 
 export function ExpiryPill({ days }: { days: number | null }) {
-  if (days === null) return <span className="text-ink-subtle">-</span>;
-  const tone: keyof typeof TONES =
-    days < 0 ? 'danger' : days <= 30 ? 'danger' : days <= 90 ? 'warn' : days <= 180 ? 'info' : 'ok';
-  return <Pill tone={tone}>{days < 0 ? `expired ${Math.abs(days)}d ago` : `${days} days`}</Pill>;
+  return <ExpiryBadge days={days} />;
 }
 
 export function Severity({ level }: { level: string }) {
-  const tone: keyof typeof TONES =
-    level === 'CRITICAL' ? 'danger' : level === 'HIGH' ? 'warn' : level === 'MEDIUM' ? 'info' : 'neutral';
-  return <Pill tone={tone}>{level}</Pill>;
+  return <SeverityBadge level={level} />;
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="py-8 text-center text-sm text-ink-subtle">{children}</p>;
+  // An older call site passes one sentence; it becomes the title so the empty
+  // state still reads as a deliberate message rather than "no data".
+  return <EmptyState title={typeof children === 'string' ? children : 'Nothing to show'} body={typeof children === 'string' ? undefined : children} />;
 }
 
 export function Loading({ label = 'Loading' }: { label?: string }) {
-  return (
-    <div className="flex items-center gap-2 py-8 justify-center text-sm text-ink-muted">
-      <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-      {label}...
-    </div>
-  );
+  return <BaseLoading label={label} />;
 }
 
 export function ErrorBox({ message }: { message: string }) {
-  return (
-    <div className="rounded-md border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger">
-      {message}
-    </div>
-  );
+  return <ErrorState message={message} />;
 }
 
 export function Table({ head, children }: { head: ReactNode[]; children: ReactNode }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px]">
-        <thead className="bg-surface-sunken">
+      <table className="w-full min-w-[640px] table-hover">
+        <thead>
           <tr>
             {head.map((h, i) => (
               <th key={i} className="th">
@@ -115,63 +98,49 @@ export function Table({ head, children }: { head: ReactNode[]; children: ReactNo
   );
 }
 
-export function Stat({
-  label,
-  value,
-  tone = 'neutral',
-  sub,
-  href,
-}: {
+export function Stat(props: {
   label: string;
   value: ReactNode;
-  tone?: keyof typeof TONES;
+  tone?: 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'brand';
   sub?: ReactNode;
   href?: string;
 }) {
-  const body = (
-    <div className="card p-4 h-full transition-shadow hover:shadow-sm">
-      <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</div>
-      <div className={`mt-1 text-2xl font-semibold num ${tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn' : 'text-ink'}`}>
-        {value}
-      </div>
-      {sub && <div className="mt-1 text-xs text-ink-subtle">{sub}</div>}
-    </div>
-  );
-  // §70: dashboard figures are entry points, not decoration.
-  return href ? (
-    <a href={href} className="block">
-      {body}
-    </a>
-  ) : (
-    body
-  );
+  const { tone, ...rest } = props;
+  const mapped = tone === 'brand' ? 'info' : tone;
+  return <BaseStat {...rest} tone={mapped as any} />;
 }
 
-/** Horizontal bar chart — enough for trend and exposure without a chart library. */
+/**
+ * Horizontal bar chart — enough for trend and exposure without a chart library,
+ * and it reads correctly in both themes because the bar is a token.
+ */
 export function BarChart({
   data,
   valueKey,
   labelKey,
   format = (v: number) => String(v),
+  tone = 'brand',
 }: {
   data: any[];
   valueKey: string;
   labelKey: string;
   format?: (v: number) => string;
+  tone?: 'brand' | 'warn' | 'danger';
 }) {
   const max = Math.max(...data.map((d) => Number(d[valueKey]) || 0), 1);
+  const bar = tone === 'danger' ? 'bg-danger/70' : tone === 'warn' ? 'bg-warn/70' : 'bg-brand/70';
   return (
     <div className="space-y-1.5">
       {data.map((d, i) => {
         const value = Number(d[valueKey]) || 0;
         return (
-          <div key={i} className="flex items-center gap-3 text-xs">
+          <div key={i} className="flex items-center gap-3 text-small">
             <span className="w-32 shrink-0 truncate text-ink-muted" title={String(d[labelKey])}>
               {d[labelKey]}
             </span>
-            <span className="flex-1 h-4 rounded bg-surface-sunken overflow-hidden">
+            <span className="h-4 flex-1 overflow-hidden rounded bg-surface-sunken">
               <span
-                className="block h-full rounded bg-brand/70"
+                className={`block h-full rounded ${bar}`}
                 style={{ width: `${Math.max(2, (value / max) * 100)}%` }}
               />
             </span>
@@ -182,3 +151,5 @@ export function BarChart({
     </div>
   );
 }
+
+export { toneFor };

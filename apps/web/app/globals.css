@@ -2,28 +2,220 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Palettes. Light is the default; dark is designed rather than inverted, so the
+ * status colours keep their meaning and contrast rather than becoming muddy.
+ * Values are RGB channel triplets so Tailwind opacity modifiers work.
+ */
 @layer base {
-  html { -webkit-text-size-adjust: 100%; }
-  body { @apply bg-surface-sunken text-ink antialiased; }
-  /* Tabular figures keep quantity and money columns aligned. */
-  .num { font-variant-numeric: tabular-nums; }
+  :root {
+    --background: 248 250 252;
+    --surface: 255 255 255;
+    --surface-sunken: 248 250 252;
+    --surface-raised: 255 255 255;
+    --foreground: 15 23 42;
+    --muted: 71 85 105;
+    --subtle: 148 163 184;
+    --border: 226 232 240;
+    --border-strong: 203 213 225;
+    --shadow: 15 23 42;
+
+    --primary: 13 125 108;
+    --primary-strong: 10 97 86;
+    --primary-soft: 230 244 241;
+    --primary-fg: 255 255 255;
+    --ring: 13 125 108;
+
+    --success: 21 128 61;
+    --success-soft: 240 253 244;
+    --warning: 180 83 9;
+    --warning-soft: 255 251 235;
+    --danger: 185 28 28;
+    --danger-soft: 254 242 242;
+    --info: 29 78 216;
+    --info-soft: 239 246 255;
+
+    /* Pharmaceutical status (§27). One meaning per token, product-wide. */
+    --st-available: 21 128 61;
+    --st-low: 180 83 9;
+    --st-out: 185 28 28;
+    --st-near-expiry: 180 83 9;
+    --st-expired: 153 27 27;
+    --st-quarantine: 109 40 217;
+    --st-recall: 159 18 57;
+    --st-blocked: 71 85 105;
+    --st-cold-chain: 14 116 144;
+    --st-controlled: 67 56 202;
+    --st-in-transit: 29 78 216;
+    --st-pending: 100 116 139;
+
+    /* Table row height by density (§26). */
+    --row-h: 2.25rem;
+    --row-py: 0.375rem;
+  }
+
+  /*
+   * An explicit choice wins; with no choice the operating system decides. Both
+   * blocks define the same tokens so neither can leave one undefined.
+   */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --background: 8 12 20;
+      --surface: 17 24 36;
+      --surface-sunken: 12 18 28;
+      --surface-raised: 24 33 47;
+      --foreground: 226 232 240;
+      --muted: 148 163 184;
+      --subtle: 100 116 139;
+      --border: 34 46 63;
+      --border-strong: 51 65 85;
+      --shadow: 0 0 0;
+
+      --primary: 45 212 191;
+      --primary-strong: 94 234 212;
+      --primary-soft: 19 61 58;
+      --primary-fg: 4 20 20;
+      --ring: 45 212 191;
+
+      --success: 74 222 128;
+      --success-soft: 20 51 33;
+      --warning: 251 191 36;
+      --warning-soft: 61 44 12;
+      --danger: 248 113 113;
+      --danger-soft: 63 24 24;
+      --info: 96 165 250;
+      --info-soft: 23 39 68;
+
+      --st-available: 74 222 128;
+      --st-low: 251 191 36;
+      --st-out: 248 113 113;
+      --st-near-expiry: 251 191 36;
+      --st-expired: 252 165 165;
+      --st-quarantine: 167 139 250;
+      --st-recall: 251 113 133;
+      --st-blocked: 148 163 184;
+      --st-cold-chain: 34 211 238;
+      --st-controlled: 129 140 248;
+      --st-in-transit: 96 165 250;
+      --st-pending: 148 163 184;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --background: 8 12 20;
+    --surface: 17 24 36;
+    --surface-sunken: 12 18 28;
+    --surface-raised: 24 33 47;
+    --foreground: 226 232 240;
+    --muted: 148 163 184;
+    --subtle: 100 116 139;
+    --border: 34 46 63;
+    --border-strong: 51 65 85;
+    --shadow: 0 0 0;
+
+    --primary: 45 212 191;
+    --primary-strong: 94 234 212;
+    --primary-soft: 19 61 58;
+    --primary-fg: 4 20 20;
+    --ring: 45 212 191;
+
+    --success: 74 222 128;
+    --success-soft: 20 51 33;
+    --warning: 251 191 36;
+    --warning-soft: 61 44 12;
+    --danger: 248 113 113;
+    --danger-soft: 63 24 24;
+    --info: 96 165 250;
+    --info-soft: 23 39 68;
+
+    --st-available: 74 222 128;
+    --st-low: 251 191 36;
+    --st-out: 248 113 113;
+    --st-near-expiry: 251 191 36;
+    --st-expired: 252 165 165;
+    --st-quarantine: 167 139 250;
+    --st-recall: 251 113 133;
+    --st-blocked: 148 163 184;
+    --st-cold-chain: 34 211 238;
+    --st-controlled: 129 140 248;
+    --st-in-transit: 96 165 250;
+    --st-pending: 148 163 184;
+  }
+
+  [data-density='comfortable'] { --row-h: 2.75rem; --row-py: 0.625rem; }
+  [data-density='compact']     { --row-h: 2.25rem; --row-py: 0.375rem; }
+  [data-density='dense']       { --row-h: 1.875rem; --row-py: 0.1875rem; }
+
+  html { -webkit-text-size-adjust: 100%; color-scheme: light dark; }
+  :root[data-theme='light'] { color-scheme: light; }
+  :root[data-theme='dark'] { color-scheme: dark; }
+
+  body {
+    @apply bg-background text-ink antialiased;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  /* Tabular figures keep quantity, money and date columns aligned (§18). */
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+
+  /* One focus treatment everywhere, never removed (§54). */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2;
+    --tw-ring-offset-color: rgb(var(--surface));
+  }
+
+  /* Operational software must stay fast for people who ask it to (§55). */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer components {
-  .card { @apply bg-white rounded-lg border border-surface-border; }
+  .card { @apply bg-surface rounded-card border border-border shadow-raised; }
+
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2
-           text-sm font-medium transition-colors disabled:opacity-50
-           disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 rounded px-3 py-1.5
+           text-body font-medium transition-colors duration-state
+           disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap;
   }
-  .btn-primary { @apply btn bg-brand text-white hover:bg-brand-dark; }
-  .btn-ghost { @apply btn border border-surface-border bg-white hover:bg-surface-sunken; }
-  .btn-danger { @apply btn bg-danger text-white hover:bg-red-800; }
+  .btn-primary { @apply btn bg-brand text-brand-fg hover:bg-brand-dark; }
+  .btn-ghost   { @apply btn border border-border-strong bg-surface text-ink hover:bg-surface-sunken; }
+  .btn-quiet   { @apply btn text-ink-muted hover:bg-surface-sunken hover:text-ink; }
+  .btn-danger  { @apply btn bg-danger text-white hover:opacity-90; }
+  .btn-sm      { @apply px-2 py-1 text-small; }
+
   .input {
-    @apply w-full rounded-md border border-surface-border bg-white px-3 py-2 text-sm
-           outline-none focus:border-brand focus:ring-2 focus:ring-brand/20;
+    @apply w-full rounded border border-border-strong bg-surface text-ink px-2.5 py-1.5
+           text-body outline-none transition-colors duration-state
+           placeholder:text-ink-subtle
+           focus:border-brand focus:ring-2 focus:ring-ring/25
+           disabled:bg-surface-sunken disabled:text-ink-subtle;
   }
-  .label { @apply block text-xs font-medium text-ink-muted mb-1; }
-  .th { @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted; }
-  .td { @apply px-3 py-2 text-sm border-t border-surface-border align-top; }
+  .label { @apply block text-caption uppercase text-ink-muted mb-1; }
+
+  .th {
+    @apply px-3 py-2 text-left text-caption uppercase text-ink-muted
+           bg-surface-sunken border-b border-border select-none;
+  }
+  .td {
+    @apply px-3 text-body border-b border-border align-middle;
+    padding-top: var(--row-py);
+    padding-bottom: var(--row-py);
+  }
+
+  /* The drawer slides in from the edge it is anchored to. */
+  @keyframes slideIn {
+    from { transform: translateX(1.5rem); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+  }
+
+  /* Zebra striping stays a hint, not a set of grey stripes, in both themes. */
+  .table-zebra tbody tr:nth-child(even) { background: rgb(var(--surface-sunken) / 0.6); }
+  .table-hover tbody tr:hover { background: rgb(var(--primary) / 0.05); }
 }

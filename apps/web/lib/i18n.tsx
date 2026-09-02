@@ -44,6 +44,13 @@ const en: Catalogue = {
   'nav.group.operations': 'Operations',
   'nav.group.compliance': 'Compliance',
   'nav.group.administration': 'Administration',
+  'nav.group.pharmacy': 'Pharmacy',
+  'nav.group.purchasing': 'Purchasing',
+  'nav.group.warehouse': 'Warehouse',
+  'nav.group.sales': 'Sales',
+  'nav.group.quality': 'Quality',
+  'nav.group.finance': 'Finance',
+  'nav.group.analytics': 'Analytics',
 
   'nav.dashboard': 'Dashboard',
   'nav.commandCenter': 'Command Center',
@@ -128,6 +135,13 @@ const am: Catalogue = {
   'nav.group.operations': 'ሥራዎች',
   'nav.group.compliance': 'ተገዢነት',
   'nav.group.administration': 'አስተዳደር',
+  'nav.group.pharmacy': 'ፋርማሲ',
+  'nav.group.purchasing': 'ግዥ',
+  'nav.group.warehouse': 'መጋዘን',
+  'nav.group.sales': 'ሽያጭ',
+  'nav.group.quality': 'ጥራት',
+  'nav.group.finance': 'ፋይናንስ',
+  'nav.group.analytics': 'ትንተና',
 
   'nav.dashboard': 'ዳሽቦርድ',
   'nav.commandCenter': 'የቁጥጥር ማዕከል',
@@ -203,6 +217,13 @@ const om: Catalogue = {
   'nav.group.operations': 'Hojiiwwan',
   'nav.group.compliance': 'Ulaagaa Eeguu',
   'nav.group.administration': 'Bulchiinsa',
+  'nav.group.pharmacy': 'Faarmaasii',
+  'nav.group.purchasing': 'Bittaa',
+  'nav.group.warehouse': 'Mankuusaa',
+  'nav.group.sales': 'Gurgurtaa',
+  'nav.group.quality': 'Qulqullina',
+  'nav.group.finance': 'Faayinaansii',
+  'nav.group.analytics': 'Xiinxala',
 
   'nav.dashboard': 'Daashboordii',
   'nav.commandCenter': 'Giddugala To’annoo',
@@ -276,6 +297,12 @@ interface I18nValue {
   locale: LocaleCode;
   setLocale: (l: LocaleCode) => void;
   t: (key: string, vars?: Record<string, string | number>) => string;
+  /**
+   * A message with an explicit English fallback, for a string the catalogues do
+   * not carry yet. Better than showing the trailing key segment, and it keeps
+   * the coverage report honest: the key is still counted as untranslated.
+   */
+  tf: (key: string, fallback: string, vars?: Record<string, string | number>) => string;
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
   formatMoney: (value: unknown, currency?: string) => string;
   formatDate: (value: unknown) => string;
@@ -334,11 +361,22 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     [locale],
   );
 
+  const tf = useCallback(
+    (key: string, fallback: string, vars?: Record<string, string | number>) => {
+      const text = CATALOGUES[locale][key] ?? en[key] ?? fallback;
+      return vars
+        ? text.replace(/\{(\w+)\}/g, (m, name) => String(vars[name] ?? m))
+        : text;
+    },
+    [locale],
+  );
+
   const value = useMemo<I18nValue>(
     () => ({
       locale,
       setLocale,
       t,
+      tf,
       formatNumber: (v, options) => new Intl.NumberFormat(locale, options).format(v),
       formatMoney: (v, currency = 'ETB') =>
         `${currency} ${new Intl.NumberFormat(locale, {
@@ -353,7 +391,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
           : new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(d);
       },
     }),
-    [locale, setLocale, t],
+    [locale, setLocale, t, tf],
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
@@ -367,6 +405,7 @@ export function useI18n(): I18nValue {
       locale: 'en',
       setLocale: () => undefined,
       t: (key) => en[key] ?? key.split('.').pop() ?? key,
+      tf: (key, fallback) => en[key] ?? fallback,
       formatNumber: (v) => String(v),
       formatMoney: (v, c = 'ETB') => `${c} ${Number(v ?? 0).toFixed(2)}`,
       formatDate: (v) => (v ? String(v).slice(0, 10) : '-'),
