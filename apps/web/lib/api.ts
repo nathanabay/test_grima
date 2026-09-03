@@ -47,6 +47,35 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+
+  /**
+   * The input this rejection was about, when the server named one.
+   *
+   * A validation failure used to arrive as one sentence with no indication of
+   * which of eleven inputs it meant, so every form could do nothing but show a
+   * banner at the top. When this is set the form marks that field instead.
+   */
+  get field(): string | null {
+    const field = (this.body as { field?: unknown } | undefined)?.field;
+    return typeof field === 'string' ? field : null;
+  }
+}
+
+/**
+ * Split a failed request into the field it names and the message to show.
+ *
+ * `fieldError` goes to that input's `Field error=`; `formError` is what stays
+ * in the banner. Exactly one of them is set, so a message is never shown twice.
+ */
+export function splitError(e: unknown): {
+  fieldError: { field: string; message: string } | null;
+  formError: string | null;
+} {
+  if (e instanceof ApiError && e.field) {
+    return { fieldError: { field: e.field, message: e.message }, formError: null };
+  }
+  const message = e instanceof Error ? e.message : String(e ?? 'Request failed');
+  return { fieldError: null, formError: message };
 }
 
 function messageOf(body: any, fallback: string): string {

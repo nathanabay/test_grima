@@ -12,8 +12,9 @@ import {
   Stat,
 } from "@/components/primitives";
 import { StatusBadge } from "@/components/status";
-import { api, can, money, qty, tokenStore } from "@/lib/api";
+import { api, can, money, qty, splitError, tokenStore } from "@/lib/api";
 import { useDeepLink } from "@/lib/deepLink";
+import { useFormErrors } from "@/lib/formErrors";
 import { posQueue, QueuedSale } from "@/lib/posQueue";
 import { useScope } from "@/lib/scope";
 import { PaymentDialog, Tender } from "@/components/pos/PaymentDialog";
@@ -110,6 +111,7 @@ function Till() {
   const [paying, setPaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const errors = useFormErrors();
   const [receipt, setReceipt] = useState<any | null>(null);
   const [shiftOpen, setShiftOpen] = useState(false);
   const [customerOpen, setCustomerOpen] = useState(false);
@@ -446,7 +448,12 @@ function Till() {
         setPaying(false);
         clearCart();
       } else {
-        setError(e.message);
+        // A rejection that names an input marks that input — the discount the
+        // cashier typed, say — rather than becoming another line of red text
+        // above the whole till.
+        const { fieldError, formError } = splitError(e);
+        if (fieldError) errors.reject(fieldError.field, fieldError.message);
+        else setError(formError);
       }
     } finally {
       setBusy(false);
@@ -972,7 +979,15 @@ function Till() {
 
               {canDiscount && (
                 <div className="mt-3">
-                  <Field label="Discount on the whole sale (%)">
+                  <Field
+                    label="Discount on the whole sale (%)"
+                    error={
+                      // The input clamps to 0-100, so the only way to be wrong
+                      // is to exceed what this cashier may give away; the
+                      // server names the field and this shows it here.
+                      errors.errorFor("saleDiscountPct")
+                    }
+                  >
                     <input
                       className="input num w-24"
                       type="number"

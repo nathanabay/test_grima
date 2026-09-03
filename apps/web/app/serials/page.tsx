@@ -16,8 +16,10 @@ import { DataTable } from "@/components/DataTable";
 import { StatusBadge, statusLabel } from "@/components/status";
 import { useApi } from "@/lib/useApi";
 import { usePaged } from "@/lib/paged";
+import { useFormErrors } from "@/lib/formErrors";
 import { BatchSelect } from "@/components/ProductSelect";
 import { api, can, shortDate, tokenStore } from "@/lib/api";
+import { useFeedback } from "@/components/Feedback";
 
 /**
  * Serial register (§3: features 141-150).
@@ -329,19 +331,31 @@ function SerialDrawer({
   const [correctedTo, setCorrectedTo] = useState("IN_STOCK");
   const [referenceNo, setReferenceNo] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const errors = useFormErrors();
+  const { toast } = useFeedback();
 
   useEffect(() => {
     setEvent("");
     setReason("");
     setReferenceNo("");
-    setError(null);
+    errors.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function record() {
-    if (!id || !event) return;
+    if (!id) return;
+    // Checked here rather than by refusing silently: a button that does
+    // nothing when pressed tells the reader nothing about why.
+    if (!event) {
+      errors.reject("eventType", "Choose what happened to this pack.");
+      return;
+    }
+    if (event === "CORRECTED" && !reason.trim()) {
+      errors.reject("reason", "A correction must say why the record was wrong.");
+      return;
+    }
     setBusy(true);
-    setError(null);
+    errors.clear();
     try {
       await api(`/serials/${id}/events`, {
         method: "POST",
@@ -356,9 +370,11 @@ function SerialDrawer({
       setReason("");
       setReferenceNo("");
       setVersion((v) => v + 1);
+      errors.clear();
+      toast(`${EVENT_LABEL[event] ?? statusLabel(event)} recorded.`, "ok");
       onChanged();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      errors.capture(e);
     } finally {
       setBusy(false);
     }
@@ -394,13 +410,17 @@ function SerialDrawer({
 
           {canMove && serial.allowedEvents.length > 0 && (
             <Card title="Record a movement">
-              {error && (
+              {errors.formError && (
                 <div className="mb-3">
-                  <ErrorState message={error} />
+                  <ErrorState message={errors.formError} />
                 </div>
               )}
               <div className="space-y-3">
-                <Field label="What happened">
+                <Field
+                  label="What happened"
+                  required
+                  error={errors.errorFor("eventType")}
+                >
                   <select
                     className="input"
                     value={event}
@@ -423,6 +443,7 @@ function SerialDrawer({
                   <Field
                     label="Corrected status"
                     hint="The original entry stays visible; this records what it should have said."
+                    error={errors.errorFor("correctedTo")}
                   >
                     <select
                       className="input"
@@ -449,6 +470,7 @@ function SerialDrawer({
                 <Field
                   label="Document reference"
                   hint="The transfer, sale or disposal note this movement belongs to."
+                  error={errors.errorFor("referenceNo")}
                 >
                   <input
                     className="input"
@@ -460,6 +482,7 @@ function SerialDrawer({
                 <Field
                   label="Reason"
                   required={event === "CORRECTED"}
+                  error={errors.errorFor("reason")}
                   hint={
                     event === "CORRECTED"
                       ? "A correction must say why the record was wrong."

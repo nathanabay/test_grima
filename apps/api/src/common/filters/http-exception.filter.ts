@@ -21,11 +21,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: unknown = 'Internal server error';
     let code: string | undefined;
+    /** Which input was rejected, when the thrower knew. */
+    let field: string | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const body = exception.getResponse();
       message = typeof body === 'string' ? body : (body as any).message ?? body;
+      if (body && typeof body === 'object' && typeof (body as any).field === 'string') {
+        field = (body as any).field;
+      }
 
       // The throttler's default text is meaningless to an operator.
       if (status === HttpStatus.TOO_MANY_REQUESTS) {
@@ -77,6 +82,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
     response.status(status).json({
       statusCode: status,
       error: message,
+      // Present only when the rejection knew which input it was about, so a
+      // form can mark that field rather than showing a banner over eleven of
+      // them. Absent for everything else, which stays a banner.
+      field,
       code,
       path: request.url,
       timestamp: new Date().toISOString(),

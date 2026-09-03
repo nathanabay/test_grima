@@ -6,6 +6,7 @@ import { useApi } from '@/lib/useApi';
 import { useFeedback } from '@/components/Feedback';
 import { useDeepLink, syncDeepLink } from '@/lib/deepLink';
 import { usePaged } from '@/lib/paged';
+import { useFormErrors } from '@/lib/formErrors';
 import { useScope } from '@/lib/scope';
 import { api, can, qty, shortDate, tokenStore } from '@/lib/api';
 import { Card, Empty, ErrorBox, Loading, Pager, Pill, Table } from '@/components/ui';
@@ -107,6 +108,7 @@ function DispensingBody() {
   }, [selectedId]);
 
   const [error, setError] = useState<string | null>(null);
+  const errors = useFormErrors();
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -280,7 +282,24 @@ function DispensingBody() {
 
   async function dispense() {
     if (!prescription) return;
-    setError(null);
+    // Checked before anything is sent, and marked on the line that is wrong
+    // rather than as a sentence over a panel of a dozen inputs.
+    const missingReason = activeLines.find(
+      (l) => l.productId !== l.prescribedProductId && !l.substitutionReason.trim(),
+    );
+    if (missingReason) {
+      errors.reject(
+        'substitutionReason',
+        'Say why this differs from what was prescribed.',
+      );
+      return;
+    }
+    const badQuantity = activeLines.find((l) => !(Number(l.quantity) > 0));
+    if (badQuantity) {
+      errors.reject('quantity', 'Enter how much is being supplied.');
+      return;
+    }
+    errors.clear();
     setMessage(null);
     setBusy(true);
     try {
@@ -292,9 +311,10 @@ function DispensingBody() {
       setDispensingOpen(false);
       idempotencyKey.current = '';
       refreshLists();
+      errors.clear();
       void showLabel(result.id);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      errors.capture(e);
     } finally {
       setBusy(false);
     }
@@ -824,8 +844,13 @@ function DispensingBody() {
       >
         <div className="space-y-4">
           {error && <ErrorBox message={error} />}
+          {errors.formError && <ErrorBox message={errors.formError} />}
 
-          <Field label="Pick from" required>
+          <Field
+            label="Pick from"
+            required
+            error={errors.errorFor('warehouseId')}
+          >
             <select
               className="input"
               value={warehouseId}
@@ -906,7 +931,7 @@ function DispensingBody() {
                   </div>
                 )}
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <Field label="Quantity">
+                  <Field label="Quantity" error={errors.errorFor('quantity')}>
                     <input
                       className="input"
                       type="number"
@@ -922,7 +947,11 @@ function DispensingBody() {
                     />
                   </Field>
                   {line.productId !== line.prescribedProductId && (
-                    <Field label="Substitution reason" required>
+                    <Field
+                      label="Substitution reason"
+                      required
+                      error={errors.errorFor('substitutionReason')}
+                    >
                       <input
                         className="input"
                         value={line.substitutionReason}

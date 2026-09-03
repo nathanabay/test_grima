@@ -5,7 +5,7 @@ import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
-import { api, can, qty, shortDate, tokenStore } from "@/lib/api";
+import { api, can, qty, shortDate, splitError, tokenStore } from "@/lib/api";
 import { useFeedback } from "@/components/Feedback";
 import {
   Card,
@@ -47,6 +47,11 @@ export default function PatientsPage() {
     syncDeepLink({ id: selectedId });
   }, [selectedId]);
   const [creating, setCreating] = useState(false);
+  /** Set when the server named the input it rejected. */
+  const [fieldError, setFieldError] = useState<{
+    field: string;
+    message: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -135,18 +140,35 @@ export default function PatientsPage() {
                 setCreating(false);
                 setSelectedId(created.id);
                 setMessage(`Patient ${created.patientCode} created.`);
-              } catch (e: any) {
-                setError(e.message);
+                setFieldError(null);
+                setError(null);
+              } catch (err: unknown) {
+                // A rejection that names an input marks that input; only the
+                // rest becomes a banner, so a message is never shown twice.
+                const { fieldError, formError } = splitError(err);
+                setFieldError(fieldError);
+                setError(formError);
               }
             }}
           >
             <div className="sm:col-span-2">
-              <label className="label">Full name</label>
-              <input name="fullName" className="input" required />
+              <Field
+                label="Full name"
+                required
+                error={fieldError?.field === "fullName" ? fieldError.message : null}
+              >
+                <input name="fullName" className="input" required />
+              </Field>
             </div>
             <div>
-              <label className="label">Date of birth</label>
-              <input name="dateOfBirth" type="date" className="input" />
+              <Field
+                label="Date of birth"
+                error={
+                  fieldError?.field === "dateOfBirth" ? fieldError.message : null
+                }
+              >
+                <input name="dateOfBirth" type="date" className="input" />
+              </Field>
             </div>
             <div>
               <label className="label">Sex</label>

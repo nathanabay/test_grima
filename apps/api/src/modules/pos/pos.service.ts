@@ -15,6 +15,7 @@ import { ConfigService } from '../../common/config/config.service';
 import { LedgerService } from '../inventory/ledger.service';
 import { FefoService } from '../inventory/fefo.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
+import { FieldError, ForbiddenFieldError } from '../../common/errors/field-error';
 
 export interface SaleLineInput {
   productId: string;
@@ -436,13 +437,20 @@ export class PosService {
         if (input.saleDiscountPct) {
           const salePct = new Prisma.Decimal(input.saleDiscountPct);
           if (salePct.lessThan(0) || salePct.greaterThan(1)) {
-            throw new BadRequestException('A sale discount is a fraction between 0 and 1');
+            throw new FieldError(
+              'saleDiscountPct',
+              'A sale discount is a fraction between 0 and 1',
+            );
           }
           const ceiling = new Prisma.Decimal(
             await this.config.getNumber('pos.maxDiscountPercent'),
           ).dividedBy(100);
           if (salePct.greaterThan(ceiling) && !user.permissions.includes('sales.sale.APPROVE')) {
-            throw new ForbiddenException(
+            // A 403, because this is a refusal on authorization grounds and
+            // not a malformed request. Named so the till marks the discount
+            // box rather than adding a line of red text above the whole sale.
+            throw new ForbiddenFieldError(
+              'saleDiscountPct',
               `A sale discount of ${salePct.times(100).toFixed(1)}% exceeds the ` +
                 `${ceiling.times(100).toFixed(1)}% ceiling and needs supervisor approval`,
             );

@@ -5,7 +5,10 @@ import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { useDeepLink, useLinkedRow } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
+import { useFormErrors } from "@/lib/formErrors";
 import { api, can, qty, shortDate, tokenStore } from "@/lib/api";
+import { usePolling, sinceLabel } from "@/lib/poll";
+import { useFeedback } from "@/components/Feedback";
 import {
   Card,
   Empty,
@@ -32,6 +35,13 @@ export default function ColdChainPage() {
   // An excursion is a regulated event and the log is kept indefinitely. The
   // screen used to show the newest 25 with no way to the ones before them.
   const excursions = usePaged<any>("/cold-chain/excursions", { pageSize: 25 });
+  // These are live sensor readings. A temperature excursion the reader cannot
+  // see until they reload is an excursion nobody is watching; the interval is
+  // short because a fridge failing is measured in minutes.
+  const { lastRefreshedAt } = usePolling(() => {
+    live.refresh();
+    excursions.refresh();
+  }, 20_000);
 
   // A temperature alert names the excursion. It is read in the row, so the
   // page scrolls to that row and rings it.
@@ -43,6 +53,13 @@ export default function ColdChainPage() {
       <PageHeader
         title="Cold Chain"
         subtitle="A breach that outlasts the sensor tolerance quarantines the affected stock automatically and waits for a QA decision."
+        action={
+          // Said out loud, so a screen that has stopped refreshing looks
+          // stale rather than looking current.
+          <span className="text-small text-ink-muted">
+            Refreshes every 20 seconds &middot; {sinceLabel(lastRefreshedAt)}
+          </span>
+        }
       />
 
       <div className="space-y-4">
@@ -343,7 +360,8 @@ function EquipmentDrawer({
   const [description, setDescription] = useState("");
   const [nextDueAt, setNextDueAt] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const errors = useFormErrors();
+  const { toast } = useFeedback();
 
   const detail = useApi<any>(
     sensor ? `/cold-chain/equipment/${sensor.sensorId}` : null,
@@ -353,7 +371,7 @@ function EquipmentDrawer({
   async function submit() {
     if (!sensor) return;
     setBusy(true);
-    setError(null);
+    errors.clear();
     try {
       if (form === "calibration") {
         await api(`/cold-chain/equipment/${sensor.sensorId}/calibrations`, {
@@ -382,9 +400,17 @@ function EquipmentDrawer({
       setNotes("");
       setDescription("");
       setVersion((v) => v + 1);
+      errors.clear();
+      toast(
+        form === "calibration"
+          ? `Calibration recorded as ${result}.`
+          : "Service record added.",
+        "ok",
+      );
       onChanged();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      // A rejection that names an input marks that input; the rest is a banner.
+      errors.capture(e);
     } finally {
       setBusy(false);
     }
@@ -406,9 +432,9 @@ function EquipmentDrawer({
     >
       {detail.loading && !data && <Loading />}
       {detail.error && <ErrorState message={detail.error} />}
-      {error && (
+      {errors.formError && (
         <div className="mb-3">
-          <ErrorState message={error} />
+          <ErrorState message={errors.formError} />
         </div>
       )}
 
@@ -449,6 +475,7 @@ function EquipmentDrawer({
                   <Field
                     label="Result"
                     hint="A FAIL is recorded and does not extend the due date — the instrument is not calibrated."
+                    error={errors.errorFor("result")}
                   >
                     <select
                       className="input"
@@ -462,21 +489,21 @@ function EquipmentDrawer({
                       ))}
                     </select>
                   </Field>
-                  <Field label="Certificate number">
+                  <Field label="Certificate number" error={errors.errorFor("certificateNo")}>
                     <input
                       className="input"
                       value={certificateNo}
                       onChange={(e) => setCertificateNo(e.target.value)}
                     />
                   </Field>
-                  <Field label="Performed by">
+                  <Field label="Performed by" error={errors.errorFor("performedBy")}>
                     <input
                       className="input"
                       value={performedBy}
                       onChange={(e) => setPerformedBy(e.target.value)}
                     />
                   </Field>
-                  <Field label="Notes">
+                  <Field label="Notes" error={errors.errorFor("notes")}>
                     <textarea
                       className="input min-h-[5rem]"
                       value={notes}
@@ -486,7 +513,7 @@ function EquipmentDrawer({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <Field label="Work type">
+                  <Field label="Work type" error={errors.errorFor("workType")}>
                     <select
                       className="input"
                       value={workType}
@@ -516,7 +543,7 @@ function EquipmentDrawer({
                       onChange={(e) => setDescription(e.target.value)}
                     />
                   </Field>
-                  <Field label="Performed by">
+                  <Field label="Performed by" error={errors.errorFor("performedBy")}>
                     <input
                       className="input"
                       value={performedBy}

@@ -12,6 +12,7 @@ import { AuthenticatedUser } from '../../common/decorators';
 import { LedgerService } from '../inventory/ledger.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
 import { SeparationOfDutiesService } from '../../common/approval/separation.service';
+import { FieldError, required } from '../../common/errors/field-error';
 
 /**
  * Waste and disposal (§31).
@@ -31,16 +32,18 @@ export class DisposalService {
   ) {}
 
   async create(data: any, user: AuthenticatedUser) {
-    if (!data.items?.length) throw new BadRequestException('A disposal needs at least one line');
-    if (!data.reason?.trim()) throw new BadRequestException('A disposal reason is required');
-    // Without these the create fell through to Prisma and came back as a bare
-    // 500 — no field named, nothing the caller could correct. A missing
-    // required field is the caller's to fix, so say which one.
-    if (!data.branchId) throw new BadRequestException('branchId is required');
-    if (!data.warehouseId) throw new BadRequestException('warehouseId is required');
+    // Each of these used to fall through to Prisma and come back as a bare
+    // 500 — no field named, nothing the caller could correct.
+    if (!data.items?.length) {
+      throw new FieldError('items', 'A disposal needs at least one line');
+    }
+    required(data.reason, 'reason', 'A disposal reason');
+    required(data.branchId, 'branchId', 'The branch');
+    required(data.warehouseId, 'warehouseId', 'The warehouse');
     if (!data.method || !Object.values(DisposalMethod).includes(data.method)) {
-      throw new BadRequestException(
-        `method must be one of ${Object.values(DisposalMethod).join(', ')}`,
+      throw new FieldError(
+        'method',
+        `Choose one of ${Object.values(DisposalMethod).join(', ')}`,
       );
     }
 

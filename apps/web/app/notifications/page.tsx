@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { api } from "@/lib/api";
+import { usePolling, sinceLabel } from "@/lib/poll";
+import { useFeedback } from "@/components/Feedback";
 import { Card, Empty, ErrorBox, Loading, Pill } from "@/components/ui";
 
 const SEVERITY_TONE: Record<string, any> = {
@@ -22,6 +24,11 @@ export default function NotificationsPage() {
     unreadOnly,
     version,
   ]);
+  // This is where escalations land. A screen that only shows them when the
+  // reader happens to press reload is not where they land.
+  const { lastRefreshedAt } = usePolling(list.refresh, 30_000, !busy);
+
+  const { toast } = useFeedback();
 
   async function markRead(ids: string[]) {
     if (!ids.length) return;
@@ -30,6 +37,14 @@ export default function NotificationsPage() {
     try {
       await api("/notifications/read", { method: "POST", body: { ids } });
       setVersion((v) => v + 1);
+      // Marking one as read moves it out of the unread list, which is easy to
+      // miss on a long page; marking twenty looks like nothing happened at all.
+      toast(
+        ids.length === 1
+          ? "Marked as read."
+          : `${ids.length} notifications marked as read.`,
+        "ok",
+      );
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -45,7 +60,10 @@ export default function NotificationsPage() {
         title="Notifications"
         subtitle="Low stock, expiry, cold-chain excursions, recalls, receiving exceptions and approvals."
         action={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-small text-ink-muted">
+              Refreshes every 30 seconds &middot; {sinceLabel(lastRefreshedAt)}
+            </span>
             <button
               className="btn-ghost"
               onClick={() => setUnreadOnly((v) => !v)}

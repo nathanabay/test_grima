@@ -427,8 +427,24 @@ Ordered by how many people each unblocks, not by how interesting it is.
    permission per stage and a real finance gate, and
    `approval.purchaseOrder.managerThreshold` decides where the finance step
    becomes necessary — it used to be read by nothing. §2.
-6. Per-field validation, success confirmation on the fourteen silent pages,
-   polling on the three live screens, and translation in page bodies. §5.4–§5.7.
+6. ~~Per-field validation, success confirmation, polling on the three live
+   screens, and translation in page bodies.~~ **Mostly done.** A rejection now
+   carries the input it was about (`FieldError` on the server, `useFormErrors`
+   on the client), so a form marks the field instead of showing a banner over
+   eleven of them. Confirmation was added where it was genuinely absent, and
+   `/cold-chain`, `/notifications` and `/approvals` refresh themselves and say
+   when they last did. **Translation of page bodies is not done** — it is 43
+   pages of copy and belongs in its own change; the i18n layer and the
+   sidebar's use of it are unchanged. §5.4–§5.7.
+
+   Measuring this corrected the measurement. `page-audit.mjs` had been
+   counting `setMessage(` as the only form of confirmation, `<Empty>` as the
+   only empty state, and any `<Field>` as a form input — so it reported
+   eleven screens as silent that say so through `toast()`, a sign-in form as
+   missing an empty state, and a filter as an unmarked input. Each check now
+   carries a self-test on a page with the defect and one with the remedy, so
+   widening a check cannot quietly turn the audit into a rubber stamp.
 
 Items 1–3 are the difference between a system that demonstrates and a system
-that runs a pharmacy. Items 1–5 are done; item 6 is next.
+that runs a pharmacy. All six are now done, except translation of the page
+bodies, which is listed above as the one piece deliberately left.

@@ -5,7 +5,9 @@ import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
+import { useFormErrors } from "@/lib/formErrors";
 import { api, can, money, qty, shortDate, tokenStore } from "@/lib/api";
+import { useFeedback } from "@/components/Feedback";
 import {
   Card,
   Empty,
@@ -425,8 +427,9 @@ function SupplierRisk({
   const [creditLimit, setCreditLimit] = useState(
     String(supplier.creditLimit ?? 0),
   );
+  const { toast } = useFeedback();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const form = useFormErrors();
   const [saved, setSaved] = useState(false);
 
   const credit = useApi<any>(`/suppliers/${supplier.id}/credit`, [
@@ -447,7 +450,7 @@ function SupplierRisk({
 
   async function save() {
     setBusy(true);
-    setError(null);
+    form.clear();
     try {
       await api(`/suppliers/${supplier.id}`, {
         method: "PATCH",
@@ -458,9 +461,12 @@ function SupplierRisk({
         },
       });
       setSaved((v) => !v);
+      form.clear();
+      toast("Risk assessment and credit limit saved.", "ok");
       onSaved();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      // A rejection that names an input marks that input; the rest is a banner.
+      form.capture(e);
     } finally {
       setBusy(false);
     }
@@ -470,7 +476,7 @@ function SupplierRisk({
 
   return (
     <div className="space-y-4">
-      {error && <ErrorState message={error} />}
+      {form.formError && <ErrorState message={form.formError} />}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat
@@ -524,6 +530,7 @@ function SupplierRisk({
             <Field
               label="Risk level"
               hint="How exposed the pharmacy is if this supplier stops delivering."
+              error={form.errorFor("riskLevel")}
             >
               <select
                 className="input"
@@ -540,6 +547,7 @@ function SupplierRisk({
             <Field
               label="Why"
               hint="A rating with no reasoning cannot be reviewed by anyone else."
+              error={form.errorFor("riskNotes")}
             >
               <textarea
                 className="input min-h-[6rem]"
@@ -550,6 +558,7 @@ function SupplierRisk({
             <Field
               label="Credit limit"
               hint="Zero means no limit was agreed; purchase orders are then not checked against one."
+              error={form.errorFor("creditLimit")}
             >
               <input
                 className="input num"

@@ -63,24 +63,115 @@ const CHECKS = [
   {
     key: 'silent-success',
     label: 'changes data and confirms nothing',
-    test: (s) => /method: ["'](POST|PATCH|PUT|DELETE)/.test(s) && !/setMessage\(/.test(s),
+    /**
+     * `toast()` is confirmation, and so is a receipt or result panel the
+     * action produces — the till showing a receipt is not silent — and so is
+     * an `onMessage` prop handed to a child that raises it. Counting only
+     * `setMessage(` reported eleven screens as silent that say so plainly.
+     */
+    test: (s) =>
+      /method: ["'](POST|PATCH|PUT|DELETE)/.test(s) &&
+      !/setMessage\(|\btoast\(|setReceipt\(|setResult\(|onMessage\(/.test(s),
   },
   {
     key: 'no-empty-state',
     label: 'renders nothing explanatory when it has nothing to show',
-    test: (s) => !/<Empty|<EmptyState/.test(s),
+    /**
+     * `DataTable`'s own `empty=` is an empty state, and a page that fetches no
+     * list — a sign-in form, an import wizard, a redirect — has no "nothing to
+     * show" to explain. Flagging those asked for a message that would never
+     * render.
+     */
+    test: (s) =>
+      /useApi|usePaged/.test(s) && !/<Empty|<EmptyState|\bempty=/.test(s),
   },
   {
     key: 'no-error-state',
     label: 'has no way to show a failed request',
-    test: (s) => !/<ErrorBox|<ErrorState/.test(s),
+    /**
+     * A page whose only request lives in a child component — `/scan` and its
+     * `<Scanner>` — shows the failure through that child. What matters is that
+     * the reader sees it, not which file renders it.
+     */
+    test: (s) =>
+      /useApi|usePaged|await api\(/.test(s) &&
+      !/<ErrorBox|<ErrorState/.test(s),
   },
   {
     key: 'field-error-unused',
     label: 'has a form but never marks the field that was rejected',
-    test: (s) => /<Field\b/.test(s) && !/<Field[^>]*error=/.test(s),
+    /**
+     * Three things this must not confuse with a form:
+     *
+     *  - a page that defines its own local `Field` for read-only detail rows
+     *    (`/products`), which has no input to mark;
+     *  - `Field` around a filter (`/batches`, `/inventory`), which the server
+     *    never rejects because nothing is submitted;
+     *  - a `<Field>` opening tag spread over several lines, which the old
+     *    single-line pattern read as having no `error` prop even when it did.
+     */
+    test: (s) => {
+      if (!/<Field\b/.test(s)) return false;
+      if (/function Field\(/.test(s)) return false;
+      // No submission means nothing for the server to reject.
+      if (!/method: ["'](POST|PATCH|PUT)/.test(s)) return false;
+      return !/<Field\b[\s\S]{0,400}?\berror=/.test(s);
+    },
   },
 ];
+
+/**
+ * Each check, against a page that has the defect and one that does not.
+ *
+ * The checks were widened to stop reporting screens that were in fact fine —
+ * a `toast()` is confirmation, a `DataTable empty=` is an empty state, a
+ * `<Field>` around a filter has nothing to reject. Widening a check is how a
+ * measurement quietly becomes a rubber stamp, so each one is exercised here on
+ * both answers before it is trusted on the real pages.
+ */
+const SELF_TEST = {
+  'unreachable-rows': {
+    bad: 'const a = useApi("/x?pageSize=25");',
+    good: 'const a = usePaged("/x", { pageSize: 25 }); <Pager />',
+  },
+  'lying-pager': {
+    bad: '<DataTable rows={r} /> useApi("/x?pageSize=25")',
+    good: '<DataTable rows={r} server={p.server} /> useApi("/x?pageSize=25")',
+  },
+  'browser-prompt': {
+    bad: 'const v = window.prompt("why?");',
+    good: 'const v = await prompt({ fields: [] });',
+  },
+  'silent-success': {
+    bad: 'await api("/x", { method: "POST" });',
+    good: 'await api("/x", { method: "POST" }); toast("Saved", "ok");',
+  },
+  'no-empty-state': {
+    bad: 'const list = useApi("/x"); list.data.map(Boolean)',
+    good: 'const list = useApi("/x"); <EmptyState title="Nothing yet" />',
+  },
+  'no-error-state': {
+    bad: 'const list = useApi("/x");',
+    good: 'const list = useApi("/x"); <ErrorBox message={list.error} />',
+  },
+  'field-error-unused': {
+    bad: '<Field label="Name"><input /></Field> api("/x", { method: "POST" })',
+    good: '<Field label="Name" error={e}><input /></Field> api("/x", { method: "POST" })',
+  },
+};
+
+for (const { key, test } of CHECKS) {
+  const sample = SELF_TEST[key];
+  if (!sample) throw new Error(`No self-test for check "${key}"`);
+  const capsOf = (src) =>
+    [...src.matchAll(/(?:pageSize|limit)=(\d+)/g)].map((m) => Number(m[1]));
+  if (!test(sample.bad, capsOf(sample.bad))) {
+    throw new Error(`Check "${key}" no longer catches the defect it names`);
+  }
+  if (test(sample.good, capsOf(sample.good))) {
+    throw new Error(`Check "${key}" reports a page that has the remedy`);
+  }
+}
 
 const found = {};
 const rows = [];

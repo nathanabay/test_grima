@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
+import { FieldError, required } from '../../common/errors/field-error';
 
 /**
  * Patients and customers (§25).
@@ -168,6 +169,16 @@ export class PatientsService {
     // were written at different times.
     if ((data.allergies !== undefined || data.notes !== undefined) && !this.canSeeClinical(user)) {
       throw new ForbiddenException('You are not authorized to record clinical patient information');
+    }
+
+    // Without this the create fell through to Prisma and came back as a bare
+    // 500 — no field named, nothing the person at the counter could correct.
+    required(data.fullName, 'fullName', "The patient's name");
+    if (data.dateOfBirth && Number.isNaN(new Date(data.dateOfBirth).getTime())) {
+      throw new FieldError('dateOfBirth', 'That is not a date we can read');
+    }
+    if (data.dateOfBirth && new Date(data.dateOfBirth).getTime() > Date.now()) {
+      throw new FieldError('dateOfBirth', 'A date of birth cannot be in the future');
     }
 
     const count = await this.prisma.patient.count();

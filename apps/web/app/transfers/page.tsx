@@ -5,7 +5,8 @@ import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
-import { api, qty, shortDate, tokenStore } from "@/lib/api";
+import { useFormErrors } from "@/lib/formErrors";
+import { api, qty, shortDate, splitError, tokenStore } from "@/lib/api";
 import { useFeedback } from "@/components/Feedback";
 import {
   Card,
@@ -718,8 +719,11 @@ function DispatchDrawer({
     }))
     .filter((l: any) => l.quantity > 0);
 
+  const errors = useFormErrors();
+
   async function dispatch() {
     setBusy(true);
+    errors.clear();
     try {
       await api(`/transfers/${transfer.id}/dispatch`, {
         method: "POST",
@@ -735,8 +739,12 @@ function DispatchDrawer({
         },
       });
       onDispatched(transfer.transferNo);
-    } catch (e: any) {
-      onError(e.message);
+    } catch (e: unknown) {
+      // A rejection that names an input marks that input; only the rest goes
+      // to the page's banner.
+      const { fieldError, formError } = splitError(e);
+      if (fieldError) errors.reject(fieldError.field, fieldError.message);
+      else onError(formError ?? "Dispatch failed");
     } finally {
       setBusy(false);
     }
@@ -756,14 +764,14 @@ function DispatchDrawer({
         />
       ) : (
         <div className="space-y-3">
-          <Field label="Courier or vehicle">
+          <Field label="Courier or vehicle" error={errors.errorFor("vehicleOrCourier")}>
             <input
               className="input"
               value={vehicleOrCourier}
               onChange={(e) => setCourier(e.target.value)}
             />
           </Field>
-          <Field label="Driver name">
+          <Field label="Driver name" error={errors.errorFor("driverName")}>
             <input
               className="input"
               value={driverName}
@@ -773,6 +781,7 @@ function DispatchDrawer({
           <Field
             label="Driver phone"
             hint="Held on the transfer so the destination can chase the delivery. It is not copied into the audit log."
+            error={errors.errorFor("driverPhone")}
           >
             <input
               className="input"
@@ -780,7 +789,7 @@ function DispatchDrawer({
               onChange={(e) => setDriverPhone(e.target.value)}
             />
           </Field>
-          <Field label="Tracking number">
+          <Field label="Tracking number" error={errors.errorFor("trackingNumber")}>
             <input
               className="input"
               value={trackingNumber}
@@ -790,6 +799,7 @@ function DispatchDrawer({
           <Field
             label="Expected arrival"
             hint="Leave blank to use the configured transit allowance. Either way the transfer appears on the overdue list once it is late."
+            error={errors.errorFor("expectedArrival")}
           >
             <input
               className="input"

@@ -6,6 +6,7 @@ import { useApi } from "@/lib/useApi";
 import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, qty, shortDate } from "@/lib/api";
+import { useFeedback } from "@/components/Feedback";
 import {
   Card,
   Empty,
@@ -34,6 +35,8 @@ export default function RecallsPage() {
   ]);
   const [error, setError] = useState<string | null>(null);
 
+  const { toast } = useFeedback();
+
   async function updateTask(taskId: string, recovered: number) {
     setError(null);
     try {
@@ -42,6 +45,7 @@ export default function RecallsPage() {
         body: { status: "RECOVERED", quantityRecovered: recovered },
       });
       detail.refresh();
+      toast(`${qty(recovered)} recorded as recovered.`, "ok");
     } catch (e: any) {
       setError(e.message);
     }

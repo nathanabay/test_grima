@@ -5,6 +5,7 @@ import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { useDeepLink, useLinkedRow } from "@/lib/deepLink";
 import { api, money } from "@/lib/api";
+import { usePolling, sinceLabel } from "@/lib/poll";
 import { useFeedback } from "@/components/Feedback";
 import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
 
@@ -18,6 +19,11 @@ export default function ApprovalsPage() {
   // so a link that names an instance scrolls to it and rings it instead.
   const link = useDeepLink("id");
   useLinkedRow(link.id, !!queue.data);
+  // A queue is the one shape of screen that is wrong when it is static: a
+  // document arriving is exactly what the reader is here for. Half a minute
+  // is often enough for a queue and rare enough not to fight a reader who is
+  // in the middle of deciding.
+  const { lastRefreshedAt } = usePolling(queue.refresh, 30_000, !busy);
 
   async function act(item: any, action: "APPROVE" | "REJECT" | "RETURN") {
     const verb = action.toLowerCase();
@@ -68,6 +74,11 @@ export default function ApprovalsPage() {
       <PageHeader
         title="My Approvals"
         subtitle="Documents waiting on a step you are permitted to decide. Anything you already approved is hidden — one person cannot approve two steps of the same document."
+        action={
+          <span className="text-small text-ink-muted">
+            Refreshes every 30 seconds &middot; {sinceLabel(lastRefreshedAt)}
+          </span>
+        }
       />
 
       {error && (

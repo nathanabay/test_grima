@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { api } from "@/lib/api";
-import { Card, Empty, ErrorBox, Pill, Table } from "@/components/ui";
+import { Card, ErrorBox, Pill, Table } from "@/components/ui";
 
 /**
  * Data import (§60): UPLOAD -> MAP COLUMNS -> VALIDATE -> PREVIEW -> IMPORT.
