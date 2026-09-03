@@ -5,6 +5,7 @@ import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
+import { useFeedback } from "@/components/Feedback";
 import {
   Card,
   Empty,
@@ -25,6 +26,7 @@ const METHODS = [
 ];
 
 export default function DisposalPage() {
+  const { prompt } = useFeedback();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -224,16 +226,41 @@ export default function DisposalPage() {
                   <button
                     className="btn-danger"
                     disabled={busy}
-                    onClick={() => {
-                      const witness = window.prompt("Witness name (required):");
-                      if (!witness) return;
-                      const cert = window.prompt(
-                        "Disposal certificate number (required):",
-                      );
-                      if (!cert) return;
+                    onClick={async () => {
+                      // The witness to a destruction of medicines is a
+                      // regulatory record. It used to be typed into a browser
+                      // prompt with no label and no way to correct a typo.
+                      const answer = await prompt({
+                        title: `Carry out disposal ${selected.disposalNo}`,
+                        body: "This removes the stock and cannot be undone. The witness and certificate are what a regulator reads to establish that the medicines were destroyed as recorded.",
+                        confirmLabel: "Carry out disposal",
+                        tone: "danger",
+                        fields: [
+                          {
+                            name: "witnessName",
+                            label: "Witness",
+                            required: true,
+                            hint: "The person who watched the destruction, in full.",
+                            validate: (v: string) =>
+                              v.trim().split(/\s+/).length < 2
+                                ? "Record the witness's full name, not initials."
+                                : null,
+                          },
+                          {
+                            name: "certificateNo",
+                            label: "Disposal certificate number",
+                            required: true,
+                            hint: "As issued by the contractor or authority.",
+                          },
+                        ],
+                      });
+                      if (!answer) return;
                       act(
                         `/disposals/${selected.id}/execute`,
-                        { witnessName: witness, certificateNo: cert },
+                        {
+                          witnessName: answer.witnessName,
+                          certificateNo: answer.certificateNo,
+                        },
                         "Disposal carried out; stock removed and certificate recorded.",
                       );
                     }}

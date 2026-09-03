@@ -6,6 +6,7 @@ import { useApi } from "@/lib/useApi";
 import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, qty, shortDate, tokenStore } from "@/lib/api";
+import { useFeedback } from "@/components/Feedback";
 import {
   Card,
   Empty,
@@ -39,6 +40,7 @@ const STATUS_TONE: Record<string, any> = {
 };
 
 export default function TransfersPage() {
+  const { prompt } = useFeedback();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // An overdue-transfer alert names the transfer; it should open it.
@@ -368,34 +370,71 @@ export default function TransfersPage() {
                     <button
                       className="btn-ghost"
                       disabled={busy}
-                      onClick={() => {
-                        const item = detail.data.items[0];
-                        const inTransit =
-                          Number(item.dispatchedQty) - Number(item.receivedQty);
-                        const got = window.prompt(
-                          `Quantity actually received of ${inTransit}:`,
-                          String(inTransit),
-                        );
-                        if (!got) return;
-                        const reason =
-                          Number(got) < inTransit
-                            ? window.prompt(
-                                "Variance reason (required for a shortfall):",
-                              )
-                            : undefined;
-                        if (Number(got) < inTransit && !reason) return;
+                      onClick={async () => {
+                        // This used to prompt for `items[0]` only, so a
+                        // three-line transfer could be short-received on its
+                        // first line and nowhere else. Every line in transit
+                        // is asked for, against the quantity dispatched.
+                        const inTransit = detail.data.items
+                          .map((i: any) => ({
+                            ...i,
+                            outstanding:
+                              Number(i.dispatchedQty) - Number(i.receivedQty),
+                          }))
+                          .filter((i: any) => i.outstanding > 0);
+                        if (!inTransit.length) return;
+                        const answer = await prompt({
+                          title: `Receive ${detail.data.transferNo}`,
+                          body: "Enter what actually arrived. A shortfall needs a reason, because the difference is stock that has left one warehouse and reached no other.",
+                          confirmLabel: "Record receipt",
+                          fields: [
+                            ...inTransit.map((i: any) => ({
+                              name: `qty-${i.id}`,
+                              label: `${i.product?.genericName ?? "Line"} — dispatched ${qty(i.outstanding)}`,
+                              type: "number" as const,
+                              required: true,
+                              min: "0",
+                              max: String(i.outstanding),
+                              step: "0.01",
+                              defaultValue: String(i.outstanding),
+                              validate: (v: string) => {
+                                const n = Number(v);
+                                if (n < 0) return "A quantity cannot be negative.";
+                                if (n > i.outstanding)
+                                  return `More than the ${qty(i.outstanding)} dispatched.`;
+                                return null;
+                              },
+                            })),
+                            {
+                              name: "reason",
+                              label: "Variance reason",
+                              type: "textarea" as const,
+                              hint: "Required only if you received less than was dispatched.",
+                              validate: (v: string, all: Record<string, string>) => {
+                                const short = inTransit.some(
+                                  (i: any) =>
+                                    Number(all[`qty-${i.id}`] ?? 0) < i.outstanding,
+                                );
+                                return short && !v
+                                  ? "A shortfall needs a reason."
+                                  : null;
+                              },
+                            },
+                          ],
+                        });
+                        if (!answer) return;
+                        const lines = inTransit.map((i: any) => ({
+                          itemId: i.id,
+                          quantity: Number(answer[`qty-${i.id}`]),
+                          varianceReason:
+                            Number(answer[`qty-${i.id}`]) < i.outstanding
+                              ? answer.reason
+                              : undefined,
+                        }));
                         act(
                           `/transfers/${detail.data.id}/receive`,
-                          {
-                            lines: [
-                              {
-                                itemId: item.id,
-                                quantity: Number(got),
-                                varianceReason: reason,
-                              },
-                            ],
-                          },
-                          "Partially received",
+                          { lines },
+                          "Receipt recorded",
                         );
                       }}
                     >

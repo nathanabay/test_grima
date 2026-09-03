@@ -6,6 +6,7 @@ import { useApi } from "@/lib/useApi";
 import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, can, qty, shortDate, tokenStore } from "@/lib/api";
+import { useFeedback } from "@/components/Feedback";
 import {
   Card,
   Empty,
@@ -367,6 +368,7 @@ function GovernanceDrawer({
   onChanged: (message: string) => void;
   onOpenPatient: (id: string) => void;
 }) {
+  const { prompt } = useFeedback();
   const [view, setView] = useState<"duplicates" | "retention">("duplicates");
   const [years, setYears] = useState(7);
   const [version, setVersion] = useState(0);
@@ -385,11 +387,23 @@ function GovernanceDrawer({
   );
 
   async function merge(sourceId: string, targetId: string, label: string) {
-    const reason = window.prompt(
-      "Why are these the same person? This is recorded in the audit trail.",
-      "Confirmed duplicate at the counter",
-    );
-    if (!reason) return;
+    const answer = await prompt({
+      title: `Merge ${label}?`,
+      body: "One patient record absorbs the other: prescriptions, dispensings and allergies are repointed, and the merge cannot be undone from here. Say why, because this goes into the audit trail.",
+      confirmLabel: "Merge them",
+      tone: "danger",
+      fields: [
+        {
+          name: "reason",
+          label: "Why these are the same person",
+          type: "textarea",
+          required: true,
+          defaultValue: "Confirmed duplicate at the counter",
+        },
+      ],
+    });
+    if (!answer) return;
+    const reason = answer.reason;
     setBusy(true);
     setError(null);
     try {
@@ -409,11 +423,23 @@ function GovernanceDrawer({
   }
 
   async function anonymize(id: string, code: string) {
-    const reason = window.prompt(
-      `Why is ${code} being anonymised? The identifying fields are cleared; the pharmacy record is kept.`,
-      "Erasure requested by the patient",
-    );
-    if (!reason) return;
+    const answer = await prompt({
+      title: `Anonymise ${code}?`,
+      body: "The identifying fields are cleared and cannot be recovered. The pharmacy record — what was dispensed, when — is kept, because it is a legal record that erasure does not reach.",
+      confirmLabel: "Anonymise",
+      tone: "danger",
+      fields: [
+        {
+          name: "reason",
+          label: "Why this patient is being anonymised",
+          type: "textarea",
+          required: true,
+          defaultValue: "Erasure requested by the patient",
+        },
+      ],
+    });
+    if (!answer) return;
+    const reason = answer.reason;
     setBusy(true);
     setError(null);
     try {

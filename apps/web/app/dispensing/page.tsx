@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Shell, PageHeader } from '@/components/Shell';
 import { useApi } from '@/lib/useApi';
+import { useFeedback } from '@/components/Feedback';
 import { useDeepLink, syncDeepLink } from '@/lib/deepLink';
 import { usePaged } from '@/lib/paged';
 import { useScope } from '@/lib/scope';
@@ -86,6 +87,7 @@ function DispensingBody() {
   const { branchId, branch, branches, warehouses, defaultWarehouseId } = useScope();
 
   const [view, setView] = useState<'queue' | 'all'>('queue');
+  const { prompt } = useFeedback();
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -576,12 +578,25 @@ function DispensingBody() {
                             <button
                               className="btn-quiet btn-sm"
                               disabled={busy}
-                              onClick={() => {
-                                const reason = window.prompt('Why is this supply being reversed?');
-                                if (!reason?.trim()) return;
+                              onClick={async () => {
+                                const answer = await prompt({
+                                  title: `Reverse ${d.dispensingNo}?`,
+                                  body: 'The supply is reversed and the stock goes back on the shelf. Nothing is deleted — a reversal is appended, and the reason is part of the clinical record.',
+                                  confirmLabel: 'Reverse the supply',
+                                  tone: 'danger',
+                                  fields: [
+                                    {
+                                      name: 'reason',
+                                      label: 'Why is this supply being reversed',
+                                      type: 'textarea',
+                                      required: true,
+                                    },
+                                  ],
+                                });
+                                if (!answer) return;
                                 void act(
                                   `/dispensing/${d.id}/reverse`,
-                                  { reason: reason.trim(), returnToStock: true },
+                                  { reason: answer.reason, returnToStock: true },
                                   `${d.dispensingNo} reversed and the stock put back.`,
                                 );
                               }}
@@ -615,12 +630,25 @@ function DispensingBody() {
                     <button
                       className="btn-ghost"
                       disabled={busy}
-                      onClick={() => {
-                        const reason = window.prompt('Rejection reason:');
-                        if (!reason?.trim()) return;
+                      onClick={async () => {
+                        const answer = await prompt({
+                          title: `Reject ${prescription.prescriptionNo}?`,
+                          body: 'The patient will not be supplied against this prescription. The reason is shown to whoever looks at it next, including the prescriber.',
+                          confirmLabel: 'Reject',
+                          tone: 'danger',
+                          fields: [
+                            {
+                              name: 'reason',
+                              label: 'Why it is being rejected',
+                              type: 'textarea',
+                              required: true,
+                            },
+                          ],
+                        });
+                        if (!answer) return;
                         void act(
                           `/prescriptions/${prescription.id}/review`,
-                          { decision: 'REJECT', reason: reason.trim() },
+                          { decision: 'REJECT', reason: answer.reason },
                           'Prescription rejected.',
                         );
                       }}
@@ -663,12 +691,28 @@ function DispensingBody() {
                     <button
                       className="btn-ghost"
                       disabled={busy}
-                      onClick={() => {
-                        const who = window.prompt('Who is collecting? (name)');
-                        if (!who?.trim()) return;
+                      onClick={async () => {
+                        const answer = await prompt({
+                          title: 'Record collection',
+                          body: 'Who took the medicine away. For a controlled drug this is the record that says it left the pharmacy with a named person.',
+                          confirmLabel: 'Record collection',
+                          fields: [
+                            {
+                              name: 'collectedBy',
+                              label: 'Collected by',
+                              required: true,
+                              hint: 'The full name of the person collecting, patient or representative.',
+                              validate: (v: string) =>
+                                v.trim().split(/\s+/).length < 2
+                                  ? 'Record a full name, not initials.'
+                                  : null,
+                            },
+                          ],
+                        });
+                        if (!answer) return;
                         void act(
                           `/prescriptions/${prescription.id}/collect`,
-                          { collectedBy: who.trim() },
+                          { collectedBy: answer.collectedBy },
                           'Collection recorded.',
                         );
                       }}
@@ -701,12 +745,25 @@ function DispensingBody() {
                     <button
                       className="btn-ghost"
                       disabled={busy}
-                      onClick={() => {
-                        const reason = window.prompt('Why is it being cancelled?');
-                        if (!reason?.trim()) return;
+                      onClick={async () => {
+                        const answer = await prompt({
+                          title: `Cancel ${prescription.prescriptionNo}?`,
+                          body: 'The prescription is closed and cannot be dispensed against. Anything already supplied stays supplied.',
+                          confirmLabel: 'Cancel it',
+                          tone: 'danger',
+                          fields: [
+                            {
+                              name: 'reason',
+                              label: 'Why it is being cancelled',
+                              type: 'textarea',
+                              required: true,
+                            },
+                          ],
+                        });
+                        if (!answer) return;
                         void act(
                           `/prescriptions/${prescription.id}/cancel`,
-                          { reason: reason.trim() },
+                          { reason: answer.reason },
                           'Prescription cancelled.',
                         );
                       }}

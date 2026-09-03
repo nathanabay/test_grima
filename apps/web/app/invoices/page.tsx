@@ -6,6 +6,7 @@ import { useApi } from "@/lib/useApi";
 import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate } from "@/lib/api";
+import { useFeedback } from "@/components/Feedback";
 import {
   Card,
   Empty,
@@ -15,6 +16,15 @@ import {
   Pill,
   Table,
 } from "@/components/ui";
+
+/** Mirrors the PaymentMethod enum; the server rejects anything else. */
+const PAYMENT_METHODS = [
+  "BANK_TRANSFER",
+  "CASH",
+  "CARD",
+  "MOBILE_MONEY",
+  "CREDIT",
+] as const;
 
 const MATCH_TONE: Record<string, any> = {
   MATCHED: "ok",
@@ -36,6 +46,7 @@ const STATUS_TONE: Record<string, any> = {
 };
 
 export default function InvoicesPage() {
+  const { prompt } = useFeedback();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // A notification names a record; opening it should open that record, not a
@@ -288,14 +299,31 @@ export default function InvoicesPage() {
                   <button
                     className="btn-primary"
                     disabled={busy}
-                    onClick={() => {
+                    onClick={async () => {
                       const needsReason = detail.data.matchStatus !== "MATCHED";
-                      const reason = needsReason
-                        ? window.prompt(
-                            `This invoice does not reconcile (${detail.data.matchStatus}). Reason for approving anyway:`,
-                          )
-                        : undefined;
-                      if (needsReason && !reason) return;
+                      let reason: string | undefined;
+                      if (needsReason) {
+                        const answer = await prompt({
+                          title: "Approve an invoice that does not reconcile?",
+                          body: `The three-way match came back ${detail.data.matchStatus}. Approving anyway is recorded against your name with the reason you give.`,
+                          confirmLabel: "Approve anyway",
+                          tone: "danger",
+                          fields: [
+                            {
+                              name: "reason",
+                              label: "Why approve despite the mismatch",
+                              type: "textarea",
+                              required: true,
+                              validate: (v) =>
+                                v.length < 10
+                                  ? "Give a reason someone reading the file later can act on."
+                                  : null,
+                            },
+                          ],
+                        });
+                        if (!answer) return;
+                        reason = answer.reason;
+                      }
                       act(
                         `/supplier-invoices/${detail.data.id}/approve`,
                         { overrideReason: reason },
@@ -313,23 +341,61 @@ export default function InvoicesPage() {
                   <button
                     className="btn-primary"
                     disabled={busy}
-                    onClick={() => {
+                    onClick={async () => {
                       const outstanding =
                         Number(detail.data.grandTotal) -
                         Number(detail.data.amountPaid);
-                      const amount = window.prompt(
-                        `Payment amount (outstanding ${outstanding.toFixed(2)}):`,
-                        outstanding.toFixed(2),
-                      );
-                      if (!amount) return;
-                      const reference =
-                        window.prompt("Payment reference:") ?? undefined;
+                      // Money used to be typed into a browser prompt, with no
+                      // currency, no method, and no way to correct a typo
+                      // before it posted against the supplier's account.
+                      const answer = await prompt({
+                        title: `Record a payment against ${detail.data.invoiceNo}`,
+                        body: `Outstanding ${money(outstanding)}. The payment is recorded here; it does not move money.`,
+                        confirmLabel: "Record payment",
+                        fields: [
+                          {
+                            name: "amount",
+                            label: "Amount",
+                            type: "number",
+                            required: true,
+                            step: "0.01",
+                            min: "0.01",
+                            max: String(outstanding),
+                            defaultValue: outstanding.toFixed(2),
+                            hint: `Between 0.01 and ${money(outstanding)}.`,
+                            validate: (v) => {
+                              const n = Number(v);
+                              if (n <= 0) return "A payment must be positive.";
+                              if (n > outstanding + 0.005)
+                                return `That is more than the ${money(outstanding)} outstanding.`;
+                              return null;
+                            },
+                          },
+                          {
+                            name: "method",
+                            label: "Method",
+                            type: "select",
+                            required: true,
+                            defaultValue: "BANK_TRANSFER",
+                            options: PAYMENT_METHODS.map((m) => ({
+                              value: m,
+                              label: m.replace(/_/g, " ").toLowerCase(),
+                            })),
+                          },
+                          {
+                            name: "reference",
+                            label: "Reference",
+                            hint: "The transfer or cheque number, so the payment can be traced.",
+                          },
+                        ],
+                      });
+                      if (!answer) return;
                       act(
                         `/supplier-invoices/${detail.data.id}/pay`,
                         {
-                          amount: Number(amount),
-                          method: "BANK_TRANSFER",
-                          reference,
+                          amount: Number(answer.amount),
+                          method: answer.method,
+                          reference: answer.reference || undefined,
                         },
                         "Payment recorded",
                       );

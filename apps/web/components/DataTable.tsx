@@ -2,6 +2,7 @@
 
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "./primitives";
+import { useFeedback } from "./Feedback";
 
 export interface Column<T> {
   key: string;
@@ -114,6 +115,7 @@ export function DataTable<T>({
   /** Tints a row that needs attention, e.g. expired stock. */
   rowTone?: (row: T) => "danger" | "warn" | null;
 }) {
+  const { prompt } = useFeedback();
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -267,10 +269,27 @@ export function DataTable<T>({
     URL.revokeObjectURL(url);
   }
 
-  function saveView() {
+  async function saveView() {
     if (!storeKey) return;
-    const name = window.prompt("Name this view");
-    if (!name?.trim()) return;
+    const answer = await prompt({
+      title: "Name this view",
+      body: "The search, sort and column choice on screen are saved under this name, in this browser.",
+      confirmLabel: "Save view",
+      fields: [
+        {
+          name: "name",
+          label: "Name",
+          required: true,
+          placeholder: "Controlled drugs, expiring first",
+          validate: (v: string) =>
+            views.some((existing) => existing.name === v)
+              ? "A view with that name already exists here."
+              : null,
+        },
+      ],
+    });
+    if (!answer) return;
+    const name = answer.name;
     const view: SavedView = {
       name: name.trim(),
       query,

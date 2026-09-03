@@ -6,6 +6,7 @@ import { useApi } from "@/lib/useApi";
 import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, shortDate } from "@/lib/api";
+import { useFeedback, type PromptField } from "@/components/Feedback";
 import {
   Card,
   Empty,
@@ -46,6 +47,7 @@ const EVIDENCE_FIELD: Record<string, string | null> = {
 };
 
 export default function QualityPage() {
+  const { prompt } = useFeedback();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // A notification names a record; opening it should open that record, not a
@@ -76,24 +78,59 @@ export default function QualityPage() {
     const field = EVIDENCE_FIELD[status];
     const body: any = { status };
 
+    // A CAPA record is what an inspector reads. Its root cause, corrective
+    // action and verification used to be typed into a browser prompt, one
+    // untyped line at a time, with the previous answer already gone.
+    const fields: PromptField[] = [];
     if (field) {
-      const prompts: Record<string, string> = {
-        rootCause: "Root cause — what actually caused this?",
-        correctiveAction:
-          "Corrective action — what has been done about this occurrence?",
-        preventiveAction: "Preventive action — what stops it happening again?",
-        verification: "Verification — what evidence shows the actions worked?",
+      const labels: Record<string, { label: string; hint: string }> = {
+        rootCause: {
+          label: "Root cause",
+          hint: "What actually caused this, not what happened.",
+        },
+        correctiveAction: {
+          label: "Corrective action",
+          hint: "What has been done about this occurrence.",
+        },
+        preventiveAction: {
+          label: "Preventive action",
+          hint: "What stops it happening again.",
+        },
+        verification: {
+          label: "Verification",
+          hint: "The evidence that shows the actions worked.",
+        },
       };
-      const value = window.prompt(prompts[field]);
-      if (!value) return;
-      body[field] = value;
+      fields.push({
+        name: field,
+        label: labels[field].label,
+        hint: labels[field].hint,
+        type: "textarea",
+        required: true,
+        validate: (v: string) =>
+          v.length < 15
+            ? "Write enough that someone reading the file in a year can follow it."
+            : null,
+      });
     }
     if (status === "CLOSED" && detail.data?.status === "REPORTED") {
-      const note = window.prompt(
-        "Closing without investigating requires a justification:",
-      );
-      if (!note) return;
-      body.closureNote = note;
+      fields.push({
+        name: "closureNote",
+        label: "Justification for closing without investigating",
+        type: "textarea",
+        required: true,
+      });
+    }
+
+    if (fields.length) {
+      const answer = await prompt({
+        title: `Move to ${status.replace(/_/g, " ").toLowerCase()}`,
+        body: "This becomes part of the incident's permanent record.",
+        confirmLabel: "Record and advance",
+        fields,
+      });
+      if (!answer) return;
+      Object.assign(body, answer);
     }
 
     setBusy(true);

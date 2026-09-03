@@ -411,9 +411,13 @@ Ordered by how many people each unblocks, not by how interesting it is.
    row. `deeplink-check.mjs` opens each link with a real id out of the API and
    checks the record is on screen, because a page can read a parameter and
    then do nothing with it. §3.
-4. **Replace the twenty-one browser prompts** with the `Drawer` + `Field`
-   pattern already in the codebase, starting with the payment amount, the
-   received quantity and the disposal witness. §5.3.
+4. ~~**Replace the twenty-one browser prompts.**~~ **Done.** All 21 are gone.
+   `useFeedback().prompt` opens a labelled dialog with typed fields,
+   per-field errors reported together, and validation that refuses what the
+   server would refuse. The three the audit named — payment amount, received
+   quantity, disposal witness — were done first. `dialog-check.mjs` stubs
+   `window.prompt` to record a call, so a screen that quietly fell back to one
+   fails rather than passing. §5.3.
 5. **Decide between the workflow engine and the inline chains**, and implement
    distinct approvers wherever `approval.requireDistinctApprovers` claims to
    apply. §2.
@@ -421,4 +425,4 @@ Ordered by how many people each unblocks, not by how interesting it is.
    polling on the three live screens, and translation in page bodies. §5.4–§5.7.
 
 Items 1–3 are the difference between a system that demonstrates and a system
-that runs a pharmacy. All three are done; item 4 is next.
+that runs a pharmacy. Items 1–4 are done; item 5 is next.

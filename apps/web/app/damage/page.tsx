@@ -6,6 +6,7 @@ import { useApi } from "@/lib/useApi";
 import { useDeepLink, useLinkedRow } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
+import { useFeedback } from "@/components/Feedback";
 import {
   Card,
   Empty,
@@ -35,6 +36,7 @@ const STATUS_TONE: Record<string, any> = {
 };
 
 export default function DamagePage() {
+  const { prompt } = useFeedback();
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -50,13 +52,25 @@ export default function DamagePage() {
   useLinkedRow(link.id, !list.loading);
 
   async function verify(id: string, decision: "VERIFY" | "REJECT") {
-    const notes =
-      decision === "REJECT"
-        ? window.prompt(
-            "Why is this being rejected? The stock will be returned to inventory:",
-          )
-        : (window.prompt("Verification notes (optional):") ?? undefined);
-    if (decision === "REJECT" && !notes) return;
+    const rejecting = decision === "REJECT";
+    const answer = await prompt({
+      title: rejecting ? "Reject this damage report?" : "Verify this damage report",
+      body: rejecting
+        ? "The stock goes back into inventory as sellable. Say why, because the person who reported it will read this."
+        : "Verifying writes the loss off against the batch. Notes are optional but are kept with the report.",
+      confirmLabel: rejecting ? "Reject" : "Verify",
+      tone: rejecting ? "danger" : "primary",
+      fields: [
+        {
+          name: "notes",
+          label: rejecting ? "Why it is being rejected" : "Verification notes",
+          type: "textarea",
+          required: rejecting,
+        },
+      ],
+    });
+    if (!answer) return;
+    const notes = answer.notes || undefined;
 
     setBusy(true);
     setError(null);

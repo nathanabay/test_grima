@@ -5,9 +5,11 @@ import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { useDeepLink, useLinkedRow } from "@/lib/deepLink";
 import { api, money } from "@/lib/api";
+import { useFeedback } from "@/components/Feedback";
 import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
 
 export default function ApprovalsPage() {
+  const { prompt } = useFeedback();
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -18,11 +20,26 @@ export default function ApprovalsPage() {
   useLinkedRow(link.id, !!queue.data);
 
   async function act(item: any, action: "APPROVE" | "REJECT" | "RETURN") {
-    const comment =
-      action === "APPROVE"
-        ? (window.prompt("Comment (optional):") ?? undefined)
-        : window.prompt(`Reason for ${action.toLowerCase()} (required):`);
-    if (action !== "APPROVE" && !comment) return;
+    const verb = action.toLowerCase();
+    const answer = await prompt({
+      title: `${verb[0].toUpperCase()}${verb.slice(1)} ${item.documentType.replace(/_/g, " ").toLowerCase()}?`,
+      body:
+        action === "APPROVE"
+          ? "Your approval is recorded against your name and moves the document to its next step."
+          : "The document goes back to whoever raised it, with what you write here.",
+      confirmLabel: `${verb[0].toUpperCase()}${verb.slice(1)}`,
+      tone: action === "APPROVE" ? "primary" : "danger",
+      fields: [
+        {
+          name: "comment",
+          label: action === "APPROVE" ? "Comment" : `Reason to ${verb}`,
+          type: "textarea",
+          required: action !== "APPROVE",
+        },
+      ],
+    });
+    if (!answer) return;
+    const comment = answer.comment || undefined;
 
     setBusy(true);
     setError(null);

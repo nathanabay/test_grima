@@ -52,7 +52,7 @@ interface FilterRow {
 }
 
 export default function ReportBuilderPage() {
-  const { toast, confirm } = useFeedback();
+  const { toast, prompt, confirm } = useFeedback();
   const [sourceKey, setSourceKey] = useState("");
   const [chosen, setChosen] = useState<string[]>([]);
   const [filters, setFilters] = useState<FilterRow[]>([]);
@@ -169,8 +169,22 @@ export default function ReportBuilderPage() {
   }
 
   async function saveReport() {
-    const name = window.prompt("Name this report");
-    if (!name) return;
+    const answer = await prompt({
+      title: "Save this report",
+      body: "The definition is saved, not its results — running it later re-reads the data with your permissions at that moment.",
+      confirmLabel: "Save report",
+      fields: [
+        {
+          name: "name",
+          label: "Name",
+          required: true,
+          placeholder: "Expiring stock by branch",
+          hint: "How it will read in the saved list.",
+        },
+      ],
+    });
+    if (!answer) return;
+    const name = answer.name;
     setBusy(true);
     setError(null);
     try {

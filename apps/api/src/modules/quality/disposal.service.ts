@@ -31,6 +31,16 @@ export class DisposalService {
   async create(data: any, user: AuthenticatedUser) {
     if (!data.items?.length) throw new BadRequestException('A disposal needs at least one line');
     if (!data.reason?.trim()) throw new BadRequestException('A disposal reason is required');
+    // Without these the create fell through to Prisma and came back as a bare
+    // 500 — no field named, nothing the caller could correct. A missing
+    // required field is the caller's to fix, so say which one.
+    if (!data.branchId) throw new BadRequestException('branchId is required');
+    if (!data.warehouseId) throw new BadRequestException('warehouseId is required');
+    if (!data.method || !Object.values(DisposalMethod).includes(data.method)) {
+      throw new BadRequestException(
+        `method must be one of ${Object.values(DisposalMethod).join(', ')}`,
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const disposalNo = await this.docNumbers.next(tx, 'DIS');

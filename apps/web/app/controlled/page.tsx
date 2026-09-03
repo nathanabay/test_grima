@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { api, qty, shortDate } from "@/lib/api";
+import { useFeedback } from "@/components/Feedback";
 import {
   Card,
   Empty,
@@ -32,6 +33,7 @@ import { SeverityBadge } from "@/components/status";
  * is what lets the register be reconciled against physical stock.
  */
 export default function ControlledPage() {
+  const { prompt } = useFeedback();
   const [productId, setProductId] = useState("");
   const [branchId, setBranchId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -65,10 +67,26 @@ export default function ControlledPage() {
   );
 
   async function reverse(entryId: string) {
-    const reason = window.prompt(
-      "Why is this entry being reversed? A reversal is appended; nothing is edited.",
-    );
-    if (!reason) return;
+    const answer = await prompt({
+      title: "Reverse this register entry?",
+      body: "A reversal is appended to the register; the original entry is never edited or deleted. Both rows stay visible to a regulator, and this reason is one of them.",
+      confirmLabel: "Append a reversal",
+      tone: "danger",
+      fields: [
+        {
+          name: "reason",
+          label: "Why the entry is being reversed",
+          type: "textarea",
+          required: true,
+          validate: (v: string) =>
+            v.length < 10
+              ? "A statutory register needs a reason someone can act on."
+              : null,
+        },
+      ],
+    });
+    if (!answer) return;
+    const reason = answer.reason;
     setBusy(true);
     setError(null);
     try {

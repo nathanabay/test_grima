@@ -5,6 +5,7 @@ import { useApi } from "@/lib/useApi";
 import { api, qty, shortDate } from "@/lib/api";
 import { Card, Empty, ErrorBox, Loading, Table } from "@/components/ui";
 import { StatusBadge } from "@/components/status";
+import { useFeedback } from "@/components/Feedback";
 
 /**
  * What is holding stock out of available (§19).
@@ -27,16 +28,29 @@ export function ReservationsPanel({
   const [onlyLapsed, setOnlyLapsed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
+  const { prompt } = useFeedback();
   const { data, error, loading, refresh } = useApi<any>(
     `/inventory/reservations?pageSize=100${onlyLapsed ? "&onlyLapsed=true" : ""}`,
     [onlyLapsed],
   );
 
   async function release(row: any) {
-    const reason = window.prompt(
-      `Release ${qty(row.quantity)} held by ${row.referenceType.replace(/_/g, " ").toLowerCase()}?\nSay why:`,
-    );
-    if (!reason?.trim()) return;
+    const answer = await prompt({
+      title: `Release ${qty(row.quantity)} back to available stock?`,
+      body: `It is currently held by ${row.referenceType.replace(/_/g, " ").toLowerCase()}. Releasing makes it sellable again, and whatever was waiting on it will find it gone.`,
+      confirmLabel: "Release the hold",
+      tone: "danger",
+      fields: [
+        {
+          name: "reason",
+          label: "Why the hold is being released",
+          type: "textarea",
+          required: true,
+        },
+      ],
+    });
+    if (!answer) return;
+    const reason = answer.reason;
     onError(null);
     setBusy(row.id);
     try {
