@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, qty, shortDate } from "@/lib/api";
 import {
@@ -17,6 +18,16 @@ import {
 
 export default function RecallsPage() {
   const [selected, setSelected] = useState<string | null>(null);
+
+  // A notification names a record; opening it should open that record, not a
+  // list the reader then searches by hand.
+  const link = useDeepLink("id");
+  useEffect(() => {
+    if (link.id) setSelected(link.id);
+  }, [link.id]);
+  useEffect(() => {
+    syncDeepLink({ id: selected });
+  }, [selected]);
   const list = usePaged<any>("/recalls", { pageSize: 25 });
   const detail = useApi<any>(selected ? `/recalls/${selected}` : null, [
     selected,

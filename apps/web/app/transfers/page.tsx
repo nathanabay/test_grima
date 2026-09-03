@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, qty, shortDate, tokenStore } from "@/lib/api";
 import {
@@ -39,6 +40,15 @@ const STATUS_TONE: Record<string, any> = {
 
 export default function TransfersPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // An overdue-transfer alert names the transfer; it should open it.
+  const link = useDeepLink("id");
+  useEffect(() => {
+    if (link.id) setSelectedId(link.id);
+  }, [link.id]);
+  useEffect(() => {
+    syncDeepLink({ id: selectedId });
+  }, [selectedId]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);

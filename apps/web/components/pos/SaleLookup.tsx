@@ -21,10 +21,13 @@ export function SaleLookup({
   canRefund,
   onClose,
   onChanged,
+  initialTerm = '',
 }: {
   open: boolean;
   branchId: string;
   branchName?: string;
+  /** Prefills the search, so `/pos?saleId=…` opens on that sale. */
+  initialTerm?: string;
   canVoid: boolean;
   canRefund: boolean;
   onClose: () => void;
@@ -41,13 +44,14 @@ export function SaleLookup({
 
   useEffect(() => {
     if (!open) return;
-    setTerm('');
+    setTerm(initialTerm);
     setSelected(null);
     setError(null);
     setReason('');
     setRefundLines({});
-    void search('');
-  }, [open]);
+    void search(initialTerm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialTerm]);
 
   async function search(q: string) {
     setLoading(true);

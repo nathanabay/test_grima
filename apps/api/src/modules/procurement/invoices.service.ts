@@ -242,7 +242,7 @@ export class InvoicesService {
         body: notes.join('\n'),
         branchId: invoice.branchId,
         roleCodes: ['FINANCE_OFFICER', 'PROCUREMENT_OFFICER'],
-        linkUrl: `/finance/invoices/${invoiceId}`,
+        linkUrl: `/invoices?id=${invoiceId}`,
       });
     }
 

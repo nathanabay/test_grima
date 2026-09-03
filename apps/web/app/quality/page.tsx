@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, shortDate } from "@/lib/api";
 import {
@@ -46,6 +47,16 @@ const EVIDENCE_FIELD: Record<string, string | null> = {
 
 export default function QualityPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // A notification names a record; opening it should open that record, not a
+  // list the reader then searches by hand.
+  const link = useDeepLink("id");
+  useEffect(() => {
+    if (link.id) setSelectedId(link.id);
+  }, [link.id]);
+  useEffect(() => {
+    syncDeepLink({ id: selectedId });
+  }, [selectedId]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);

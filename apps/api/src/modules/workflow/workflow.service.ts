@@ -153,7 +153,7 @@ export class WorkflowService {
       body: `A document is waiting at step ${step.step} (${step.name}).`,
       branchId: input.branchId ?? null,
       roleCodes: step.notifyRoles,
-      linkUrl: `/approvals/${instanceId}`,
+      linkUrl: `/approvals?id=${instanceId}`,
     });
   }
 

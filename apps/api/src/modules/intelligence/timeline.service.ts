@@ -41,6 +41,29 @@ const TIMELINE_PERMISSION: Record<string, string> = {
   SUPPLIER: 'procurement.supplier.READ',
 };
 
+/**
+ * Where a document attached to a record is read.
+ *
+ * There is no page per document — a document belongs to a record, and every
+ * one of these pages carries a Documents tab. The link used to be
+ * `/documents/<id>`, a route that has never existed, so every document entry
+ * in every timeline was a dead end.
+ */
+function documentLink(entityType: string, entityId: string): string | null {
+  switch (entityType.toUpperCase()) {
+    case 'PRODUCT':
+      return `/products?id=${entityId}&tab=documents`;
+    case 'SUPPLIER':
+      return `/suppliers?id=${entityId}&tab=documents`;
+    case 'BATCH':
+      return `/batches/${entityId}`;
+    case 'PATIENT':
+      return `/patients?id=${entityId}`;
+    default:
+      return null;
+  }
+}
+
 /** Roles with a clinical reason to see a patient's history (§25). */
 const CLINICAL_ROLES = ['PHARMACIST', 'PHARMACY_ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER'];
 
@@ -173,7 +196,7 @@ export class TimelineService {
           (row.referenceNo ? ` · ${row.referenceNo}` : '') +
           (row.reason ? ` · ${row.reason}` : ''),
         actor: row.performedById ? (actors.get(row.performedById) ?? null) : null,
-        linkUrl: `/inventory/ledger?transactionId=${row.id}`,
+        linkUrl: `/adjustments?transactionId=${row.id}`,
         sourceType: row.referenceType ?? 'INVENTORY_TRANSACTION',
         sourceId: row.referenceId ?? row.id,
       };
@@ -248,7 +271,9 @@ export class TimelineService {
       title: `Document attached: ${doc.fileName}`,
       detail: `${doc.mimeType}, ${Math.round(doc.sizeBytes / 1024)} KB`,
       actor: doc.uploadedById ? (actors.get(doc.uploadedById) ?? null) : null,
-      linkUrl: `/documents/${doc.id}`,
+      // There is no page per document; a document belongs to a record, and the
+      // reader wants that record's Documents tab, not a file on its own.
+      linkUrl: documentLink(entityType, entityId),
       sourceType: 'DOCUMENT',
       sourceId: doc.id,
     }));
@@ -289,7 +314,7 @@ export class TimelineService {
         // §71: old and new value, actor and reason, all on one line.
         detail: `${p.oldValue.toString()} → ${p.newValue.toString()}${p.reason ? ` · ${p.reason}` : ''}`,
         actor: p.changedById ? (priceActors.get(p.changedById) ?? null) : null,
-        linkUrl: `/products?id=${productId}&tab=pricing`,
+        linkUrl: `/products?id=${productId}&tab=price-history`,
         sourceType: 'PRICE_HISTORY',
         sourceId: p.id,
       })),
@@ -299,7 +324,7 @@ export class TimelineService {
         title: `Batch ${b.batchNumber} received`,
         detail: `Expires ${b.expiryDate.toISOString().slice(0, 10)} · ${b.status}`,
         actor: null,
-        linkUrl: `/batches?id=${b.id}`,
+        linkUrl: `/batches/${b.id}`,
         sourceType: 'BATCH',
         sourceId: b.id,
       })),
@@ -358,7 +383,7 @@ export class TimelineService {
         title: `Batch ${batch.batchNumber} created`,
         detail: `${batch.product.genericName} ${batch.product.strength} · expires ${batch.expiryDate.toISOString().slice(0, 10)}`,
         actor: null,
-        linkUrl: `/batches?id=${batchId}`,
+        linkUrl: `/batches/${batchId}`,
         sourceType: 'BATCH',
         sourceId: batchId,
       });
@@ -371,7 +396,7 @@ export class TimelineService {
           title: 'Released by QA',
           detail: batch.qualityNotes,
           actor: batch.releasedById ? (actors.get(batch.releasedById) ?? null) : null,
-          linkUrl: `/batches?id=${batchId}`,
+          linkUrl: `/batches/${batchId}`,
           sourceType: 'BATCH',
           sourceId: batchId,
         });
@@ -474,7 +499,9 @@ export class TimelineService {
         title: `Sale ${s.saleNo}`,
         detail: s.grandTotal.toString(),
         actor: null,
-        linkUrl: `/pos?saleId=${s.id}`,
+        // The till's sale lookup searches by sale number, which is also what a
+        // cashier reads off a receipt; a uuid matches nothing there.
+        linkUrl: `/pos?saleNo=${s.saleNo}`,
         sourceType: 'SALE',
         sourceId: s.id,
       });
@@ -487,7 +514,9 @@ export class TimelineService {
         title: `${c.consentType} consent ${c.granted ? 'granted' : 'refused'} (v${c.version})`,
         detail: c.withdrawnAt ? `Withdrawn ${c.withdrawnAt.toISOString().slice(0, 10)}` : c.method,
         actor: null,
-        linkUrl: `/patients?id=${patientId}&tab=consent`,
+        // No consent tab exists on `/patients` yet; the link opens the patient
+        // rather than naming a tab that is not there.
+        linkUrl: `/patients?id=${patientId}`,
         sourceType: 'PATIENT_CONSENT',
         sourceId: c.id,
       });

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, useLinkedRow } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
 import {
@@ -64,6 +65,10 @@ export default function ReceivingPage() {
       .join("&"),
     pageSize: 10,
   });
+  // A goods-receipt alert names the receipt; the recent-receipts list is where
+  // it is read, so the link scrolls to that row.
+  const linked = useDeepLink("id");
+  useLinkedRow(linked.id, !recent.loading);
 
   useEffect(() => {
     if (!org.data) return;
@@ -401,7 +406,7 @@ export default function ReceivingPage() {
           {recent.rows.length ? (
             <Table head={["GRN", "When", "Lines", "Flags"]}>
               {recent.rows.map((g: any) => (
-                <tr key={g.id}>
+                <tr key={g.id} data-row-id={g.id}>
                   <td className="td font-medium">{g.grnNo}</td>
                   <td className="td text-xs text-ink-muted">
                     {shortDate(g.receivedAt)}

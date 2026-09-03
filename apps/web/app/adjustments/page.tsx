@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, useLinkedRow } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
 import {
@@ -77,6 +78,11 @@ export default function AdjustmentsPage() {
       .join("&"),
     pageSize: 25,
   });
+
+  // A timeline entry names a ledger movement; the ledger panel is where it is
+  // read, so the link scrolls to that row rather than to the top of the list.
+  const link = useDeepLink("transactionId");
+  useLinkedRow(link.transactionId, !ledger.loading);
 
   useEffect(() => {
     if (!org.data) return;
@@ -421,7 +427,7 @@ export default function AdjustmentsPage() {
               ]}
             >
               {ledger.rows.map((t: any) => (
-                <tr key={t.id}>
+                <tr key={t.id} data-row-id={t.id}>
                   <td className="td text-xs text-ink-muted">
                     {shortDate(t.occurredAt)}
                   </td>

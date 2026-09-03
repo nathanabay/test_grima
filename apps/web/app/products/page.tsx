@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, can, money, qty, shortDate, tokenStore } from "@/lib/api";
 import { Card, Empty, ErrorBox, Loading, Pager, Pill, Table } from "@/components/ui";
@@ -23,6 +24,24 @@ export default function ProductsPage() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("Overview");
+
+  // A notification, or a timeline entry, names a product and a tab of its
+  // record. Both are honoured, and both are written back as the reader moves,
+  // so what is on screen can be copied out of the address bar and sent on.
+  const link = useDeepLink("id", "tab");
+  useEffect(() => {
+    if (link.id) setSelectedId(link.id);
+    const wanted = TABS.find(
+      (t) => t.toLowerCase().replace(/ /g, "-") === link.tab?.toLowerCase(),
+    );
+    if (wanted) setTab(wanted);
+  }, [link.id, link.tab]);
+  useEffect(() => {
+    syncDeepLink({
+      id: selectedId,
+      tab: selectedId ? tab.toLowerCase().replace(/ /g, "-") : null,
+    });
+  }, [selectedId, tab]);
 
   // The drug master holds more products than one page. Reading a fixed first
   // page and stopping hid 94 of 119 on the seed alone.

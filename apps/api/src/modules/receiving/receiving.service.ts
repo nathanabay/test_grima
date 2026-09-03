@@ -412,7 +412,7 @@ export class ReceivingService {
           .join('\n'),
         branchId: input.branchId,
         roleCodes: ['QA_OFFICER', 'WAREHOUSE_MANAGER'],
-        linkUrl: `/receiving/${result.receipt.id}`,
+        linkUrl: `/receiving?id=${result.receipt.id}`,
       });
     }
 

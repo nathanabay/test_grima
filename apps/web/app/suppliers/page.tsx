@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, can, money, qty, shortDate, tokenStore } from "@/lib/api";
 import {
@@ -25,13 +26,34 @@ import {
 import { DataTable } from "@/components/DataTable";
 import { StatusBadge, SeverityBadge } from "@/components/status";
 
+const SUPPLIER_TABS = [
+  "Profile",
+  "Risk",
+  "Products",
+  "Orders",
+  "Documents",
+] as const;
+
 export default function SuppliersPage() {
   const [term, setTerm] = useState("");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<
-    "Profile" | "Risk" | "Products" | "Orders" | "Documents"
-  >("Profile");
+  const [tab, setTab] =
+    useState<(typeof SUPPLIER_TABS)[number]>("Profile");
+
+  // As on `/products`: the link names a supplier and, when a document or an
+  // order sent the reader here, which tab of that supplier to open.
+  const link = useDeepLink("id", "tab");
+  useEffect(() => {
+    if (link.id) setSelectedId(link.id);
+    const wanted = SUPPLIER_TABS.find(
+      (t) => t.toLowerCase() === link.tab?.toLowerCase(),
+    );
+    if (wanted) setTab(wanted);
+  }, [link.id, link.tab]);
+  useEffect(() => {
+    syncDeepLink({ id: selectedId, tab: selectedId ? tab.toLowerCase() : null });
+  }, [selectedId, tab]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -252,11 +274,7 @@ export default function SuppliersPage() {
               <div className="mb-3 flex gap-1 border-b border-surface-border pb-2">
                 {(
                   [
-                    "Profile",
-                    "Risk",
-                    "Products",
-                    "Orders",
-                    "Documents",
+                    ...SUPPLIER_TABS,
                   ] as const
                 ).map((t) => (
                   <button

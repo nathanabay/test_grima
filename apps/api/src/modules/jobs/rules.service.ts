@@ -183,7 +183,7 @@ export class RulesService implements OnModuleInit {
           }`,
         branchId: b.branchId,
         roleCodes: ['WAREHOUSE_MANAGER', 'PHARMACY_ADMIN', 'BRANCH_MANAGER'],
-        linkUrl: `/inventory/expiry?batchId=${b.batchId}`,
+        linkUrl: `/batches/${b.batchId}`,
         payload: { batchId: b.batchId, daysRemaining: days, valueAtRisk: value },
       });
       alerted += 1;
@@ -230,7 +230,7 @@ export class RulesService implements OnModuleInit {
           .map((r) => `${r.productName}: ${r.available} available, suggest ordering ${r.suggestedQuantity}`)
           .join('\n'),
       roleCodes: ['PROCUREMENT_OFFICER', 'PHARMACY_ADMIN'],
-      linkUrl: '/procurement/replenishment',
+      linkUrl: '/procurement',
     });
 
     this.logger.log(`Low stock rule: ${recommendations.length} recommendation(s)`);
@@ -260,7 +260,7 @@ export class RulesService implements OnModuleInit {
         body: `Purchase order ${po.poNo} was expected on ${po.expectedDate?.toISOString().slice(0, 10)}.`,
         branchId: po.branchId,
         roleCodes: ['PROCUREMENT_OFFICER'],
-        linkUrl: `/procurement/purchase-orders/${po.id}`,
+        linkUrl: `/procurement?poId=${po.id}`,
       });
     }
 
@@ -294,7 +294,7 @@ export class RulesService implements OnModuleInit {
         title: `${s.companyName} licence ${days < 0 ? 'has expired' : `expires in ${days} days`}`,
         body: `Supplier licence expiry: ${s.licenseExpiry?.toISOString().slice(0, 10)}. Obtain a renewed licence before the next order.`,
         roleCodes: ['PROCUREMENT_OFFICER', 'QA_OFFICER'],
-        linkUrl: `/suppliers/${s.id}`,
+        linkUrl: `/suppliers?id=${s.id}`,
       });
     }
 

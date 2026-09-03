@@ -50,6 +50,8 @@ const SORTS = [
  */
 interface Filters {
   search: string;
+  /** Set only by a link that named one product, e.g. a reorder alert. */
+  productId: string;
   warehouseId: string;
   batchStatus: string;
   expiringWithinDays: string;
@@ -63,6 +65,7 @@ interface Filters {
 
 const EMPTY_FILTERS: Filters = {
   search: "",
+  productId: "",
   warehouseId: "",
   batchStatus: "",
   expiringWithinDays: "",
@@ -79,6 +82,7 @@ function readFilters(): Filters {
   const p = new URLSearchParams(window.location.search);
   return {
     search: p.get("search") ?? "",
+    productId: p.get("productId") ?? "",
     warehouseId: p.get("warehouseId") ?? "",
     batchStatus: p.get("batchStatus") ?? "",
     expiringWithinDays: p.get("expiringWithinDays") ?? "",
@@ -94,6 +98,7 @@ function readFilters(): Filters {
 function toQuery(f: Filters, extra: Record<string, string> = {}): string {
   const p = new URLSearchParams();
   if (f.search.trim()) p.set("search", f.search.trim());
+  if (f.productId) p.set("productId", f.productId);
   if (f.warehouseId) p.set("warehouseId", f.warehouseId);
   if (f.batchStatus) p.set("batchStatus", f.batchStatus);
   if (f.expiringWithinDays) p.set("expiringWithinDays", f.expiringWithinDays);
@@ -405,6 +410,22 @@ function InventoryBody() {
                 </button>
               </div>
             </form>
+
+            {filters.productId && (
+              <p className="mt-2 flex flex-wrap items-center gap-2 text-caption text-ink-muted">
+                Showing one product, because a link named it.
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm"
+                  onClick={() => {
+                    update({ productId: "" });
+                    setPage(1);
+                  }}
+                >
+                  Show every product
+                </button>
+              </p>
+            )}
 
             {filters.onlyBelowReorder && (
               <p className="mt-2 text-caption text-ink-muted">

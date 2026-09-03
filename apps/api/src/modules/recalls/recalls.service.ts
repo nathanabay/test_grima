@@ -196,7 +196,7 @@ export class RecallsService {
           )
           .join('\n'),
       roleCodes: ['QA_OFFICER', 'PHARMACY_ADMIN', 'BRANCH_MANAGER', 'PHARMACIST'],
-      linkUrl: `/recalls/${result.recall.id}`,
+      linkUrl: `/recalls?id=${result.recall.id}`,
     });
 
     return this.dashboard(result.recall.id);

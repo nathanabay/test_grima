@@ -13,6 +13,7 @@ import {
 } from "@/components/primitives";
 import { StatusBadge } from "@/components/status";
 import { api, can, money, qty, tokenStore } from "@/lib/api";
+import { useDeepLink } from "@/lib/deepLink";
 import { posQueue, QueuedSale } from "@/lib/posQueue";
 import { useScope } from "@/lib/scope";
 import { PaymentDialog, Tender } from "@/components/pos/PaymentDialog";
@@ -113,6 +114,13 @@ function Till() {
   const [shiftOpen, setShiftOpen] = useState(false);
   const [customerOpen, setCustomerOpen] = useState(false);
   const [lookupOpen, setLookupOpen] = useState(false);
+
+  // A timeline entry or a search hit names a past sale; the till opens its
+  // lookup on that sale instead of on an empty search box.
+  const link = useDeepLink("saleNo");
+  useEffect(() => {
+    if (link.saleNo) setLookupOpen(true);
+  }, [link.saleNo]);
   const [refresh, setRefresh] = useState(0);
 
   const searchRef = useRef<HTMLInputElement>(null);
@@ -1042,6 +1050,7 @@ function Till() {
         canRefund={canVoid}
         onClose={() => { setLookupOpen(false); focusSearch(); }}
         onChanged={() => setRefresh((r) => r + 1)}
+        initialTerm={link.saleNo ?? ""}
       />
     </>
   );

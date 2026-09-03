@@ -2,6 +2,7 @@
 
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, useLinkedRow } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { can, money, qty, shortDate, tokenStore } from "@/lib/api";
 import {
@@ -18,6 +19,11 @@ export default function ProcurementPage() {
   const user = typeof window !== "undefined" ? tokenStore.user : null;
   const replenishment = useApi<any[]>("/replenishment/recommendations");
   const orders = usePaged<any>("/purchase-orders", { pageSize: 15 });
+  // A purchase-order alert names the order; a reorder alert names the product
+  // whose recommendation sent the reader here. Both are read in a row, so the
+  // page scrolls to that row rather than to the top of the list.
+  const link = useDeepLink("poId", "productId");
+  useLinkedRow(link.poId ?? link.productId, !orders.loading);
   // Gated rather than fetched-and-swallowed: a finance officer reads purchase
   // orders but not supplier scorecards, and firing a request their permissions
   // refuse leaves a silently missing panel and a 403 in the log.
@@ -56,7 +62,7 @@ export default function ProcurementPage() {
               ]}
             >
               {replenishment.data.slice(0, 25).map((r) => (
-                <tr key={r.productId}>
+                <tr key={r.productId} data-row-id={r.productId}>
                   <td className="td">
                     <div className="font-medium">{r.productName}</div>
                     <div className="text-xs text-ink-subtle">
@@ -97,7 +103,7 @@ export default function ProcurementPage() {
             {orders.rows.length ? (
               <Table head={["PO", "Supplier", "Status", "Expected", "Total"]}>
                 {orders.rows.map((po: any) => (
-                  <tr key={po.id}>
+                  <tr key={po.id} data-row-id={po.id}>
                     <td className="td font-medium">{po.poNo}</td>
                     <td className="td">{po.supplier.companyName}</td>
                     <td className="td">

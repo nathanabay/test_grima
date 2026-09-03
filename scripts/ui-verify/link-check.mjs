@@ -70,7 +70,13 @@ for (const raw of links) {
   } catch {
     source = '';
   }
-  const readsParams = /useSearchParams|URLSearchParams|location\.search/.test(source);
+  // `useDeepLink('id')` is how a page reads its query string here: it wraps
+  // `window.location.search` so a statically prerendered client page does not
+  // need a Suspense boundary. Naming the hook counts as reading the URL, and
+  // the key it is asked for appears as a quoted string just as before.
+  const readsParams = /useSearchParams|URLSearchParams|location\.search|useDeepLink/.test(
+    source,
+  );
   for (const pair of query.split('&')) {
     const key = pair.split('=')[0];
     const honoured =

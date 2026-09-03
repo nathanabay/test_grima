@@ -87,9 +87,27 @@ export class AuditService {
    * of the operation it describes.
    */
   async record(entry: AuditEntry, tx?: Prisma.TransactionClient): Promise<void> {
-    const client = tx ?? this.prisma;
-    const createdAt = new Date();
+    // Appending to a hash chain is read-the-tail-then-write, and that is only
+    // correct if one writer does it at a time. Without the lock two requests
+    // landing in the same millisecond both read the same tail and both claim
+    // it as their predecessor, so the chain forks: `verifyChain` walks by
+    // sequence, finds the second row pointing at its grandparent, and reports
+    // "chain broken" on rows nobody has touched. That is worse than no
+    // tamper-evidence, because it makes a real tamper indistinguishable from
+    // ordinary concurrent traffic. Observed on a running server: sequences
+    // 2440 and 2441 both carried the same previousHash.
+    if (tx) return this.append(tx, entry);
+    return this.prisma.$transaction((inner) => this.append(inner, entry));
+  }
 
+  /** The append itself, always under the chain lock. */
+  private async append(
+    client: Prisma.TransactionClient,
+    entry: AuditEntry,
+  ): Promise<void> {
+    await this.prisma.advisoryLock(client, 'audit-log-chain');
+
+    const createdAt = new Date();
     const previous = await client.auditLog.findFirst({
       orderBy: { sequence: 'desc' },
       select: { hash: true },

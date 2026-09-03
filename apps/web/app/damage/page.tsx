@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, useLinkedRow } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
 import {
@@ -44,6 +45,9 @@ export default function DamagePage() {
     pageSize: 25,
   });
   const summary = useApi<any>("/damage-reports/summary?days=90", [message]);
+  // A damage report is read in the row, so the link marks the row.
+  const link = useDeepLink("id");
+  useLinkedRow(link.id, !list.loading);
 
   async function verify(id: string, decision: "VERIFY" | "REJECT") {
     const notes =
@@ -156,7 +160,7 @@ export default function DamagePage() {
             ]}
           >
             {list.rows.map((r: any) => (
-              <tr key={r.id}>
+              <tr key={r.id} data-row-id={r.id}>
                 <td className="td font-medium">
                   {r.reportNo}
                   <div className="text-xs text-ink-subtle">

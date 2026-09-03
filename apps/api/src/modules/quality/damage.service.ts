@@ -190,7 +190,7 @@ export class DamageService {
         `Needs verification before disposal.`,
       branchId: input.branchId,
       roleCodes: ['QA_OFFICER', 'WAREHOUSE_MANAGER'],
-      linkUrl: `/damage/${result.id}`,
+      linkUrl: `/damage?id=${result.id}`,
     });
 
     return this.findOne(result.id);

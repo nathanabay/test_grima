@@ -238,7 +238,7 @@ export class BackupService {
         title: 'Database backup FAILED',
         body: `${fileName} did not complete: ${error.message}`,
         roleCodes: ['SUPER_ADMIN', 'PHARMACY_ADMIN'],
-        linkUrl: '/admin/backups',
+        linkUrl: '/admin?tab=Backups',
       });
 
       this.logger.error(`Backup failed: ${error.message}`);

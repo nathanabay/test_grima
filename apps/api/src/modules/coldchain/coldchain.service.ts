@@ -479,7 +479,7 @@ export class ColdChainService {
         `Stock will be quarantined automatically if the breach lasts more than ${sensor.maxExcursionMinutes} minutes.`,
       branchId: sensor.warehouse.branchId,
       roleCodes: ['QA_OFFICER', 'WAREHOUSE_MANAGER', 'PHARMACY_ADMIN'],
-      linkUrl: `/cold-chain/excursions/${excursion.id}`,
+      linkUrl: `/cold-chain?excursionId=${excursion.id}`,
     });
 
     return excursion;
@@ -562,7 +562,7 @@ export class ColdChainService {
         `${affectedQuantity.toString()} units were quarantined after a temperature excursion. ` +
         `A QA officer must review and record a disposition before this stock can be used.`,
       roleCodes: ['QA_OFFICER', 'PHARMACY_ADMIN'],
-      linkUrl: `/cold-chain/excursions/${excursionId}`,
+      linkUrl: `/cold-chain?excursionId=${excursionId}`,
     });
   }
 

@@ -326,6 +326,36 @@ describe('Stock status enforcement (§8, §27, §73)', () => {
 });
 
 describe('Audit trail (§42)', () => {
+  it('stays a single chain when entries are written at the same moment', async () => {
+    // The append is read-the-tail-then-write. Without a lock two callers
+    // landing together both read the same tail and both claim it as their
+    // predecessor, so the chain forks and `verifyChain` reports "broken" on
+    // rows nobody touched — which makes a real tamper indistinguishable from
+    // ordinary traffic. This is the concurrency the old code did not survive.
+    await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        audit.record({
+          module: 'test',
+          action: 'CREATE',
+          entityType: 'Test',
+          entityId: FIXTURE.productId,
+          newValue: { concurrent: i },
+        }),
+      ),
+    );
+
+    const rows = await prisma.auditLog.findMany({
+      orderBy: { sequence: 'desc' },
+      take: 13,
+      select: { sequence: true, hash: true, previousHash: true },
+    });
+    const ordered = rows.reverse();
+    for (let i = 1; i < ordered.length; i += 1) {
+      expect(ordered[i].previousHash).toBe(ordered[i - 1].hash);
+    }
+    expect((await audit.verifyChain()).valid).toBe(true);
+  });
+
   it('chains hashes so a rewritten row can be detected', async () => {
     await audit.record({
       module: 'test',

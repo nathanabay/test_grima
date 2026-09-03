@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Shell, PageHeader } from '@/components/Shell';
 import { useApi } from '@/lib/useApi';
+import { useDeepLink, syncDeepLink } from '@/lib/deepLink';
 import { usePaged } from '@/lib/paged';
 import { useScope } from '@/lib/scope';
 import { api, can, qty, shortDate, tokenStore } from '@/lib/api';
@@ -88,6 +89,20 @@ function DispensingBody() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Two names are emitted for the same thing — `id` from the dispensing
+  // alerts, `prescriptionId` from the clinical ones — so both are read.
+  const link = useDeepLink('id', 'prescriptionId');
+  useEffect(() => {
+    const wanted = link.id ?? link.prescriptionId;
+    if (wanted) {
+      setSelectedId(wanted);
+      setView('all');
+    }
+  }, [link.id, link.prescriptionId]);
+  useEffect(() => {
+    syncDeepLink({ id: selectedId, prescriptionId: null });
+  }, [selectedId]);
 
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, syncDeepLink } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, shortDate } from "@/lib/api";
 import { translationCoverage } from "@/lib/i18n";
@@ -29,6 +30,19 @@ type Tab = (typeof TABS)[number];
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("Users");
+
+  // The backup and audit alerts name a tab of this page; `userId` and
+  // `auditId` name a row on it, which the tab has to be showing first.
+  const link = useDeepLink("tab", "userId", "auditId");
+  useEffect(() => {
+    const wanted = TABS.find((t) => t.toLowerCase() === link.tab?.toLowerCase());
+    if (wanted) setTab(wanted);
+    else if (link.userId) setTab("Users");
+    else if (link.auditId) setTab("Audit trail");
+  }, [link.tab, link.userId, link.auditId]);
+  useEffect(() => {
+    syncDeepLink({ tab });
+  }, [tab]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 

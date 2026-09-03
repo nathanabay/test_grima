@@ -127,7 +127,7 @@ export class IncidentsService {
       body: input.description,
       branchId: input.branchId ?? null,
       roleCodes: ['QA_OFFICER', 'PHARMACY_ADMIN'],
-      linkUrl: `/quality/${incident.id}`,
+      linkUrl: `/quality?id=${incident.id}`,
     });
 
     // A supplier-attributed incident feeds their quality score.
@@ -220,7 +220,7 @@ export class IncidentsService {
           `Preventive action: ${updated.preventiveAction ?? 'not recorded'}`,
         branchId: incident.branchId,
         roleCodes: ['QA_OFFICER'],
-        linkUrl: `/quality/${id}`,
+        linkUrl: `/quality?id=${id}`,
       });
     }
 
@@ -246,7 +246,7 @@ export class IncidentsService {
       userId: assignedToId,
       title: `Quality incident ${incident.incidentNo} assigned to you`,
       body: incident.description,
-      linkUrl: `/quality/${id}`,
+      linkUrl: `/quality?id=${id}`,
     });
     return incident;
   }

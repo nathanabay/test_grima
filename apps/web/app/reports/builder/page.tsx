@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink } from "@/lib/deepLink";
 import { api } from "@/lib/api";
 import { Card, Empty, ErrorBox, Loading, Pill, Stat } from "@/components/ui";
 import { DataTable } from "@/components/DataTable";
@@ -69,6 +70,15 @@ export default function ReportBuilderPage() {
 
   const catalogue = useApi<CatalogueSource[]>("/report-builder/sources");
   const saved = useApi<any[]>("/report-builder/saved", [savedVersion]);
+
+  // A scheduled-report notification names the saved report it produced;
+  // opening it should run that report, not drop the reader on a blank builder.
+  const link = useDeepLink("saved");
+  useEffect(() => {
+    const report = saved.data?.find((r: any) => r.id === link.saved);
+    if (report) void runSaved(report);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [link.saved, saved.data]);
 
   const source = useMemo(
     () => (catalogue.data ?? []).find((s) => s.key === sourceKey) ?? null,

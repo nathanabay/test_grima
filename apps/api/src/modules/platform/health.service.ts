@@ -196,7 +196,7 @@ export class HealthService {
         label: 'Backups',
         state: 'DEGRADED',
         detail: 'No backup has ever been taken.',
-        linkUrl: '/admin/backups',
+        linkUrl: '/admin?tab=Backups',
       };
     }
 
@@ -210,7 +210,7 @@ export class HealthService {
         last.status === 'FAILED'
           ? `Last backup failed: ${last.errorMessage ?? 'no reason recorded'}`
           : `Last backup ${Math.round(ageHours)}h ago, ${last.verifiedAt ? 'verified' : 'not yet verified'}`,
-      linkUrl: '/admin/backups',
+      linkUrl: '/admin?tab=Backups',
     };
   }
 

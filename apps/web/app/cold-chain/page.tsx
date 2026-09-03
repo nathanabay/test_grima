@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, useLinkedRow } from "@/lib/deepLink";
 import { usePaged } from "@/lib/paged";
 import { api, can, qty, shortDate, tokenStore } from "@/lib/api";
 import {
@@ -31,6 +32,11 @@ export default function ColdChainPage() {
   // An excursion is a regulated event and the log is kept indefinitely. The
   // screen used to show the newest 25 with no way to the ones before them.
   const excursions = usePaged<any>("/cold-chain/excursions", { pageSize: 25 });
+
+  // A temperature alert names the excursion. It is read in the row, so the
+  // page scrolls to that row and rings it.
+  const link = useDeepLink("excursionId");
+  useLinkedRow(link.excursionId, !excursions.loading);
 
   return (
     <Shell>
@@ -123,7 +129,7 @@ export default function ColdChainPage() {
               ]}
             >
               {excursions.rows.map((e: any) => (
-                <tr key={e.id}>
+                <tr key={e.id} data-row-id={e.id}>
                   <td className="td font-medium">{e.excursionNo}</td>
                   <td className="td text-ink-muted">{e.sensor.name}</td>
                   <td className="td text-ink-muted">

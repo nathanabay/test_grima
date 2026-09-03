@@ -36,7 +36,7 @@ export const DEFAULT_AUTOMATION_RULES = [
           body:
             'Batch {batchNumber} holds {quantityOnHand} unit(s) worth {valueAtRisk} at {warehouseName}.\n' +
             'Consider redistribution or a promotion while there is still time to sell it.',
-          linkUrl: '/inventory/expiry?batchId={batchId}',
+          linkUrl: '/batches/{batchId}',
         },
       },
     ],
@@ -53,7 +53,7 @@ export const DEFAULT_AUTOMATION_RULES = [
               body:
                 'Batch {batchNumber} was flagged two weeks ago and still holds {quantityOnHand} unit(s).\n' +
                 'Value at risk: {valueAtRisk}.',
-              linkUrl: '/inventory/expiry?batchId={batchId}',
+              linkUrl: '/batches/{batchId}',
             },
           },
         ],
@@ -86,7 +86,7 @@ export const DEFAULT_AUTOMATION_RULES = [
           body:
             'Batch {batchNumber}: {quantityOnHand} unit(s) worth {valueAtRisk} at {warehouseName}.\n' +
             'Transfer, return to the supplier or plan the write-off now.',
-          linkUrl: '/inventory/expiry?batchId={batchId}',
+          linkUrl: '/batches/{batchId}',
         },
       },
     ],

@@ -404,8 +404,13 @@ Ordered by how many people each unblocks, not by how interesting it is.
    beside a link to the full list, and probes that read only a total.
    `pager-check.mjs` clicks Next on every converted screen and proves the rows
    changed. §5.1, §5.2.
-3. **`?id=` handling on the fifteen list pages.** Makes every notification link
-   land on its record, and turns the existing drawers into deep links. §3.
+3. ~~**`?id=` handling on the fifteen list pages.**~~ **Done.** All 47 broken
+   links land: fifteen pointed at routes that never existed and now point at
+   the page that holds the record, and the rest are read by `useDeepLink`,
+   which opens the detail panel, selects the tab, or scrolls to and rings the
+   row. `deeplink-check.mjs` opens each link with a real id out of the API and
+   checks the record is on screen, because a page can read a parameter and
+   then do nothing with it. §3.
 4. **Replace the twenty-one browser prompts** with the `Drawer` + `Field`
    pattern already in the codebase, starting with the payment amount, the
    received quantity and the disposal witness. §5.3.
@@ -416,4 +421,4 @@ Ordered by how many people each unblocks, not by how interesting it is.
    polling on the three live screens, and translation in page bodies. §5.4–§5.7.
 
 Items 1–3 are the difference between a system that demonstrates and a system
-that runs a pharmacy. Items 1 and 2 are done; item 3 is next.
+that runs a pharmacy. All three are done; item 4 is next.

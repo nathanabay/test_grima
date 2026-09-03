@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { useDeepLink, useLinkedRow } from "@/lib/deepLink";
 import { api, money } from "@/lib/api";
 import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
 
@@ -11,6 +12,10 @@ export default function ApprovalsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const queue = useApi<any[]>("/workflows/queue", [message]);
+  // The approvals queue has nothing to open — every row is already expanded —
+  // so a link that names an instance scrolls to it and rings it instead.
+  const link = useDeepLink("id");
+  useLinkedRow(link.id, !!queue.data);
 
   async function act(item: any, action: "APPROVE" | "REJECT" | "RETURN") {
     const comment =
@@ -64,7 +69,7 @@ export default function ApprovalsPage() {
         {queue.data?.length ? (
           <Table head={["Document", "Step", "Value", "Waiting", ""]}>
             {queue.data.map((item) => (
-              <tr key={item.instanceId}>
+              <tr key={item.instanceId} data-row-id={item.instanceId}>
                 <td className="td">
                   <div className="font-medium">
                     {item.documentType.replace(/_/g, " ")}
