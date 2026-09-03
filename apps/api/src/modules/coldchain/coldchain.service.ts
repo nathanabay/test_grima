@@ -13,6 +13,28 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { ConfigService } from '../../common/config/config.service';
 
 /**
+ * What a sensor's calibration currently says.
+ *
+ * Derived from the newest certificate as well as the due date, because a
+ * failure clears the due date and a null due date on its own cannot tell
+ * "never calibrated" apart from "calibrated, and it failed" — and those call
+ * for different actions.
+ */
+function calibrationStatus(
+  sensor: { calibrationDueAt: Date | null; lastCalibratedAt: Date | null },
+  newest: { result: string } | null,
+): 'FAILED' | 'NEVER_CALIBRATED' | 'OVERDUE' | 'DUE_SOON' | 'VALID' {
+  const now = Date.now();
+  if (newest?.result === 'FAIL') return 'FAILED';
+  if (!sensor.calibrationDueAt) {
+    return sensor.lastCalibratedAt ? 'OVERDUE' : 'NEVER_CALIBRATED';
+  }
+  if (sensor.calibrationDueAt.getTime() < now) return 'OVERDUE';
+  if (sensor.calibrationDueAt.getTime() - now < 30 * 86_400_000) return 'DUE_SOON';
+  return 'VALID';
+}
+
+/**
  * Cold chain monitoring (§29, §30).
  *
  * A reading outside the configured range opens an excursion. Once the breach
@@ -105,6 +127,10 @@ export class ColdChainService {
         // demonstrably drifted is not calibrated just because its previous
         // certificate has not expired yet, and leaving it reading VALID would
         // let a QA release rest on a reading nobody should trust.
+        //
+        // lastCalibratedAt is deliberately left alone: the sensor HAS been
+        // calibrated before, and clearing it would make a failure read as
+        // "never calibrated", which hides the finding rather than reporting it.
         await tx.temperatureSensor.update({
           where: { id: sensorId },
           data: { calibrationDueAt: null },
@@ -206,7 +232,13 @@ export class ColdChainService {
 
       await tx.temperatureSensor.update({
         where: { id: sensorId },
-        data: { lastMaintenanceAt: performedAt, nextMaintenanceAt: nextDueAt },
+        data: {
+          lastMaintenanceAt: performedAt,
+          // Only move the schedule when this record actually carries a next
+          // date. Writing null when the field was simply omitted silently took
+          // the sensor off the maintenance schedule altogether.
+          ...(nextDueAt ? { nextMaintenanceAt: nextDueAt } : {}),
+        },
       });
 
       return created;
@@ -236,16 +268,9 @@ export class ColdChainService {
       },
     });
 
-    const now = Date.now();
     return {
       ...sensor,
-      calibrationStatus: !sensor.calibrationDueAt
-        ? 'NEVER_CALIBRATED'
-        : sensor.calibrationDueAt.getTime() < now
-          ? 'OVERDUE'
-          : sensor.calibrationDueAt.getTime() - now < 30 * 86_400_000
-            ? 'DUE_SOON'
-            : 'VALID',
+      calibrationStatus: calibrationStatus(sensor, sensor.calibrations[0] ?? null),
     };
   }
 
@@ -262,23 +287,32 @@ export class ColdChainService {
 
     const sensors = await this.prisma.temperatureSensor.findMany({
       where: { isActive: true },
-      include: { warehouse: { select: { id: true, name: true } } },
+      include: {
+        warehouse: { select: { id: true, name: true } },
+        // The newest certificate decides whether this reads as a failure or as
+        // "never calibrated"; the due date alone cannot tell them apart.
+        calibrations: { orderBy: { calibratedAt: 'desc' }, take: 1 },
+      },
       orderBy: { code: 'asc' },
     });
 
     const rows = sensors
       .map((s) => {
-        const calibrationOverdue = !!s.calibrationDueAt && s.calibrationDueAt < now;
+        const status = calibrationStatus(s, s.calibrations[0] ?? null);
+        const calibrationFailed = status === 'FAILED';
+        const neverCalibrated = status === 'NEVER_CALIBRATED';
+        const calibrationOverdue = status === 'OVERDUE';
         const calibrationDueSoon =
-          !!s.calibrationDueAt && !calibrationOverdue && s.calibrationDueAt <= horizon;
+          !!s.calibrationDueAt && status === 'VALID' && s.calibrationDueAt <= horizon;
         const maintenanceOverdue = !!s.nextMaintenanceAt && s.nextMaintenanceAt < now;
         const maintenanceDueSoon =
           !!s.nextMaintenanceAt && !maintenanceOverdue && s.nextMaintenanceAt <= horizon;
-        const neverCalibrated = !s.calibrationDueAt;
 
         if (
+          !calibrationFailed &&
           !neverCalibrated &&
           !calibrationOverdue &&
+          status !== 'DUE_SOON' &&
           !calibrationDueSoon &&
           !maintenanceOverdue &&
           !maintenanceDueSoon
@@ -294,13 +328,15 @@ export class ColdChainService {
           lastCalibratedAt: s.lastCalibratedAt,
           calibrationDueAt: s.calibrationDueAt,
           nextMaintenanceAt: s.nextMaintenanceAt,
+          calibrationStatus: status,
+          calibrationFailed,
           neverCalibrated,
           calibrationOverdue,
-          calibrationDueSoon,
+          calibrationDueSoon: calibrationDueSoon || status === 'DUE_SOON',
           maintenanceOverdue,
           maintenanceDueSoon,
           severity:
-            neverCalibrated || calibrationOverdue
+            calibrationFailed || neverCalibrated || calibrationOverdue
               ? 'CRITICAL'
               : maintenanceOverdue
                 ? 'HIGH'

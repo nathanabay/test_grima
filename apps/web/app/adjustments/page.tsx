@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
@@ -455,7 +455,16 @@ function LossAnalysis({
 }) {
   const [days, setDays] = useState(90);
 
-  const from = new Date(Date.now() - days * 86_400_000).toISOString();
+  // Memoised on `days`, not recomputed each render.
+  //
+  // Building the URL from Date.now() inline made it different on every render,
+  // so the fetch hook saw a new path each time, refetched, re-rendered, and
+  // fetched again. The page never went idle — the browser sweep timed out on it
+  // after thirty seconds — and it hammered the API the whole time it was open.
+  const from = useMemo(
+    () => new Date(Date.now() - days * 86_400_000).toISOString(),
+    [days],
+  );
   const query = new URLSearchParams({ from });
   if (warehouseId) query.set("warehouseId", warehouseId);
 

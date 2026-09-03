@@ -122,6 +122,22 @@ export class CountsService {
       orderBy: [{ lastMovementAt: 'asc' }],
     });
 
+    // A FULL count is scoped to the branch, but StockCountItem carries no
+    // warehouse of its own, so post() writes every variance against the count's
+    // single warehouseId. On a branch with more than one warehouse that posts a
+    // shortfall found in the cold room against the main store, leaving both
+    // wrong. Until each line carries its own warehouse, a FULL count that spans
+    // warehouses is refused rather than silently misposted.
+    if (data.countType === CountType.FULL) {
+      const spanned = new Set(balances.map((b) => b.warehouseId));
+      if (spanned.size > 1) {
+        throw new BadRequestException(
+          `A full branch count spans ${spanned.size} warehouses, and a variance can only be ` +
+            `posted against one. Run a WAREHOUSE count for each of them instead.`,
+        );
+      }
+    }
+
     if (data.countType === CountType.CYCLE) {
       const size = data.sampleSize ?? 50;
       // Positions never counted, or counted longest ago, come first.
@@ -207,6 +223,7 @@ export class CountsService {
       where: { id },
       include: { items: true },
     });
+    await this.assertReachable(count, user);
 
     // Prefer the exact batch when the pack carried a GS1 batch number.
     const candidates = count.items.filter((i) => i.productId === resolution.product!.id);
@@ -253,6 +270,7 @@ export class CountsService {
     if (count.status === DocumentStatus.CLOSED) {
       throw new BadRequestException('This count has already been posted');
     }
+    await this.assertReachable(count, user);
 
     const tolerancePercent = await this.config.getNumber('count.tolerancePercent');
     const escalationValue = new Prisma.Decimal(
@@ -295,10 +313,22 @@ export class CountsService {
         });
       }
 
-      await tx.stockCount.update({
-        where: { id },
-        data: { status: DocumentStatus.SUBMITTED },
-      });
+      // A blind count reveals its expected quantities once the sheet is
+      // submitted, so submitting must mean the whole sheet is in. Flipping to
+      // SUBMITTED after any single line let a counter record one throwaway
+      // value, read back every remaining expected quantity, and then copy them
+      // in — which is precisely the exercise a blind count exists to prevent.
+      const recorded = new Set([
+        ...count.items.filter((i) => i.countedQty !== null).map((i) => i.id),
+        ...lines.map((l) => l.itemId),
+      ]);
+      const complete = count.items.every((i) => recorded.has(i.id));
+      if (complete) {
+        await tx.stockCount.update({
+          where: { id },
+          data: { status: DocumentStatus.SUBMITTED },
+        });
+      }
     });
 
     return this.findOne(id, user);
@@ -316,6 +346,7 @@ export class CountsService {
     if (count.status === DocumentStatus.CLOSED) {
       throw new BadRequestException('This count has already been posted');
     }
+    await this.assertReachable(count, user);
 
     const uncounted = count.items.filter((i) => i.countedQty === null);
     if (uncounted.length) {
@@ -429,11 +460,28 @@ export class CountsService {
     };
   }
 
+  /**
+   * A count belongs to one branch and one warehouse, and only somebody who can
+   * reach both may read or act on it (§4).
+   *
+   * Loading a document by id and acting on it without this is the direct-object
+   * reference: the id is the only thing the caller supplies, and ids from other
+   * branches are discoverable through any list endpoint.
+   */
+  private async assertReachable(
+    count: { branchId: string; warehouseId: string },
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    this.scope.assertBranch(user, count.branchId);
+    await this.scope.assertWarehouse(user, count.warehouseId);
+  }
+
   async findOne(id: string, user?: AuthenticatedUser) {
     const count = await this.prisma.stockCount.findUniqueOrThrow({
       where: { id },
       include: { items: true },
     });
+    if (user) await this.assertReachable(count, user);
     return this.maskBlind(count, user);
   }
 
@@ -477,13 +525,26 @@ export class CountsService {
    * Only negative movements are losses. A positive adjustment is stock found,
    * which is a different question and would cancel out real losses if netted.
    */
-  async lossAnalysis(query: { from?: Date; to?: Date; warehouseId?: string; branchId?: string }) {
+  async lossAnalysis(
+    query: { from?: Date; to?: Date; warehouseId?: string; branchId?: string },
+    user: AuthenticatedUser,
+  ) {
+    // The branch and warehouse in the query are a filter, not an authorization:
+    // narrowing to a branch the caller cannot reach must be refused, not served.
+    if (query.branchId) this.scope.assertBranch(user, query.branchId);
+    if (query.warehouseId) await this.scope.assertWarehouse(user, query.warehouseId);
     const items = await this.prisma.stockAdjustmentItem.findMany({
       where: {
         quantityDelta: { lt: 0 },
         adjustment: {
           ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
-          ...(query.branchId ? { branchId: query.branchId } : {}),
+          // One branch clause, not two. Spreading the scope filter after the
+          // caller's branchId replaced it with the whole scope, so asking for
+          // one branch quietly returned every branch the reader can see — under
+          // a heading naming the one they asked for.
+          ...(query.branchId
+            ? { branchId: query.branchId }
+            : this.scope.branchFilter(user)),
           ...(query.from || query.to
             ? {
                 createdAt: {
@@ -577,7 +638,12 @@ export class CountsService {
   async findAll(query: { warehouseId?: string; page?: number; pageSize?: number }, user?: AuthenticatedUser) {
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(100, query.pageSize ?? 25);
-    const where = query.warehouseId ? { warehouseId: query.warehouseId } : {};
+    const where = {
+      ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
+      // Counts outside the reader's branches are not theirs to see; filtering
+      // in the query rather than over the result keeps the total honest.
+      ...(user ? this.scope.branchFilter(user) : {}),
+    };
     const [data, total] = await Promise.all([
       this.prisma.stockCount.findMany({
         where,
@@ -617,6 +683,13 @@ export class CountsService {
   ) {
     if (!data.reason?.trim()) throw new BadRequestException('An adjustment reason is required');
     if (!data.items?.length) throw new BadRequestException('Nothing to adjust');
+
+    // §4: an adjustment writes to the ledger, so the caller has to be able to
+    // reach the branch and the warehouse it names. Without this, the branch and
+    // warehouse are simply whatever the request body claims, and a clerk scoped
+    // to one branch could write off another branch's stock.
+    this.scope.assertBranch(user, data.branchId);
+    await this.scope.assertWarehouse(user, data.warehouseId);
 
     // A negative adjustment is a loss, and an unclassified loss cannot be acted
     // on. Positive adjustments are stock found, which needs no loss reason.

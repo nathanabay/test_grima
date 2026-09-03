@@ -7,7 +7,7 @@
 
 What is tested, at which level, and why that level.
 
-Generated 2026-09-02 from the schema, the route table and the permission catalogue.
+Generated 2026-09-03 from the schema, the route table and the permission catalogue.
 
 ## The three levels, and what each is for
 
@@ -42,7 +42,7 @@ of them is wrong and the disagreement is the finding.
 
 ## Unit and integration suites
 
-17 suites, 235 cases. 3 of them require a database.
+17 suites, 325 cases. 3 of them require a database.
 
 | Suite | Cases | Needs a database | Covers |
 | --- | --- | --- | --- |
@@ -50,30 +50,30 @@ of them is wrong and the disagreement is the finding.
 | `automation.spec.ts` | 28 | no | Field access; Condition evaluation (§58); Message templates; Rule descriptions; The shipped rules (§58 examples) |
 | `barcode.spec.ts` | 12 | no | Code 128 / GS1-128 (§62); EAN-13 (§62); Label symbology selection (§62, §73) |
 | `config.spec.ts` | 23 | no | .env parsing (§65); Settings catalogue (§65, "no magic values"); ConfigService validation |
-| `expiry.spec.ts` | 5 | no | Expiry classification (§9); Expiry risk score for redistribution (§10) |
-| `fefo.spec.ts` | 9 | no | FEFO allocation engine (§8) |
+| `expiry.spec.ts` | 17 | no | Expiry classification (§9); Expiry risk score for redistribution (§10) |
+| `fefo.spec.ts` | 15 | no | FEFO allocation engine (§8) |
 | `fhir.spec.ts` | 28 | no | Patient, outbound; Patient, inbound; MedicationRequest, inbound; Outbound resources are R4-shaped |
 | `gs1.spec.ts` | 7 | no | GS1 DataMatrix parsing (§17) |
 | `import.spec.ts` | 26 | no | CSV parsing; CSV writing; Import catalogue |
 | `intelligence.spec.ts` | 11 | no | Report data sources |
-| `ledger.integration.spec.ts` | 13 | yes | Stock ledger (§19); Concurrency protection (§48, §68); Stock status enforcement (§8, §27, §73); Audit trail (§42) |
+| `ledger.integration.spec.ts` | 17 | yes | Stock ledger (§19); Concurrency protection (§48, §68); Stock status enforcement (§8, §27, §73); Audit trail (§42) |
 | `pricing.integration.spec.ts` | 18 | yes | Price resolution order (§32); Quantity breaks; Effective windows; Customer group discount; Transparency |
 | `replenishment.spec.ts` | 10 | no | Replenishment (§12); Forecasting (§39); ABC / XYZ classification (§37) |
-| `scheduled-reports.spec.ts` | 7 | no | Scheduled report delivery window (§40) |
+| `scheduled-reports.spec.ts` | 10 | no | Scheduled report delivery window (§40); Cron day-of-week (§40) |
 | `serial-lifecycle.spec.ts` | 10 | no | Serial lifecycle state machine (§3: features 141-150) |
-| `settings-enforced.spec.ts` | 2 | no | Settings catalogue (§65) |
+| `settings-enforced.spec.ts` | 67 | no | Settings catalogue (§65) |
 | `units.spec.ts` | 6 | no | Unit conversion (§6) |
 
 ## End-to-end suites
 
-7 suites, 320 checks, run against a seeded API on port 4000.
+7 suites, 345 checks, run against a seeded API on port 4000.
 
 | Suite | Checks |
 | --- | --- |
 | `scripts/e2e-capa-workflow.mjs` | 19 |
 | `scripts/e2e-damage-pos.mjs` | 24 |
 | `scripts/e2e-enterprise.mjs` | 94 |
-| `scripts/e2e-lifecycle.mjs` | 64 |
+| `scripts/e2e-lifecycle.mjs` | 89 |
 | `scripts/e2e-procurement.mjs` | 20 |
 | `scripts/e2e-warehouse.mjs` | 34 |
 | `scripts/e2e-workflow.mjs` | 65 |

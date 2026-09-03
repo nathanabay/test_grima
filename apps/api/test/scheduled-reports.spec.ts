@@ -47,3 +47,32 @@ describe('Scheduled report delivery window (§40)', () => {
     expect(cronMatchesHour('0 25 * * *', at('2026-09-02T08:00:00'))).toBe(false);
   });
 });
+
+describe('Cron day-of-week (§40)', () => {
+  it('treats 7 as Sunday, as standard cron does', () => {
+    // A report saved as "0 6 * * 7" was accepted and then silently never
+    // delivered, because 7 fell outside the 0-6 range the matcher allowed.
+    const sunday = new Date('2026-09-06T06:00:00');
+    const monday = new Date('2026-09-07T06:00:00');
+    expect(cronMatchesHour('0 6 * * 7', sunday)).toBe(true);
+    expect(cronMatchesHour('0 6 * * 7', monday)).toBe(false);
+    expect(cronMatchesHour('0 6 * * 0', sunday)).toBe(true);
+  });
+
+  it('handles a range that ends at 7, which means Monday to Sunday', () => {
+    // Rewriting the 7 to a 0 inside the field would make this the empty range
+    // 1-0 and match nothing at all.
+    const wednesday = new Date('2026-09-02T06:00:00');
+    const sunday = new Date('2026-09-06T06:00:00');
+    expect(cronMatchesHour('0 6 * * 1-7', wednesday)).toBe(true);
+    expect(cronMatchesHour('0 6 * * 1-7', sunday)).toBe(true);
+  });
+
+  it('does not let the Sunday alias widen a range that excludes it', () => {
+    const sunday = new Date('2026-09-06T06:00:00');
+    const saturday = new Date('2026-09-05T06:00:00');
+    expect(cronMatchesHour('0 6 * * 1-5', sunday)).toBe(false);
+    expect(cronMatchesHour('0 6 * * 1-6', saturday)).toBe(true);
+    expect(cronMatchesHour('0 6 * * 1-6', sunday)).toBe(false);
+  });
+});

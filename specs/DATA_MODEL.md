@@ -12,7 +12,7 @@ unit price in binary floating point will disagree with its own invoices.
 Primary keys are UUIDs so a record can be created in one branch and
 referenced in another without a central sequence.
 
-Generated 2026-09-02 from the schema, the route table and the permission catalogue.
+Generated 2026-09-03 from the schema, the route table and the permission catalogue.
 
 **114 tables, 28 enumerations.**
 

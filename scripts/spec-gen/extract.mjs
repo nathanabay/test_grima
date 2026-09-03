@@ -149,13 +149,29 @@ facts.settings = {
 // ---- Tests ----
 const testDir = path.join(ROOT, 'apps/api/test');
 const testFiles = (await readdir(testDir)).filter((f) => f.endsWith('.spec.ts'));
+
+// Counting `it(` with a regex undercounts: it misses `it.each`, `it.skip`, and
+// anything written across lines. Jest's own report is the authority, so use it
+// when it is there and say so when it is not, rather than publishing a number
+// that quietly disagrees with `pnpm test`.
+let jestCounts = null;
+try {
+  const report = JSON.parse(await readFile('/tmp/jest.json', 'utf8'));
+  jestCounts = new Map(
+    report.testResults.map((r) => [path.basename(r.name), r.assertionResults.length]),
+  );
+} catch {
+  jestCounts = null;
+}
+
+facts.testCountsFrom = jestCounts ? 'jest --json' : 'source scan (approximate)';
 facts.tests = await Promise.all(
   testFiles.map(async (f) => {
     const src = await readFile(path.join(testDir, f), 'utf8');
     return {
       file: f,
       suites: [...src.matchAll(/^describe\('([^']*)'/gm)].map((m) => m[1]),
-      cases: (src.match(/\n\s*it\(/g) ?? []).length,
+      cases: jestCounts?.get(f) ?? (src.match(/\n\s*it\(/g) ?? []).length,
       integration: /PrismaClient|\$connect/.test(src),
     };
   }),

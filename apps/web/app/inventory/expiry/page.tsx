@@ -193,7 +193,12 @@ function ExpiryBody() {
               ) : (
                 <DataTable
                   rows={shown}
-                  getKey={(r: any) => `${r.batchId}-${r.warehouseId}`}
+                  // expiryReport emits one row per InventoryBalance, which is
+                  // per location — so batch + warehouse is not unique when a
+                  // batch is split across bins.
+                  getKey={(r: any) =>
+                    `${r.batchId}-${r.warehouseId}-${r.locationId ?? "none"}`
+                  }
                   pageSize={50}
                   exportName="expiry-risk"
                   viewKey="expiry"
@@ -393,8 +398,25 @@ function ExpiryBody() {
                   {
                     key: "to",
                     label: "Move to",
-                    value: (r: any) =>
-                      r.toBranchName ?? r.suggestedBranchName ?? "—",
+                    // The API returns a ranked `destinations` array; this column
+                    // read `toBranchName`, which it has never sent, so the one
+                    // actionable column on the screen always showed a dash.
+                    value: (r: any) => r.destinations?.[0]?.branchName ?? "—",
+                    render: (r: any) => {
+                      const best = r.destinations?.[0];
+                      if (!best) return "—";
+                      return (
+                        <div>
+                          <div className="text-ink">{best.branchName}</div>
+                          <div className="text-caption text-ink-subtle">
+                            would use {qty(best.suggestedTransferQty)} in time
+                            {r.destinations.length > 1
+                              ? ` · ${r.destinations.length - 1} other option(s)`
+                              : ""}
+                          </div>
+                        </div>
+                      );
+                    },
                   },
                   {
                     key: "why",

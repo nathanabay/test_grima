@@ -22230,6 +22230,7 @@
   "count": 65,
   "notEnforced": 21
  },
+ "testCountsFrom": "jest --json",
  "tests": [
   {
    "file": "accounting.integration.spec.ts",
@@ -22280,7 +22281,7 @@
     "Expiry classification (§9)",
     "Expiry risk score for redistribution (§10)"
    ],
-   "cases": 5,
+   "cases": 17,
    "integration": false
   },
   {
@@ -22288,7 +22289,7 @@
    "suites": [
     "FEFO allocation engine (§8)"
    ],
-   "cases": 9,
+   "cases": 15,
    "integration": false
   },
   {
@@ -22336,7 +22337,7 @@
     "Stock status enforcement (§8, §27, §73)",
     "Audit trail (§42)"
    ],
-   "cases": 13,
+   "cases": 17,
    "integration": true
   },
   {
@@ -22364,9 +22365,10 @@
   {
    "file": "scheduled-reports.spec.ts",
    "suites": [
-    "Scheduled report delivery window (§40)"
+    "Scheduled report delivery window (§40)",
+    "Cron day-of-week (§40)"
    ],
-   "cases": 7,
+   "cases": 10,
    "integration": false
   },
   {
@@ -22382,7 +22384,7 @@
    "suites": [
     "Settings catalogue (§65)"
    ],
-   "cases": 2,
+   "cases": 67,
    "integration": false
   },
   {
@@ -22409,7 +22411,7 @@
   },
   {
    "file": "e2e-lifecycle.mjs",
-   "checks": 64
+   "checks": 89
   },
   {
    "file": "e2e-procurement.mjs",

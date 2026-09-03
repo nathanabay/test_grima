@@ -393,7 +393,10 @@ export class ForecastService {
       let zeroDemandMonths = 0;
       let stockOutSkipped = 0;
 
-      for (let i = minHistory; i < series.length; i++) {
+      // series always ends with the month in progress. Scoring a full-month
+      // prediction against three days of sales contributes an error near 100%
+      // and makes the "best" method depend on the day the report is run.
+      for (let i = minHistory; i < series.length - 1; i++) {
         // A month the product was out of stock is not evidence about demand,
         // so scoring against it would penalise a forecast for being right.
         if (stockOutMonths.includes(i)) {

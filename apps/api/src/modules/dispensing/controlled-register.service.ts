@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -94,6 +94,22 @@ export class ControlledRegisterService {
     const original = await this.prisma.controlledRegisterEntry.findUniqueOrThrow({
       where: { id: entryId },
     });
+
+    if (original.entryType === 'REVERSAL') {
+      throw new ConflictException('A reversal cannot itself be reversed');
+    }
+    const alreadyReversed = await this.prisma.controlledRegisterEntry.findFirst({
+      where: { reversalOfId: original.id },
+      select: { entryNo: true },
+    });
+    if (alreadyReversed) {
+      // Two reversals of one entry put the register permanently above physical
+      // stock, and reconcile() then reports an unexplained variance on a
+      // controlled drug forever.
+      throw new ConflictException(
+        `Entry ${original.entryNo} was already reversed by entry ${alreadyReversed.entryNo}`,
+      );
+    }
 
     const entry = await this.prisma.$transaction(async (tx) =>
       this.record(tx, {

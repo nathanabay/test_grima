@@ -82,6 +82,16 @@ export class TransfersService {
   }
 
   async submit(id: string, user: AuthenticatedUser) {
+    const transfer = await this.prisma.stockTransfer.findUniqueOrThrow({ where: { id } });
+    // Without this, submitting an IN_TRANSIT transfer sent it back to SUBMITTED:
+    // the stock was still on a lorry, but overdueInTransit no longer watched it,
+    // so a lost shipment vanished from the alert built to catch it.
+    if (transfer.status !== TransferStatus.DRAFT) {
+      throw new ConflictException(
+        `Only a draft transfer can be submitted; this one is ${transfer.status}`,
+      );
+    }
+    await this.scope.assertWarehouse(user, transfer.fromWarehouseId);
     return this.setStatus(id, TransferStatus.SUBMITTED, user);
   }
 
@@ -90,6 +100,7 @@ export class TransfersService {
     if (transfer.status !== TransferStatus.SUBMITTED) {
       throw new ConflictException(`Only submitted transfers can be approved; this is ${transfer.status}`);
     }
+    await this.scope.assertWarehouse(user, transfer.fromWarehouseId);
     const updated = await this.prisma.stockTransfer.update({
       where: { id },
       data: { status: TransferStatus.APPROVED, approvedById: user.id },
@@ -109,6 +120,27 @@ export class TransfersService {
   }
 
   /** Dispatch: stock leaves the origin warehouse. Supports partial shipment. */
+  /**
+   * Refuse a payload naming the same line twice.
+   *
+   * The ledger's idempotency key is built from the line's quantity as it stood
+   * before the transaction. Two entries for one line therefore produce the same
+   * key: the first posts, the second is treated as a replay and returns without
+   * moving anything — yet both increment the document's dispatched quantity. The
+   * destination could then receive stock that never left the origin.
+   */
+  private assertNoRepeatedLines(lines: Array<{ itemId: string }>): void {
+    const seen = new Set<string>();
+    for (const line of lines) {
+      if (seen.has(line.itemId)) {
+        throw new BadRequestException(
+          `Line ${line.itemId} appears more than once. Combine the quantities into a single entry.`,
+        );
+      }
+      seen.add(line.itemId);
+    }
+  }
+
   async dispatch(
     id: string,
     lines: Array<{ itemId: string; quantity: number }>,
@@ -126,11 +158,31 @@ export class TransfersService {
       where: { id },
       include: { items: true },
     });
-    if (!([TransferStatus.APPROVED, TransferStatus.PICKING] as TransferStatus[]).includes(transfer.status)) {
+    this.assertNoRepeatedLines(lines);
+
+    // 3: a partial dispatch was documented, coded for, and impossible — the
+    // first dispatch set IN_TRANSIT, which this guard then rejected, stranding
+    // whatever did not fit on the first truck.
+    const dispatchable: TransferStatus[] = [
+      TransferStatus.APPROVED,
+      TransferStatus.PICKING,
+      TransferStatus.IN_TRANSIT,
+      TransferStatus.PARTIALLY_RECEIVED,
+    ];
+    if (!dispatchable.includes(transfer.status)) {
       throw new ConflictException(
         `Transfer must be APPROVED before dispatch; it is ${transfer.status}`,
       );
     }
+    const outstandingLines = transfer.items.filter((i) =>
+      i.requestedQty.greaterThan(i.dispatchedQty),
+    );
+    if (!outstandingLines.length) {
+      throw new ConflictException('Every line on this transfer has already been dispatched');
+    }
+
+    // §4: stock may only be dispatched from a warehouse the user can reach.
+    await this.scope.assertWarehouse(user, transfer.fromWarehouseId);
 
     let expectedArrival: Date | null = null;
     if (logistics.expectedArrival) {
@@ -181,17 +233,20 @@ export class TransfersService {
           });
         }
 
+        // Only overwrite a logistics field this dispatch actually carries. A
+        // second, partial dispatch that names no courier must not erase the
+        // courier of the first.
         await tx.stockTransfer.update({
           where: { id },
           data: {
             status: TransferStatus.IN_TRANSIT,
             dispatchedById: user.id,
             dispatchedAt: new Date(),
-            vehicleOrCourier: logistics.vehicleOrCourier ?? null,
-            driverName: logistics.driverName ?? null,
-            driverPhone: logistics.driverPhone ?? null,
-            trackingNumber: logistics.trackingNumber ?? null,
-            expectedArrival: expectedArrival ?? null,
+            ...(logistics.vehicleOrCourier ? { vehicleOrCourier: logistics.vehicleOrCourier } : {}),
+            ...(logistics.driverName ? { driverName: logistics.driverName } : {}),
+            ...(logistics.driverPhone ? { driverPhone: logistics.driverPhone } : {}),
+            ...(logistics.trackingNumber ? { trackingNumber: logistics.trackingNumber } : {}),
+            ...(expectedArrival ? { expectedArrival } : {}),
           },
         });
       },
@@ -230,6 +285,10 @@ export class TransfersService {
       where: { id },
       include: { items: true },
     });
+    this.assertNoRepeatedLines(lines);
+    // §4: and only received into a warehouse the user can reach.
+    await this.scope.assertWarehouse(user, transfer.toWarehouseId);
+
     if (!([TransferStatus.IN_TRANSIT, TransferStatus.PARTIALLY_RECEIVED] as TransferStatus[]).includes(transfer.status)) {
       throw new ConflictException(`Transfer is ${transfer.status} and cannot be received`);
     }

@@ -7,7 +7,7 @@
 
 How the schema moves forward without losing anything a pharmacy needs to keep.
 
-Generated 2026-09-02 from the schema, the route table and the permission catalogue.
+Generated 2026-09-03 from the schema, the route table and the permission catalogue.
 
 ## The rule
 

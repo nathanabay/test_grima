@@ -182,6 +182,7 @@ export default function WarehousePage() {
           <div className="flex items-center gap-2">
             <select
               className="input w-64"
+              aria-label="Warehouse"
               value={warehouseId}
               onChange={(e) => setWarehouseId(e.target.value)}
             >

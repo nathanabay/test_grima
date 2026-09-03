@@ -93,6 +93,15 @@ export class SerialsService {
     if (filter.warehouseId) {
       await this.scope.assertWarehouse(user, filter.warehouseId);
       where.warehouseId = filter.warehouseId;
+    } else if (!this.scope.isUnscoped(user)) {
+      // Without this, omitting the filter returned every branch's packs — the
+      // enumeration step that makes an id-based attack on the rest trivial.
+      // A pack with no warehouse has left stock (dispensed, sold, destroyed)
+      // and is still visible: its history is what a recall trace needs.
+      where.OR = [
+        { warehouseId: { in: await this.reachableWarehouseIds(user) } },
+        { warehouseId: null },
+      ];
     }
     if (filter.productId) where.batch = { productId: filter.productId };
 
@@ -133,8 +142,27 @@ export class SerialsService {
     };
   }
 
+  /**
+   * Every warehouse this user can reach, including those inside their branches.
+   *
+   * Resolved rather than read straight off the token because a branch-scoped
+   * user reaches every warehouse in their branches without naming any of them.
+   */
+  private async reachableWarehouseIds(user: AuthenticatedUser): Promise<string[]> {
+    const warehouses = await this.prisma.warehouse.findMany({
+      where: {
+        OR: [
+          ...(user.warehouseIds.length ? [{ id: { in: user.warehouseIds } }] : []),
+          ...(user.branchIds.length ? [{ branchId: { in: user.branchIds } }] : []),
+        ],
+      },
+      select: { id: true },
+    });
+    return warehouses.map((w) => w.id);
+  }
+
   /** Full history of one pack: the question a recall or an audit actually asks. */
-  async history(id: string) {
+  async history(id: string, user?: AuthenticatedUser) {
     const serial = await this.prisma.serialNumber.findUnique({
       where: { id },
       include: {
@@ -143,6 +171,7 @@ export class SerialsService {
       },
     });
     if (!serial) throw new NotFoundException('Serial not found');
+    if (user && serial.warehouseId) await this.scope.assertWarehouse(user, serial.warehouseId);
 
     const userIds = [
       ...new Set(serial.events.map((e) => e.performedById).filter((v): v is string => !!v)),
@@ -168,13 +197,13 @@ export class SerialsService {
   }
 
   /** Look a pack up by the serial printed on it, which is what a scanner gives. */
-  async findBySerial(serial: string) {
+  async findBySerial(serial: string, user?: AuthenticatedUser) {
     const row = await this.prisma.serialNumber.findFirst({
       where: { serial },
       orderBy: { createdAt: 'desc' },
     });
     if (!row) throw new NotFoundException(`No serial "${serial}" is registered`);
-    return this.history(row.id);
+    return this.history(row.id, user);
   }
 
   /**
@@ -313,6 +342,12 @@ export class SerialsService {
     if (eventType === 'CORRECTED' && !input.reason?.trim()) {
       throw new BadRequestException('A correction must state why the record was wrong');
     }
+    // Two different warehouses, and both have to be checked. The one the pack is
+    // in now decides whether this caller may touch it at all; the one the caller
+    // named decides where they may send it. Checking only the second let a user
+    // scoped to one branch destroy or recall another branch's pack simply by
+    // omitting the field.
+    if (serial.warehouseId) await this.scope.assertWarehouse(user, serial.warehouseId);
     if (input.warehouseId) await this.scope.assertWarehouse(user, input.warehouseId);
 
     const toStatus = check.toStatus as SerialStatus;
@@ -397,12 +432,20 @@ export class SerialsService {
         skipped.push({ serial: s.serial, reason: check.reason ?? 'Not recallable' });
         continue;
       }
-      await this.recordEvent(
-        s.id,
-        { eventType: 'RECALLED', reason, referenceType: 'RECALL', referenceNo },
-        user,
-      );
-      recalled += 1;
+      try {
+        await this.recordEvent(
+          s.id,
+          { eventType: 'RECALLED', reason, referenceType: 'RECALL', referenceNo },
+          user,
+        );
+        recalled += 1;
+      } catch (error: any) {
+        // A pack in a warehouse this user cannot reach must not abandon the
+        // whole recall half-done with no record of what was reached. It is
+        // reported as skipped — which is exactly the number the recall report
+        // has to state — and somebody with wider scope finishes the job.
+        skipped.push({ serial: s.serial, reason: error?.message ?? 'Could not be recalled' });
+      }
     }
 
     const destroyed = await this.prisma.serialNumber.count({

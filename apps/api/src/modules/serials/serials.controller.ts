@@ -40,15 +40,15 @@ export class SerialsController {
   @Get('by-serial/:serial')
   @RequirePermissions('inventory.serial.READ')
   @ApiOperation({ summary: 'Resolve the code printed on a pack to its full history' })
-  bySerial(@Param('serial') serial: string) {
-    return this.serials.findBySerial(serial);
+  bySerial(@Param('serial') serial: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.serials.findBySerial(serial, user);
   }
 
   @Get(':id')
   @RequirePermissions('inventory.serial.READ')
   @ApiOperation({ summary: 'Serial history: every movement, in order (§3: feature 149)' })
-  history(@Param('id') id: string) {
-    return this.serials.history(id);
+  history(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.serials.history(id, user);
   }
 
   @Post('import')

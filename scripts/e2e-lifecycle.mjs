@@ -7,9 +7,20 @@
 // Run against a seeded API on :4000.
 const BASE = 'http://localhost:4000/api';
 let failures = 0;
+const skipped = [];
 function check(name, ok, detail = '') {
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` -- ${detail}` : ''}`);
   if (!ok) failures++;
+}
+/**
+ * A precondition this dataset cannot satisfy.
+ *
+ * Reported separately and never as a PASS: a check that could not run tells you
+ * nothing, and dressing it as a success is how a gap survives a green suite.
+ */
+function skip(name, why) {
+  console.log(`  SKIP  ${name} -- ${why}`);
+  skipped.push({ name, why });
 }
 async function login(identifier) {
   const r = await fetch(`${BASE}/auth/login`, {
@@ -41,6 +52,15 @@ const adminToken = await login('admin');
 const admin = client(adminToken);
 const adminV1 = client(adminToken, 'http://localhost:4000/api/v1');
 const cashier = client(await login('cashier'));
+const storekeeper = client(await login('storekeeper'));
+// The technician is the branch-scoped role that holds inventory.serial.READ;
+// the storekeeper does not, so it is the wrong actor for the serial checks.
+const technician = client(await login('technician'));
+// A branch manager holds every inventory permission AND is scoped to one
+// branch. That combination is the only one that actually tests scope: a role
+// that lacks the permission would be refused whether or not scope existed, so
+// a check written against it proves nothing.
+const branchMgr = client(await login('branchmgr'));
 
 const org = (await admin('GET', '/admin/organization')).body;
 const branch = org.branches[0];
@@ -155,8 +175,11 @@ check('loss analysis reports by cause',
 console.log('\nBLIND AND FROZEN COUNTS (§21: features 175-176)');
 // ============================================================
 
+const storeMe = (await storekeeper('GET', '/auth/me')).body;
+const counterBranch = org.branches.find((b) => storeMe.branchIds.includes(b.id)) ?? branch;
+const counterWarehouse = counterBranch.warehouses[0] ?? warehouse;
 const count = await admin('POST', '/stock-counts', {
-  warehouseId: warehouse.id, branchId: branch.id, countType: 'RANDOM',
+  warehouseId: counterWarehouse.id, branchId: counterBranch.id, countType: 'RANDOM',
   sampleSize: 3, isBlind: true, freeze: true,
 });
 check('a blind, frozen count opens', count.ok && count.body.isBlind && count.body.isFrozen,
@@ -166,7 +189,7 @@ const countId = count.body.id;
 const frozenItem = count.body.items[0];
 
 const blocked = await admin('POST', '/stock-adjustments', {
-  branchId: branch.id, warehouseId: warehouse.id,
+  branchId: counterBranch.id, warehouseId: counterWarehouse.id,
   reason: 'Should be blocked by the freeze',
   items: [{ productId: frozenItem.productId, batchId: frozenItem.batchId, quantityDelta: -1, lossType: 'DAMAGE' }],
 });
@@ -177,7 +200,7 @@ const unfrozen = await admin('POST', `/stock-counts/${countId}/freeze`, { freeze
 check('the freeze can be lifted', unfrozen.ok && unfrozen.body.isFrozen === false);
 
 const afterThaw = await admin('POST', '/stock-adjustments', {
-  branchId: branch.id, warehouseId: warehouse.id,
+  branchId: counterBranch.id, warehouseId: counterWarehouse.id,
   reason: 'Allowed once the freeze is lifted',
   items: [{ productId: frozenItem.productId, batchId: frozenItem.batchId, quantityDelta: -1, lossType: 'COUNTING_ERROR' }],
 });
@@ -185,7 +208,6 @@ check('the same movement is accepted once the freeze is lifted', afterThaw.ok,
   `HTTP ${afterThaw.status}: ${afterThaw.body?.error ?? ''}`);
 
 // The counter role sees no system quantity; a supervisor does.
-const storekeeper = client(await login('storekeeper'));
 const blindRead = await storekeeper('GET', `/stock-counts/${countId}`);
 check('a blind count hides the expected quantity from the counter',
   blindRead.ok && blindRead.body.blindMasked === true && blindRead.body.items[0].systemQty === null,
@@ -215,11 +237,19 @@ const supplier = (await admin('GET', '/suppliers?pageSize=1')).body.data[0];
 const badRisk = await admin('PATCH', `/suppliers/${supplier.id}`, { riskLevel: 'APOCALYPTIC' });
 check('an unrecognised risk level is refused', badRisk.status === 400, badRisk.body?.error);
 
-const tampered = await admin('PATCH', `/suppliers/${supplier.id}`, { supplierScore: 100, riskLevel: 'HIGH' });
+// Read the score first and then try to write a DIFFERENT value. Asserting
+// against a fixed number cannot tell "the write was ignored" from "it was
+// already that number", and on a fresh seed it is already 100.
+const scoreBefore = Number((await admin('GET', `/suppliers/${supplier.id}`)).body.supplierScore);
+const tampered = await admin('PATCH', `/suppliers/${supplier.id}`, {
+  supplierScore: scoreBefore === 42 ? 43 : 42,
+  onTimeDeliveryRate: 1,
+  riskLevel: 'HIGH',
+});
 const afterTamper = (await admin('GET', `/suppliers/${supplier.id}`)).body;
 check('a client cannot write the computed supplier score',
-  tampered.ok && Number(afterTamper.supplierScore) !== 100,
-  `score is ${afterTamper.supplierScore}`);
+  tampered.ok && Number(afterTamper.supplierScore) === scoreBefore,
+  `score stayed ${afterTamper.supplierScore} (was ${scoreBefore})`);
 check('the risk level it was allowed to set did apply', afterTamper.riskLevel === 'HIGH');
 
 const credit = await admin('GET', `/suppliers/${supplier.id}/credit`);
@@ -346,7 +376,7 @@ if (sensors.body?.length) {
   check('equipment due for attention is listed', due.ok && Array.isArray(due.body.rows),
     `${due.body?.rows?.length} of ${due.body?.activeSensors} sensor(s)`);
 } else {
-  check('cold-chain equipment checks', true, 'no sensors configured in this dataset');
+  skip('cold-chain equipment checks', 'no sensors configured in this dataset');
 }
 
 // ============================================================
@@ -393,6 +423,234 @@ check('the report says plainly that a signal is not a finding',
   typeof anomalies.body?.note === 'string' && /not findings/i.test(anomalies.body.note));
 
 // ============================================================
+console.log('\nBRANCH SCOPE ON WRITES AND READS (§4)');
+// ============================================================
+
+// A storekeeper is scoped to one branch. Everything below asks whether that
+// scope actually holds when the request names somebody else's branch.
+const storeUser = storeMe;
+const mgrUser = (await branchMgr('GET', '/auth/me')).body;
+check('the branch manager holds the permissions these checks need, and one branch',
+  mgrUser.permissions.includes('inventory.adjustment.CREATE') &&
+    mgrUser.permissions.includes('inventory.adjustment.READ') &&
+    mgrUser.branchIds.length === 1,
+  `${mgrUser.branchIds.length} branch(es)`);
+
+const otherBranch = org.branches.find((b) => !mgrUser.branchIds.includes(b.id));
+
+if (otherBranch && mgrUser.branchIds.length) {
+  const otherWarehouse = otherBranch.warehouses[0];
+  const otherBalance = (await admin(
+    'GET',
+    `/inventory/balances?warehouseId=${otherWarehouse.id}&pageSize=1`,
+  )).body.data?.[0];
+
+  if (otherBalance?.batchId) {
+    const crossBranchWriteOff = await branchMgr('POST', '/stock-adjustments', {
+      branchId: otherBranch.id,
+      warehouseId: otherWarehouse.id,
+      reason: 'Should be refused: another branch',
+      items: [{
+        productId: otherBalance.productId,
+        batchId: otherBalance.batchId,
+        quantityDelta: -1,
+        lossType: 'SHRINKAGE',
+      }],
+    });
+    check('a user WITH the permission still cannot write off another branch\'s stock',
+      crossBranchWriteOff.status === 403,
+      `HTTP ${crossBranchWriteOff.status}: ${crossBranchWriteOff.body?.error ?? ''}`);
+  }
+
+  const otherCount = await admin('POST', '/stock-counts', {
+    warehouseId: otherWarehouse.id, branchId: otherBranch.id,
+    countType: 'RANDOM', sampleSize: 2,
+  });
+  if (otherCount.ok) {
+    const foreignRecord = await branchMgr('POST', `/stock-counts/${otherCount.body.id}/record`, {
+      lines: [{ itemId: otherCount.body.items[0].id, countedQty: 1 }],
+    });
+    check('a scoped user cannot record against another branch\'s count',
+      foreignRecord.status === 403,
+      `HTTP ${foreignRecord.status}: ${foreignRecord.body?.error ?? ''}`);
+
+    const foreignRead = await branchMgr('GET', `/stock-counts/${otherCount.body.id}`);
+    check('nor read it', foreignRead.status === 403, `HTTP ${foreignRead.status}`);
+  }
+
+  const foreignLoss = await branchMgr('GET', `/stock-adjustments/loss-analysis?branchId=${otherBranch.id}`);
+  check('nor pull another branch\'s loss analysis', foreignLoss.status === 403,
+    `HTTP ${foreignLoss.status}: ${foreignLoss.body?.error ?? ''}`);
+
+  const scopedCounts = await branchMgr('GET', '/stock-counts?pageSize=100');
+  check('the count list is filtered to the reader\'s branches',
+    scopedCounts.ok && (scopedCounts.body.data ?? []).every((c) => mgrUser.branchIds.includes(c.branchId)),
+    `${scopedCounts.body?.data?.length ?? 0} count(s) returned`);
+} else {
+  skip('branch scope checks', 'the counter role is unscoped in this dataset');
+}
+
+// A serial held in another branch must not be reachable, listed, or moved.
+//
+// The pack is planted deliberately rather than found in the dataset: picking
+// whichever serial happens to be out of scope makes the check depend on the
+// seed, and it silently degenerates into "there wasn't one" on a dataset where
+// the reader can reach everything.
+if (otherBranch) {
+  const foreignWarehouse = otherBranch.warehouses[0];
+  const foreignBatch = (await admin(
+    'GET',
+    `/inventory/balances?warehouseId=${foreignWarehouse.id}&pageSize=1`,
+  )).body.data?.[0];
+
+  if (foreignBatch?.batchId) {
+    const planted = `E2E-SCOPE-${stamp}`;
+    const planting = await admin('POST', '/serials/import', {
+      batchId: foreignBatch.batchId,
+      serials: [planted],
+      warehouseId: foreignWarehouse.id,
+      referenceNo: 'E2E-SCOPE',
+    });
+    check('a pack can be registered into a branch the reader cannot reach',
+      planting.body?.created === 1, `created ${planting.body?.created}`);
+
+    const found = await admin('GET', `/serials/by-serial/${planted}`);
+    const plantedId = found.body?.id;
+
+    const listed = await branchMgr('GET', '/serials?pageSize=500');
+    check('the serial register does not list a pack from another branch',
+      listed.ok && !(listed.body.data ?? []).some((r) => r.id === plantedId),
+      `${listed.body?.data?.length ?? 0} pack(s) visible`);
+
+    const peek = await branchMgr('GET', `/serials/${plantedId}`);
+    check('nor can that pack be opened directly by its id', peek.status === 403,
+      `HTTP ${peek.status}: ${peek.body?.error ?? ''}`);
+
+    const move = await branchMgr('POST', `/serials/${plantedId}/events`, {
+      eventType: 'DESTROYED', reason: 'Should be refused: another branch',
+    });
+    check('nor destroyed by a permitted user omitting the warehouse from the request',
+      move.status === 403, `HTTP ${move.status}: ${move.body?.error ?? ''}`);
+
+    const stillThere = await admin('GET', `/serials/${plantedId}`);
+    check('and the pack is untouched afterwards', stillThere.body?.status === 'IN_STOCK',
+      stillThere.body?.status);
+  } else {
+    skip('serial branch-scope checks', 'no stock in the other branch to attach a serial to');
+  }
+}
+
+// ============================================================
+console.log('\nBLIND COUNT CANNOT BE UNMASKED EARLY (§21)');
+// ============================================================
+
+const storeBranch = org.branches.find((b) => storeUser.branchIds.includes(b.id)) ?? branch;
+const storeWarehouse = storeBranch.warehouses[0] ?? warehouse;
+const blind = await admin('POST', '/stock-counts', {
+  warehouseId: storeWarehouse.id, branchId: storeBranch.id,
+  countType: 'RANDOM', sampleSize: 3, isBlind: true,
+});
+if (blind.ok && blind.body.items.length > 1) {
+  const blindId = blind.body.id;
+  await storekeeper('POST', `/stock-counts/${blindId}/record`, {
+    lines: [{ itemId: blind.body.items[0].id, countedQty: 1 }],
+  });
+  const peekAfterOneLine = await storekeeper('GET', `/stock-counts/${blindId}`);
+  check('recording one line does not reveal the rest of a blind sheet',
+    peekAfterOneLine.body?.blindMasked === true &&
+      peekAfterOneLine.body.items.every((i) => i.systemQty === null),
+    `masked=${peekAfterOneLine.body?.blindMasked}`);
+
+  const rest = blind.body.items.slice(1).map((i) => ({ itemId: i.id, countedQty: 1 }));
+  await storekeeper('POST', `/stock-counts/${blindId}/record`, { lines: rest });
+  const afterAll = await storekeeper('GET', `/stock-counts/${blindId}`);
+  check('the sheet is revealed once every line is counted',
+    afterAll.body?.blindMasked === false,
+    `masked=${afterAll.body?.blindMasked}, status ${afterAll.body?.status}`);
+} else {
+  skip('blind-count reveal', 'not enough positions to open a multi-line blind count');
+}
+
+// ============================================================
+console.log('\nSTOCK INTEGRITY GUARDS (§20, §28)');
+// ============================================================
+
+// A payload naming the same transfer line twice used to collapse to one ledger
+// movement while the document counted both — the destination could then receive
+// stock that never left the origin.
+const wh2 = org.branches.flatMap((b) => b.warehouses).find((w) => w.id !== warehouse.id);
+if (wh2) {
+  const src = (await admin('GET', `/inventory/balances?warehouseId=${warehouse.id}&pageSize=1`)).body.data?.[0];
+  if (src?.batchId) {
+    const draft = await admin('POST', '/transfers', {
+      fromWarehouseId: warehouse.id, toWarehouseId: wh2.id,
+      reason: 'End-to-end duplicate-line check',
+      items: [{ productId: src.productId, batchId: src.batchId, quantity: 4 }],
+    });
+    if (draft.ok) {
+      await admin('POST', `/transfers/${draft.body.id}/submit`, {});
+      await admin('POST', `/transfers/${draft.body.id}/approve`, {});
+      const itemId = draft.body.items[0].id;
+
+      const doubled = await admin('POST', `/transfers/${draft.body.id}/dispatch`, {
+        lines: [{ itemId, quantity: 2 }, { itemId, quantity: 2 }],
+      });
+      check('a transfer payload naming one line twice is refused',
+        doubled.status === 400, `HTTP ${doubled.status}: ${doubled.body?.error ?? ''}`);
+
+      const partial = await admin('POST', `/transfers/${draft.body.id}/dispatch`, {
+        lines: [{ itemId, quantity: 2 }], vehicleOrCourier: 'First truck',
+      });
+      check('a partial dispatch is accepted', partial.ok, `HTTP ${partial.status}`);
+
+      const second = await admin('POST', `/transfers/${draft.body.id}/dispatch`, {
+        lines: [{ itemId, quantity: 2 }],
+      });
+      check('and the rest can follow on a later truck', second.ok,
+        `HTTP ${second.status}: ${second.body?.error ?? ''}`);
+
+      const after = (await admin('GET', `/transfers/${draft.body.id}`)).body;
+      check('the second dispatch does not erase the first truck\'s courier',
+        after.vehicleOrCourier === 'First truck', String(after.vehicleOrCourier));
+
+      const resubmit = await admin('POST', `/transfers/${draft.body.id}/submit`, {});
+      check('an in-transit transfer cannot be dragged back to submitted',
+        resubmit.status === 409, `HTTP ${resubmit.status}: ${resubmit.body?.error ?? ''}`);
+    }
+  }
+}
+
+// A controlled-register entry reversed twice puts the register permanently
+// above physical stock.
+const register = (await admin('GET', '/controlled-register?pageSize=50')).body;
+const reversible = (register.data ?? []).find(
+  (e) => e.entryType !== 'REVERSAL' && !e.reversalOfId,
+);
+if (reversible) {
+  const first = await admin('POST', `/controlled-register/${reversible.id}/reverse`, {
+    reason: 'End-to-end reversal check',
+  });
+  check('a register entry can be reversed once', first.ok, `HTTP ${first.status}`);
+
+  const again = await admin('POST', `/controlled-register/${reversible.id}/reverse`, {
+    reason: 'Should be refused: already reversed',
+  });
+  check('but not twice', again.status === 409, `HTTP ${again.status}: ${again.body?.error ?? ''}`);
+
+  if (first.ok) {
+    const reversalOfReversal = await admin('POST', `/controlled-register/${first.body.id}/reverse`, {
+      reason: 'Should be refused: reversing a reversal',
+    });
+    check('and a reversal cannot itself be reversed', reversalOfReversal.status === 409,
+      `HTTP ${reversalOfReversal.status}`);
+  }
+} else {
+  skip('controlled-register reversal',
+    'the register is empty — no suite creates a controlled dispensing, so the ' +
+    'reversal guard is covered by unit-level reasoning only');
+}
+
+// ============================================================
 console.log('\nTIMELINE AUTHORIZATION (§25, §42)');
 // ============================================================
 
@@ -426,6 +684,11 @@ check('the audit hash chain still verifies after all of the above',
   chain.body?.valid === true, `${chain.body?.checked ?? 0} entries checked`);
 
 console.log('\n' + '='.repeat(60));
+if (skipped.length) {
+  console.log(`${skipped.length} check(s) could not run on this dataset:`);
+  for (const s of skipped) console.log(`  - ${s.name}: ${s.why}`);
+  console.log('');
+}
 if (failures) {
   console.log(`${failures} CHECK(S) FAILED`);
   process.exit(1);

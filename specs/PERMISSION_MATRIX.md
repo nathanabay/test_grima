@@ -9,7 +9,7 @@ Who may do what. A permission code is `module.resource.ACTION`, and every
 decision is taken on the server: the client uses this catalogue only to decide
 what to render, never whether to allow.
 
-Generated 2026-09-02 from the schema, the route table and the permission catalogue.
+Generated 2026-09-03 from the schema, the route table and the permission catalogue.
 
 **202 permissions across 48 resources, granted through 12 roles.**
 

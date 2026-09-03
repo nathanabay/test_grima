@@ -234,6 +234,9 @@ export class InventoryService {
           unit: b.product.baseUnit,
           warehouseId: b.warehouseId,
           warehouseName: b.warehouse.name,
+          // A batch can sit in several bins in one warehouse, so product +
+          // batch + warehouse does not identify a row.
+          locationId: b.locationId,
           branchId: b.branchId,
           // §9: Potential Expiry Loss = remaining quantity x inventory cost
           potentialLoss: available.times(b.product.averageCost),
@@ -297,7 +300,14 @@ export class InventoryService {
 
     const cells = new Map<
       string,
-      { month: string; batches: number; quantity: Prisma.Decimal; value: Prisma.Decimal; alreadyExpired: boolean }
+      {
+        month: string;
+        batches: number;
+        quantity: Prisma.Decimal;
+        value: Prisma.Decimal;
+        expiredQuantity: Prisma.Decimal;
+        expiredValue: Prisma.Decimal;
+      }
     >();
 
     for (const b of balances) {
@@ -312,15 +322,22 @@ export class InventoryService {
         batches: 0,
         quantity: new Prisma.Decimal(0),
         value: new Prisma.Decimal(0),
-        // Stock that has already expired is shown in its own month rather than
-        // folded into "this month": it is a disposal backlog, not a risk.
-        alreadyExpired: expiry.getTime() < now.getTime(),
+        expiredQuantity: new Prisma.Decimal(0),
+        expiredValue: new Prisma.Decimal(0),
       };
+      const value = available.times(b.product.averageCost);
+      // The current month holds both stock that has already expired and stock
+      // that has not. A single flag on the cell described whichever row was
+      // read first, so the same data labelled the month differently between
+      // runs; the expired portion is measured instead.
+      const isExpired = expiry.getTime() < now.getTime();
       cells.set(month, {
         ...cell,
         batches: cell.batches + 1,
         quantity: cell.quantity.plus(available),
-        value: cell.value.plus(available.times(b.product.averageCost)),
+        value: cell.value.plus(value),
+        expiredQuantity: isExpired ? cell.expiredQuantity.plus(available) : cell.expiredQuantity,
+        expiredValue: isExpired ? cell.expiredValue.plus(value) : cell.expiredValue,
       });
     }
 
@@ -331,7 +348,12 @@ export class InventoryService {
         batches: c.batches,
         quantity: c.quantity.toFixed(2),
         value: c.value.toFixed(2),
-        alreadyExpired: c.alreadyExpired,
+        expiredQuantity: c.expiredQuantity.toFixed(2),
+        expiredValue: c.expiredValue.toFixed(2),
+        // True only when the whole month is already past — a disposal backlog
+        // rather than a risk. A month that is part expired reports both figures.
+        alreadyExpired: c.expiredQuantity.equals(c.quantity) && !c.quantity.isZero(),
+        partlyExpired: !c.expiredQuantity.isZero() && !c.expiredQuantity.equals(c.quantity),
       }));
 
     return {
@@ -355,10 +377,15 @@ export class InventoryService {
    */
   async expiryTrend(user: AuthenticatedUser, options: { months?: number; warehouseId?: string } = {}) {
     const months = Math.min(36, Math.max(1, options.months ?? 12));
+    // Normalise to the first of the month BEFORE stepping back, and step back
+    // months-1. Stepping back first can overflow a short month (31 March minus
+    // one month is 3 March, not 28 February), which dropped the very month the
+    // caller asked for; and stepping back the full count returned months+1
+    // buckets under a heading that promised months.
     const since = new Date();
-    since.setMonth(since.getMonth() - months);
     since.setDate(1);
     since.setHours(0, 0, 0, 0);
+    since.setMonth(since.getMonth() - (months - 1));
 
     const movements = await this.prisma.inventoryTransaction.findMany({
       where: {

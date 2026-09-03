@@ -98,13 +98,16 @@ export class CountsController {
   @Get('stock-adjustments/loss-analysis')
   @RequirePermissions('inventory.adjustment.READ')
   @ApiOperation({ summary: 'Shrinkage by cause and by product (§21)' })
-  lossAnalysis(@Query() query: any) {
-    return this.counts.lossAnalysis({
-      from: query.from ? new Date(query.from) : undefined,
-      to: query.to ? new Date(query.to) : undefined,
-      warehouseId: query.warehouseId,
-      branchId: query.branchId,
-    });
+  lossAnalysis(@Query() query: any, @CurrentUser() user: AuthenticatedUser) {
+    return this.counts.lossAnalysis(
+      {
+        from: query.from ? new Date(query.from) : undefined,
+        to: query.to ? new Date(query.to) : undefined,
+        warehouseId: query.warehouseId,
+        branchId: query.branchId,
+      },
+      user,
+    );
   }
 
   @Post('stock-adjustments')

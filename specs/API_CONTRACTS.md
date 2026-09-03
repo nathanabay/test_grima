@@ -12,7 +12,7 @@ handler runs. A route with no `@RequirePermissions` and no `@Public` is a
 route nobody decided about, so they are listed separately below rather than
 buried in the table.
 
-Generated 2026-09-02 from the schema, the route table and the permission catalogue.
+Generated 2026-09-03 from the schema, the route table and the permission catalogue.
 
 **361 routes across 31 areas.**
 

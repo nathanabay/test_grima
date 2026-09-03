@@ -36,10 +36,19 @@ export function cronMatchesHour(expression: string, at: Date): boolean {
   // rather than treated as "every hour".
   if (!matches(minute, 0, 0, 59) && !/^[\d*,\-/]+$/.test(minute)) return false;
 
+  // Standard cron accepts both 0 and 7 for Sunday, and a range may use either
+  // end ("1-7" is Monday to Sunday). Rewriting 7 to 0 in the field would turn
+  // that range into the empty "1-0", so the DAY is offered in both forms and
+  // the field is left exactly as it was written.
+  const weekday = at.getDay();
+  const weekdayMatches =
+    matches(dayOfWeek, weekday, 0, 7) ||
+    (weekday === 0 && matches(dayOfWeek, 7, 0, 7));
+
   return (
     matches(hour, at.getHours(), 0, 23) &&
     matches(dayOfMonth, at.getDate(), 1, 31) &&
     matches(month, at.getMonth() + 1, 1, 12) &&
-    matches(dayOfWeek, at.getDay(), 0, 6)
+    weekdayMatches
   );
 }
