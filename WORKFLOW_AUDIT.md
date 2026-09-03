@@ -16,10 +16,15 @@ and the fixes measured against them. Both currently fail.
 The rules are sound and the screens are unusable by the people who need them.
 
 Six of eight core jobs cannot be completed in the browser by the role that owns
-them, and 72 of 177 page/role combinations the product's own sidebar offers are
-broken or partial. All of it traces to a handful of structural mistakes, not to
-scattered bugs — and none of it was visible before, because every test and every
-browser sweep signs in as an administrator who holds all 204 permissions.
+them. 72 of 177 page/role combinations the product's own sidebar offers are
+broken or partial. 47 of 58 notification links cannot reach the record they name.
+38 of 43 pages carry at least one problem that costs a reader their data,
+their input, or their confidence that an action worked.
+
+Almost none of it is scattered bugs. It is a handful of structural mistakes,
+each repeated everywhere — and none of it was visible before, because every
+test and every browser sweep signs in as an administrator who holds all 204
+permissions, against a seed small enough that the caps never bite.
 
 ---
 
@@ -182,29 +187,227 @@ only where a record deserves a page of its own.
 
 ---
 
+---
+
+## 5. Every page: what a reader can see and do
+
+§1–§4 covered how work moves. This covers what the forty-three screens are like
+to use once you can reach them. Every figure here comes from a scan of the pages
+themselves or from a browser sweep, both reproducible.
+
+**38 of 43 pages carry at least one of the problems below.** The figures are
+produced by `scripts/ui-verify/page-audit.mjs`, which is committed alongside
+this document.
+
+### 5.1 The lists do not reach the data
+
+Twenty-seven pages fetch a capped page and give the reader no way to the rest. Only `/inventory` and `/batches` paginate against the
+server, and both were touched in the last two days.
+
+Two are **already truncating on demo data**:
+
+| Page | Cap | Records today | Unreachable |
+| --- | ---: | ---: | ---: |
+| `/products` — the drug master | 25 | 119 | **94** |
+| `/dispensing` — All prescriptions | 25 | 59 | **34** |
+
+The rest fit only because the seed is small. `/procurement` shows fifteen
+purchase orders and there are exactly fifteen; `/patients` caps at fifty and
+holds twenty-seven. Each becomes the same defect on the first ordinary week of
+trading, silently.
+
+Six of the twenty-four do not display a total either, so nothing on screen
+suggests anything is missing.
+
+### 5.2 The shared table pages inside the slice it was handed
+
+`DataTable` is the product's list component: sorting, column choice, saved
+views, density, export, and a **Previous / Next** pager. That pager is
+client-side — it pages over the rows the screen passed in. It takes a `total`
+prop precisely so it can say "25 of 119" when the server holds more.
+
+**One page out of seventeen passes it** (`/serials`). Twelve of the other
+sixteen fetch a capped slice, so their pager cannot reach the rest.
+
+So on twelve screens — `/accounting`, `/adjustments`, `/admin/integrations`,
+`/admin/jobs`, `/automation`, `/cold-chain`, `/controlled`, `/forecast`,
+`/pricing`, `/suppliers`, `/transfers`, `/warehouse` — the reader sees a pager
+reading `1 / 3`, walks it
+to the end, and reasonably concludes they have seen everything. They have seen
+the first 15 to 200 rows. **A pager that lies about the extent of the data is
+worse than no pager**, because no pager at least prompts the question.
+
+The worst of them is `/controlled`: capped at 200 register entries, no total, no
+route to the rest. That is the record a regulator reads.
+
+A separate shape of the same mistake: `/inventory/expiry` fetches **670 rows
+uncapped** and pages them in the browser. The results are complete and the
+response grows with the pharmacy.
+
+The report claims the DataTable is "used by every list screen". It is used by
+seventeen of forty-three; the rest hand-roll a `<Table>` and therefore have no
+sorting, no column choice, no saved views and no export.
+
+### 5.3 Regulated data is captured through browser prompts
+
+Twenty-one `window.prompt` calls across ten pages, including:
+
+- `/invoices` — **a payment amount**, typed into a browser prompt with no
+  validation, no currency, and no way to correct a typo before it posts.
+- `/transfers` — **the quantity actually received** against a dispatch.
+- `/disposal` — **the witness to a disposal**, which is a regulatory record.
+- `/quality` — investigation fields chosen dynamically by key.
+- `/dispensing` — four, including the reversal reason and who collected the
+  medicine. **Those are mine**, added two commits ago, in the same pass where I
+  replaced three of them on `/batches` and called the pattern out.
+
+A `window.prompt` cannot be validated, cannot be styled, cannot show a hint,
+returns only a string, and is suppressed outright by some browsers in installed
+PWA mode — which this product supports. Every one of these should be the
+`Drawer` + `Field` pattern the codebase already has.
+
+### 5.4 Errors arrive as one banner and never mark the field
+
+Thirty-five pages render failures through a single `ErrorBox` at the top. The
+`Field` primitive takes an `error` prop for exactly this. Nine pages build forms
+with `Field`; **none of them passes it** — zero uses across forty-three pages. A reader whose form is rejected is
+told what is wrong and left to work out which of eleven inputs it refers to.
+
+### 5.5 Half the pages that change something say nothing when it works
+
+Seventeen pages change data and set no success message. The only evidence an action succeeded is that the list quietly
+re-renders — and if the change is off-screen or below the cap in §5.1, there is
+no evidence at all.
+
+### 5.6 Nothing on screen updates itself
+
+No page in the product polls or refreshes. `setInterval` appears nowhere.
+
+For most screens that is right. For three it is not: `/cold-chain` presents
+**live** sensor readings, `/notifications` is where escalations land, and
+`/approvals` is a queue — all of them static until somebody presses reload. A
+cold-chain excursion is visible when the reader happens to refresh.
+
+### 5.7 Translation covers the chrome, not the product
+
+`lib/i18n.tsx` is 450 lines: three locales, dotted-key catalogues, placeholder
+interpolation, `Intl` number and date formatting, missing-key logging, and a
+coverage report on `/admin`. Every nav item carries a `labelKey`.
+
+**No page body uses it** — zero of forty-three call a translate function.
+Switching to Amharic translates the sidebar and the header and leaves every
+heading, column, button, empty state and error message in English.
+
+### 5.8 Smaller, across the board
+
+- **Loading is a spinner on 39 pages** and a content-shaped skeleton on one.
+- **Offline support is one page.** `posQueue` is used by `/pos` alone; the PWA
+  claim does not extend past the till.
+- **Keyboard shortcuts are one page.** `/pos`, plus the shell's command palette.
+- **`/admin/jobs`, `/import` and `/login` have no empty state at all**, and
+  `/returns`, `/disposal` and `/notifications` rendered blank in the browser
+  sweep — no heading, no explanation, no way to start the thing the page is for.
+- **URL state is one page.** Only `/inventory` puts its filters in the address
+  bar; every other filter, tab and selection is lost on reload and cannot be
+  sent to a colleague.
+
+---
+
+## 6. Page by page
+
+`—` means none of the checks in §5 fired. It does not mean the page is finished.
+
+| Page | Findings |
+| --- | --- |
+| `/` | no empty state; no error state |
+| `/accounting` | caps at 100 with no pager; pager covers only the fetched slice; changes data without confirming it |
+| `/adjustments` | caps at 25 with no pager; pager covers only the fetched slice |
+| `/admin` | caps at 50 with no pager; changes data without confirming it |
+| `/admin/integrations` | caps at 100 with no pager; pager covers only the fetched slice; changes data without confirming it |
+| `/admin/jobs` | caps at 50 with no pager; pager covers only the fetched slice; changes data without confirming it; no empty state |
+| `/admin/settings` | changes data without confirming it |
+| `/approvals` | 2 browser prompts |
+| `/automation` | caps at 15 with no pager; pager covers only the fetched slice; changes data without confirming it |
+| `/batches` | — |
+| `/batches/[id]` | — |
+| `/cold-chain` | caps at 25 with no pager; pager covers only the fetched slice; changes data without confirming it |
+| `/command-center` | — |
+| `/controlled` | caps at 200 with no pager; pager covers only the fetched slice; 1 browser prompt |
+| `/counts` | caps at 200 with no pager |
+| `/damage` | caps at 25 with no pager; 2 browser prompts |
+| `/dashboard` | caps at 100 with no pager |
+| `/dispensing` | caps at 25 with no pager — **34 of 59 unreachable today**; 4 browser prompts |
+| `/disposal` | caps at 25 with no pager; 2 browser prompts |
+| `/forecast` | caps at 25 with no pager; pager covers only the fetched slice |
+| `/import` | changes data without confirming it; no empty state |
+| `/inventory` | — |
+| `/inventory/expiry` | — |
+| `/invoices` | caps at 25 with no pager; 3 browser prompts |
+| `/login` | no empty state |
+| `/notifications` | changes data without confirming it |
+| `/patients` | caps at 50 with no pager; 2 browser prompts |
+| `/pos` | changes data without confirming it |
+| `/pricing` | caps at 200 with no pager; pager covers only the fetched slice; changes data without confirming it |
+| `/procurement` | caps at 15 with no pager |
+| `/products` | caps at 25 with no pager — **94 of 119 unreachable today** |
+| `/products/[id]` | — |
+| `/quality` | caps at 25 with no pager; 2 browser prompts |
+| `/recalls` | caps at 25 with no pager; changes data without confirming it |
+| `/receiving` | caps at 25 with no pager; changes data without confirming it |
+| `/reports` | — |
+| `/reports/builder` | 1 browser prompt; changes data without confirming it |
+| `/returns` | caps at 25 with no pager |
+| `/scan` | no error state |
+| `/serials` | caps at 100 with no pager; changes data without confirming it |
+| `/suppliers` | caps at 50 with no pager; pager covers only the fetched slice; changes data without confirming it |
+| `/transfers` | caps at 25 with no pager; pager covers only the fetched slice; 2 browser prompts |
+| `/warehouse` | caps at 200 with no pager; pager covers only the fetched slice; changes data without confirming it |
+
+---
+
 ## What is genuinely sound
 
-Worth stating, because an audit that only lists faults misrepresents the system:
+Worth stating, because an audit that only lists faults misrepresents the system.
 
 - Every state machine has a transition table or an equivalent guard, and no
-  declared state is unreachable except the one noted above.
-- Notification targeting, role expansion and branch scoping are correct.
+  declared state is unreachable except `TransferStatus.RECEIVED`.
+- Notification targeting is correct: role codes expand to concrete users,
+  scoped by branch, and an event with no recipient is recorded rather than
+  dropped. It is only the links that fail.
 - The automation rule engine is wired, active, and its default rules cover the
   gaps a nightly job would otherwise leave.
-- The ledger, FEFO, the audit chain and the money arithmetic are unaffected by
-  any of this. The rules hold; it is the reach that fails.
+- The design system holds up. Contrast, focus order, dark mode and overflow pass
+  at six widths across forty pages, and the primitives exist for almost every
+  fix listed above — `Drawer`, `Field` with its unused `error` prop, `DataTable`
+  with its unused `total` prop, a 450-line i18n layer no page calls. **Most of
+  this audit is not missing machinery. It is machinery that was built and not
+  connected.**
+- The ledger, FEFO, the audit chain and the money arithmetic are untouched by
+  any of it. The rules hold; it is the reach that fails.
 
 ---
 
 ## Order of work
 
-1. `GET /me/scope` and repoint `ScopeProvider` — unblocks six of six broken
-   tasks and 69 of 72 partial pages.
-2. `?id=` handling on the fifteen list pages — makes every notification link
-   work.
-3. Decide between the workflow engine and the inline chains; implement
-   distinct approvers wherever the setting claims to apply.
-4. The smaller items above.
+Ordered by how many people each unblocks, not by how interesting it is.
 
-Step 1 is a few hours and changes the product from unusable to usable for every
-operational role. Nothing else on this list matters until it is done.
+1. **`GET /me/scope`, and repoint `ScopeProvider` and `/pos` at it.** Unblocks
+   six of six broken tasks and 69 of 72 partial pages. A few hours. It changes
+   the product from unusable to usable for every operational role, and nothing
+   else on this list matters until it is done.
+2. **Server pagination on the twenty-four capped lists**, and pass `total` to
+   every `DataTable`. Two pages are already hiding data; the rest will start on
+   the first ordinary week. §5.1, §5.2.
+3. **`?id=` handling on the fifteen list pages.** Makes every notification link
+   land on its record, and turns the existing drawers into deep links. §3.
+4. **Replace the twenty-one browser prompts** with the `Drawer` + `Field`
+   pattern already in the codebase, starting with the payment amount, the
+   received quantity and the disposal witness. §5.3.
+5. **Decide between the workflow engine and the inline chains**, and implement
+   distinct approvers wherever `approval.requireDistinctApprovers` claims to
+   apply. §2.
+6. Per-field validation, success confirmation on the fourteen silent pages,
+   polling on the three live screens, and translation in page bodies. §5.4–§5.7.
+
+Items 1–3 are the difference between a system that demonstrates and a system
+that runs a pharmacy.
