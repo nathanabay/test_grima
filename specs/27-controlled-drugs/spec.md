@@ -18,6 +18,7 @@ Requirement range `PHARM-CTRL-001` – `PHARM-CTRL-050`.
 - `GET /controlled-register` — dispensing.controlled.READ
 - `GET /controlled-register/anomalies` — dispensing.controlled.READ
 - `GET /controlled-register/reconcile` — dispensing.controlled.READ
+- `POST /controlled-register/opening` — dispensing.controlled.CREATE
 - `POST /controlled-register/:id/reverse` — dispensing.controlled.CREATE
 
 ## Screens

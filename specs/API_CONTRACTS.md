@@ -14,7 +14,7 @@ buried in the table.
 
 Generated 2026-09-03 from the schema, the route table and the permission catalogue.
 
-**377 routes across 31 areas.**
+**385 routes across 31 areas.**
 
 Every route is served twice: unversioned under `/api`, and under `/api/v1`.
 A client that has been calling `/api/...` keeps working; a new integration
@@ -252,12 +252,15 @@ can pin `/api/v1/...`. A future `v2` is added per controller with
 
 | Method | Path | Requires | Purpose |
 | --- | --- | --- | --- |
+| GET | `/inventory/anomalies` | `inventory.balance.READ` | Stock positions that need a person: negative balances, over-reservation, holds at zero,  |
 | GET | `/inventory/balances` | `inventory.balance.READ` | Stock balances, scoped to the caller branches |
+| GET | `/inventory/balances.csv` | `inventory.balance.EXPORT` | The current stock filter as a CSV, capped so an export cannot pull the whole ledger |
 | GET | `/inventory/batches` | `inventory.batch.READ` |  |
 | GET | `/inventory/batches/:id` | `inventory.batch.READ` |  |
 | POST | `/inventory/batches/:id/block` | `inventory.batch.EDIT` |  |
 | POST | `/inventory/batches/:id/quarantine` | `quality.quarantine.CREATE` | Move a batch into quarantine (§16) |
 | POST | `/inventory/batches/:id/release` | `quality.quarantine.APPROVE` | QA release: makes the batch allocatable by FEFO |
+| POST | `/inventory/batches/:id/split` | `inventory.batch.EDIT` | Split or repack part of a batch into a child batch that keeps its expiry, cost and  |
 | GET | `/inventory/expiry` | `inventory.expiry.READ` | Expiry dashboard with value at risk (§9) |
 | GET | `/inventory/expiry/calendar` | `inventory.expiry.READ` | Month-by-month expiry calendar with value at risk (§9) |
 | GET | `/inventory/expiry/comparison` | `inventory.expiry.READ` | Expiry exposure by branch, category or supplier (§9) |
@@ -267,9 +270,13 @@ can pin `/api/v1/...`. A future `v2` is added per controller with
 | POST | `/inventory/fefo/allocate` | `inventory.balance.READ` | Dry-run FEFO allocation showing chosen and excluded batches |
 | GET | `/inventory/fefo/recommend` | `inventory.balance.READ` | The batch FEFO recommends for a product in a warehouse |
 | GET | `/inventory/ledger` | `inventory.ledger.READ` | Immutable stock transaction ledger |
+| GET | `/inventory/ledger.csv` | `inventory.ledger.EXPORT` |  |
+| GET | `/inventory/ledger/batch/:batchId` | `inventory.ledger.READ` | One batch\ |
 | GET | `/inventory/ledger/integrity` | `inventory.ledger.READ` | Replay the ledger and report any cached balance that drifted |
 | GET | `/inventory/products/:productId/branches` | `inventory.balance.READ` | Inter-branch availability search (§34) |
 | GET | `/inventory/products/:productId/stock` | `inventory.balance.READ` |  |
+| GET | `/inventory/reservations` | `inventory.balance.READ` | What is holding stock out of available, and who holds it |
+| POST | `/inventory/reservations/:id/release` | `inventory.balance.EDIT` | Release a hold by hand. The document it belongs to is left alone — releasing the stock  |
 
 ## Notifications
 
@@ -345,6 +352,7 @@ can pin `/api/v1/...`. A future `v2` is added per controller with
 | GET | `/controlled-register` | `dispensing.controlled.READ` | Controlled medicines register (append-only) |
 | POST | `/controlled-register/:id/reverse` | `dispensing.controlled.CREATE` | Append a reversal entry; register rows are never edited or deleted |
 | GET | `/controlled-register/anomalies` | `dispensing.controlled.READ` | Patterns in the controlled register worth investigating: volume outliers, unusual  |
+| POST | `/controlled-register/opening` | `dispensing.controlled.CREATE` | Open the register for a controlled product at a branch, from the stock it actually holds.  |
 | GET | `/controlled-register/reconcile` | `dispensing.controlled.READ` |  |
 | POST | `/dispensing` | `dispensing.dispensing.CREATE` | Dispense medicines using FEFO allocation, with safety and controlled-drug checks |
 | GET | `/dispensing` | `dispensing.dispensing.READ` |  |

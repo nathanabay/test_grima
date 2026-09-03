@@ -1,147 +1,185 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
-import { api, can, qty, shortDate, tokenStore } from "@/lib/api";
-import {
-  BatchStatus,
-  Card,
-  Empty,
-  ErrorBox,
-  Loading,
-  Table,
-} from "@/components/ui";
+import { can, money, qty, shortDate, tokenStore } from "@/lib/api";
+import { BatchStatus, Card, Empty, ErrorBox, Loading, Table } from "@/components/ui";
+import { ExpiryBadge } from "@/components/status";
+import { Field, Toolbar } from "@/components/primitives";
+import { BatchStatusDialog, type BatchAction } from "@/components/inventory/BatchStatusDialog";
 
-const QUARANTINE_REASONS = [
-  "QUALITY_INVESTIGATION",
-  "DAMAGED_PACKAGING",
-  "TEMPERATURE_EXCURSION",
-  "SUSPECTED_COUNTERFEIT",
-  "RECALL",
-  "DOCUMENTATION_ISSUE",
-  "SHORT_SHELF_LIFE",
-  "REGULATORY_HOLD",
+const STATUSES = [
+  "QUARANTINED",
+  "RELEASED",
+  "AVAILABLE",
+  "BLOCKED",
+  "DAMAGED",
+  "RECALLED",
+  "RETURNED",
+  "EXPIRED",
+  "DESTROYED",
+];
+
+const EXPIRY_WINDOWS = [
+  { label: "Any expiry", value: "" },
+  { label: "Expiring in 30 days", value: "30" },
+  { label: "Expiring in 90 days", value: "90" },
+  { label: "Expiring in 180 days", value: "180" },
 ];
 
 export default function BatchesPage() {
+  return (
+    <Shell>
+      <BatchesBody />
+    </Shell>
+  );
+}
+
+function BatchesBody() {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [expiring, setExpiring] = useState("");
+  const [onlyInStock, setOnlyInStock] = useState(false);
+  const [page, setPage] = useState(1);
+
+  const [target, setTarget] = useState<any | null>(null);
+  const [action, setAction] = useState<BatchAction | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const user = typeof window !== "undefined" ? tokenStore.user : null;
   const canRelease = can(user, "quality.quarantine.APPROVE");
   const canQuarantine = can(user, "quality.quarantine.CREATE");
 
-  const {
-    data,
-    error: loadError,
-    loading,
-    refresh,
-  } = useApi<any>(
-    `/inventory/batches?pageSize=50${status ? `&status=${status}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
-    [status, search],
-  );
+  const query = [
+    `pageSize=50`,
+    `page=${page}`,
+    status ? `status=${status}` : "",
+    search ? `search=${encodeURIComponent(search)}` : "",
+    expiring ? `expiringWithinDays=${expiring}` : "",
+    onlyInStock ? "onlyInStock=true" : "",
+  ]
+    .filter(Boolean)
+    .join("&");
 
-  async function act(batchId: string, action: "release" | "quarantine") {
-    setError(null);
-    setMessage(null);
-    const reason =
-      action === "release"
-        ? window.prompt(
-            "Release reason (recorded in the audit trail):",
-            "Certificate of analysis reviewed",
-          )
-        : window.prompt(
-            "Quarantine reason (recorded in the audit trail):",
-            "Quality investigation",
-          );
-    if (!reason) return;
+  const { data, error, loading, refresh } = useApi<any>(`/inventory/batches?${query}`, [query]);
 
-    let quarantineReason = "QUALITY_INVESTIGATION";
-    if (action === "quarantine") {
-      const chosen = window.prompt(
-        `Quarantine category — one of:\n${QUARANTINE_REASONS.join("\n")}`,
-        "QUALITY_INVESTIGATION",
-      );
-      if (!chosen) return;
-      quarantineReason = chosen;
-    }
-
-    setBusy(batchId);
-    try {
-      await api(`/inventory/batches/${batchId}/${action}`, {
-        method: "POST",
-        body: action === "release" ? { reason } : { reason, quarantineReason },
-      });
-      setMessage(
-        `Batch ${action === "release" ? "released — now allocatable by FEFO" : "quarantined — FEFO will skip it"}.`,
-      );
-      refresh();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(null);
-    }
+  function open(batch: any, next: BatchAction) {
+    setTarget(batch);
+    setAction(next);
   }
 
   return (
-    <Shell>
+    <>
       <PageHeader
-        title="Batches & Quarantine"
-        subtitle="Only AVAILABLE and RELEASED batches can be dispensed, sold or transferred."
+        title="Batches"
+        subtitle="Quarantine holds stock out of FEFO; release makes it allocatable. Both are recorded against the person who decided, with the evidence they decided on."
       />
 
-      <Card className="mb-4">
-        <div className="flex flex-wrap gap-2">
-          <input
-            className="input flex-1 min-w-[200px]"
-            placeholder="Search batch number or product"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select
-            className="input w-auto"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="">All statuses</option>
-            {[
-              "AVAILABLE",
-              "RELEASED",
-              "QUARANTINED",
-              "BLOCKED",
-              "DAMAGED",
-              "EXPIRED",
-              "RECALLED",
-              "RETURNED",
-              "DESTROYED",
-            ].map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-      </Card>
-
       {message && (
-        <div className="mb-3 rounded-md border border-ok/30 bg-ok-light px-3 py-2 text-sm text-ok">
+        <div
+          className="mb-3 rounded-md border border-ok/30 bg-ok-light px-3 py-2 text-sm text-ok"
+          role="status"
+        >
           {message}
         </div>
       )}
-      {error && (
-        <div className="mb-3">
-          <ErrorBox message={error} />
-        </div>
-      )}
-      {loadError && <ErrorBox message={loadError} />}
+
+      <Card className="mb-4">
+        <form
+          className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setPage(1);
+            setSearch(draft);
+          }}
+        >
+          <Field label="Search">
+            <input
+              className="input"
+              placeholder="Batch, lot, invoice, product or SKU"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+          </Field>
+          <Field label="Status">
+            <select
+              className="input"
+              value={status}
+              onChange={(e) => {
+                setPage(1);
+                setStatus(e.target.value);
+              }}
+            >
+              <option value="">Any status</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Expiry">
+            <select
+              className="input"
+              value={expiring}
+              onChange={(e) => {
+                setPage(1);
+                setExpiring(e.target.value);
+              }}
+            >
+              {EXPIRY_WINDOWS.map((w) => (
+                <option key={w.value} value={w.value}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="flex items-end gap-2">
+            <label className="flex items-center gap-1.5 pb-2 text-small">
+              <input
+                type="checkbox"
+                checked={onlyInStock}
+                onChange={(e) => {
+                  setPage(1);
+                  setOnlyInStock(e.target.checked);
+                }}
+              />
+              Only with stock
+            </label>
+            <button className="btn-primary mb-0.5">Search</button>
+          </div>
+        </form>
+      </Card>
+
+      {error && <ErrorBox message={error} />}
       {loading && <Loading />}
 
       {data && (
-        <Card title={`${data.total} batch${data.total === 1 ? "" : "es"}`}>
+        <Card
+          title={`${data.total.toLocaleString()} batch${data.total === 1 ? "" : "es"}`}
+          action={
+            <div className="flex items-center gap-2 text-sm">
+              <button
+                className="btn-ghost"
+                disabled={page === 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                Previous
+              </button>
+              <span className="text-ink-muted">Page {data.page}</span>
+              <button
+                className="btn-ghost"
+                disabled={data.page * data.pageSize >= data.total}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </button>
+            </div>
+          }
+        >
           {data.data.length ? (
             <Table
               head={[
@@ -150,74 +188,92 @@ export default function BatchesPage() {
                 "Status",
                 "Expiry",
                 "On hand",
+                "Available",
+                "Value",
                 "Supplier",
-                "Actions",
+                "",
               ]}
             >
-              {data.data.map((b: any) => {
-                const onHand = b.balances.reduce(
-                  (s: number, x: any) => s + Number(x.onHand),
-                  0,
-                );
-                return (
-                  <tr key={b.id}>
-                    <td className="td font-medium">{b.batchNumber}</td>
-                    <td className="td">
-                      {b.product.genericName} {b.product.strength}
+              {data.data.map((b: any) => (
+                <tr key={b.id}>
+                  <td className="td">
+                    <Link className="font-medium text-brand underline" href={`/batches/${b.id}`}>
+                      {b.batchNumber}
+                    </Link>
+                    {b._count?.childBatches > 0 && (
                       <div className="text-xs text-ink-subtle">
-                        {b.product.sku}
+                        split into {b._count.childBatches}
                       </div>
-                    </td>
-                    <td className="td">
-                      <BatchStatus status={b.status} />
-                      {b.quarantineReason && (
-                        <div className="mt-0.5 text-xs text-ink-subtle">
-                          {b.quarantineReason}
-                        </div>
+                    )}
+                  </td>
+                  <td className="td">
+                    <div>
+                      {b.product.genericName} {b.product.strength}
+                    </div>
+                    <div className="text-xs text-ink-subtle">
+                      {b.product.sku}
+                      {b.product.isControlled && " · CONTROLLED"}
+                      {b.product.isColdChain && " · COLD CHAIN"}
+                    </div>
+                  </td>
+                  <td className="td">
+                    <BatchStatus status={b.status} />
+                    {b.quarantineReason && (
+                      <div className="text-xs text-ink-subtle">
+                        {b.quarantineReason.replace(/_/g, " ").toLowerCase()}
+                      </div>
+                    )}
+                  </td>
+                  <td className="td">
+                    <div className="text-xs text-ink-muted">{shortDate(b.expiryDate)}</div>
+                    <ExpiryBadge days={b.daysToExpiry} />
+                  </td>
+                  <td className="td num">{qty(b.onHand)}</td>
+                  <td className="td num font-medium">{qty(b.available)}</td>
+                  <td className="td num">{money(b.stockValue)}</td>
+                  <td className="td text-xs text-ink-muted">{b.supplier?.companyName ?? "—"}</td>
+                  <td className="td">
+                    <div className="flex gap-1">
+                      {canRelease && ["QUARANTINED", "BLOCKED", "RETURNED"].includes(b.status) && (
+                        <button
+                          className="btn-ghost text-xs"
+                          onClick={() => open(b, "release")}
+                        >
+                          Release
+                        </button>
                       )}
-                    </td>
-                    <td className="td text-ink-muted">
-                      {shortDate(b.expiryDate)}
-                    </td>
-                    <td className="td num">{qty(onHand)}</td>
-                    <td className="td text-xs text-ink-muted">
-                      {b.supplier?.companyName ?? "-"}
-                    </td>
-                    <td className="td">
-                      <div className="flex gap-1">
-                        {canRelease &&
-                          ["QUARANTINED", "BLOCKED", "RETURNED"].includes(
-                            b.status,
-                          ) && (
-                            <button
-                              className="btn-ghost text-xs"
-                              disabled={busy === b.id}
-                              onClick={() => act(b.id, "release")}
-                            >
-                              Release
-                            </button>
-                          )}
-                        {canQuarantine &&
-                          ["AVAILABLE", "RELEASED"].includes(b.status) && (
-                            <button
-                              className="btn-ghost text-xs"
-                              disabled={busy === b.id}
-                              onClick={() => act(b.id, "quarantine")}
-                            >
-                              Quarantine
-                            </button>
-                          )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                      {canQuarantine &&
+                        !["QUARANTINED", "DESTROYED", "EXPIRED"].includes(b.status) && (
+                          <button
+                            className="btn-ghost text-xs"
+                            onClick={() => open(b, "quarantine")}
+                          >
+                            Quarantine
+                          </button>
+                        )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </Table>
           ) : (
-            <Empty>No batches match these filters.</Empty>
+            <Empty>No batches match this filter.</Empty>
           )}
         </Card>
       )}
-    </Shell>
+
+      <BatchStatusDialog
+        batch={target}
+        action={action}
+        onClose={() => {
+          setAction(null);
+          setTarget(null);
+        }}
+        onDone={() => {
+          setMessage("Batch status updated.");
+          refresh();
+        }}
+      />
+    </>
   );
 }

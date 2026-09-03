@@ -203,7 +203,19 @@ check('new batch starts QUARANTINED, not sellable', newBatch.status === 'QUARANT
 // ---------------------------------------------------------------
 console.log('\nSTEP 8  Quarantined stock is invisible to FEFO');
 // ---------------------------------------------------------------
-const fefoBefore = await pharmacist('POST', '/inventory/fefo/allocate', {
+// §4: the branch pharmacist cannot probe the central warehouse — a FEFO
+// allocation names batch numbers, quantities and expiry dates, so the actor has
+// to be one that reaches the site being asked about. The warehouse user works
+// the central store and posted the receipt above.
+const branchProbe = await pharmacist('POST', '/inventory/fefo/allocate', {
+  productId: amox.id,
+  warehouseId: centralWh.id,
+  quantity: 20,
+});
+check('a branch pharmacist cannot probe the central warehouse with FEFO',
+  branchProbe.status === 403, `HTTP ${branchProbe.status}`);
+
+const fefoBefore = await warehouse('POST', '/inventory/fefo/allocate', {
   productId: amox.id,
   warehouseId: centralWh.id,
   quantity: 20,
@@ -290,10 +302,21 @@ check('a plain code is NOT treated as GS1 identification', plainQr.body.parsed.i
 // ---------------------------------------------------------------
 console.log('\nSTEP 10  QA releases the batch -> stock becomes available');
 // ---------------------------------------------------------------
-const release = await qa('POST', `/inventory/batches/${newBatch.id}/release`, {
+// §16: a release names the evidence it was decided on. "Released" with nothing
+// behind it is the record an inspector asks about and nobody can answer.
+const releaseWithoutEvidence = await qa('POST', `/inventory/batches/${newBatch.id}/release`, {
   reason: 'Certificate of analysis reviewed and accepted',
 });
-check('QA released the batch', release.body.status === 'RELEASED');
+check('releasing without naming the evidence is refused',
+  releaseWithoutEvidence.status === 400,
+  `HTTP ${releaseWithoutEvidence.status}`);
+
+const release = await qa('POST', `/inventory/batches/${newBatch.id}/release`, {
+  reason: 'Certificate of analysis reviewed and accepted',
+  evidenceRef: `COA-${stamp}`,
+});
+check('QA released the batch', release.body.status === 'RELEASED',
+  release.ok ? '' : `HTTP ${release.status}: ${String(release.body?.error).slice(0, 90)}`);
 
 const unauthorizedRelease = await cashier('POST', `/inventory/batches/${newBatch.id}/block`, {
   reason: 'attempt without permission',
@@ -347,7 +370,10 @@ const grn2 = await warehouse('POST', '/goods-receipts', {
 check('second, longer-dated batch received', grn2.ok, grn2.body.grnNo);
 const laterBatch = (await warehouse('GET', `/inventory/batches?productId=${amox.id}&search=${laterBatchNumber}`))
   .body.data.find((b) => b.batchNumber === laterBatchNumber);
-await qa('POST', `/inventory/batches/${laterBatch.id}/release`, { reason: 'COA accepted' });
+await qa('POST', `/inventory/batches/${laterBatch.id}/release`, {
+  reason: 'COA accepted',
+  evidenceRef: `COA-${stamp}-2`,
+});
 
 const recheck = await hoPharmacist(
   'GET',

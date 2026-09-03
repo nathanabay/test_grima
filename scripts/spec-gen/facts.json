@@ -15714,6 +15714,10 @@
    "path": "/api/controlled-register/anomalies"
   },
   {
+   "method": "POST",
+   "path": "/api/controlled-register/opening"
+  },
+  {
    "method": "GET",
    "path": "/api/controlled-register/reconcile"
   },
@@ -15995,7 +15999,15 @@
   },
   {
    "method": "GET",
+   "path": "/api/inventory/anomalies"
+  },
+  {
+   "method": "GET",
    "path": "/api/inventory/balances"
+  },
+  {
+   "method": "GET",
+   "path": "/api/inventory/balances.csv"
   },
   {
    "method": "GET",
@@ -16016,6 +16028,10 @@
   {
    "method": "POST",
    "path": "/api/inventory/batches/:id/release"
+  },
+  {
+   "method": "POST",
+   "path": "/api/inventory/batches/:id/split"
   },
   {
    "method": "GET",
@@ -16055,6 +16071,14 @@
   },
   {
    "method": "GET",
+   "path": "/api/inventory/ledger.csv"
+  },
+  {
+   "method": "GET",
+   "path": "/api/inventory/ledger/batch/:batchId"
+  },
+  {
+   "method": "GET",
    "path": "/api/inventory/ledger/integrity"
   },
   {
@@ -16064,6 +16088,14 @@
   {
    "method": "GET",
    "path": "/api/inventory/products/:productId/stock"
+  },
+  {
+   "method": "GET",
+   "path": "/api/inventory/reservations"
+  },
+  {
+   "method": "POST",
+   "path": "/api/inventory/reservations/:id/release"
   },
   {
    "method": "GET",
@@ -18418,6 +18450,18 @@
    "tag": "Prescriptions & Dispensing",
    "method": "POST",
    "controllerPath": "",
+   "routePath": "controlled-register/opening",
+   "permissions": [
+    "dispensing.controlled.CREATE"
+   ],
+   "isPublic": false,
+   "summary": "Open the register for a controlled product at a branch, from the stock it actually holds. "
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "POST",
+   "controllerPath": "",
    "routePath": "controlled-register/:id/reverse",
    "permissions": [
     "dispensing.controlled.CREATE"
@@ -19074,6 +19118,18 @@
    "tag": "Inventory",
    "method": "GET",
    "controllerPath": "inventory",
+   "routePath": "ledger/batch/:batchId",
+   "permissions": [
+    "inventory.ledger.READ"
+   ],
+   "isPublic": false,
+   "summary": "One batch\\"
+  },
+  {
+   "module": "inventory",
+   "tag": "Inventory",
+   "method": "GET",
+   "controllerPath": "inventory",
    "routePath": "ledger/integrity",
    "permissions": [
     "inventory.ledger.READ"
@@ -19194,6 +19250,18 @@
    "tag": "Inventory",
    "method": "POST",
    "controllerPath": "inventory",
+   "routePath": "batches/:id/split",
+   "permissions": [
+    "inventory.batch.EDIT"
+   ],
+   "isPublic": false,
+   "summary": "Split or repack part of a batch into a child batch that keeps its expiry, cost and "
+  },
+  {
+   "module": "inventory",
+   "tag": "Inventory",
+   "method": "POST",
+   "controllerPath": "inventory",
    "routePath": "batches/:id/quarantine",
    "permissions": [
     "quality.quarantine.CREATE"
@@ -19224,6 +19292,66 @@
    ],
    "isPublic": false,
    "summary": null
+  },
+  {
+   "module": "inventory",
+   "tag": "Inventory",
+   "method": "GET",
+   "controllerPath": "inventory",
+   "routePath": "balances.csv",
+   "permissions": [
+    "inventory.balance.EXPORT"
+   ],
+   "isPublic": false,
+   "summary": "The current stock filter as a CSV, capped so an export cannot pull the whole ledger"
+  },
+  {
+   "module": "inventory",
+   "tag": "Inventory",
+   "method": "GET",
+   "controllerPath": "inventory",
+   "routePath": "ledger.csv",
+   "permissions": [
+    "inventory.ledger.EXPORT"
+   ],
+   "isPublic": false,
+   "summary": null
+  },
+  {
+   "module": "inventory",
+   "tag": "Inventory",
+   "method": "GET",
+   "controllerPath": "inventory",
+   "routePath": "reservations",
+   "permissions": [
+    "inventory.balance.READ"
+   ],
+   "isPublic": false,
+   "summary": "What is holding stock out of available, and who holds it"
+  },
+  {
+   "module": "inventory",
+   "tag": "Inventory",
+   "method": "POST",
+   "controllerPath": "inventory",
+   "routePath": "reservations/:id/release",
+   "permissions": [
+    "inventory.balance.EDIT"
+   ],
+   "isPublic": false,
+   "summary": "Release a hold by hand. The document it belongs to is left alone — releasing the stock "
+  },
+  {
+   "module": "inventory",
+   "tag": "Inventory",
+   "method": "GET",
+   "controllerPath": "inventory",
+   "routePath": "anomalies",
+   "permissions": [
+    "inventory.balance.READ"
+   ],
+   "isPublic": false,
+   "summary": "Stock positions that need a person: negative balances, over-reservation, holds at zero, "
   },
   {
    "module": "inventory",
@@ -21428,7 +21556,8 @@
     "actions": [
      "READ",
      "PRINT",
-     "EXPORT"
+     "EXPORT",
+     "EDIT"
     ]
    },
    {
@@ -21853,6 +21982,7 @@
    "inventory.balance.READ",
    "inventory.balance.PRINT",
    "inventory.balance.EXPORT",
+   "inventory.balance.EDIT",
    "inventory.ledger.READ",
    "inventory.ledger.PRINT",
    "inventory.ledger.EXPORT",
@@ -22063,6 +22193,7 @@
      "inventory.balance.READ",
      "inventory.balance.PRINT",
      "inventory.balance.EXPORT",
+     "inventory.balance.EDIT",
      "inventory.ledger.READ",
      "inventory.ledger.PRINT",
      "inventory.ledger.EXPORT",
@@ -22271,6 +22402,7 @@
      "inventory.balance.READ",
      "inventory.balance.PRINT",
      "inventory.balance.EXPORT",
+     "inventory.balance.EDIT",
      "inventory.ledger.READ",
      "inventory.ledger.PRINT",
      "inventory.ledger.EXPORT",
@@ -22407,6 +22539,7 @@
      "inventory.balance.READ",
      "inventory.balance.PRINT",
      "inventory.balance.EXPORT",
+     "inventory.balance.EDIT",
      "inventory.ledger.READ",
      "inventory.ledger.PRINT",
      "inventory.ledger.EXPORT",
@@ -22441,6 +22574,7 @@
      "inventory.balance.READ",
      "inventory.balance.PRINT",
      "inventory.balance.EXPORT",
+     "inventory.balance.EDIT",
      "inventory.goods_receipt.CREATE",
      "inventory.goods_receipt.READ",
      "inventory.goods_receipt.EDIT",
@@ -22508,6 +22642,7 @@
      "inventory.balance.READ",
      "inventory.balance.PRINT",
      "inventory.balance.EXPORT",
+     "inventory.balance.EDIT",
      "inventory.ledger.READ",
      "inventory.ledger.PRINT",
      "inventory.ledger.EXPORT",
@@ -22577,6 +22712,7 @@
      "inventory.balance.READ",
      "inventory.balance.PRINT",
      "inventory.balance.EXPORT",
+     "inventory.balance.EDIT",
      "inventory.goods_receipt.CREATE",
      "inventory.goods_receipt.READ",
      "inventory.goods_receipt.EDIT",
@@ -22781,6 +22917,7 @@
      "inventory.balance.READ",
      "inventory.balance.PRINT",
      "inventory.balance.EXPORT",
+     "inventory.balance.EDIT",
      "inventory.ledger.READ",
      "inventory.ledger.PRINT",
      "inventory.ledger.EXPORT",
@@ -22881,7 +23018,7 @@
   ]
  },
  "settings": {
-  "count": 72,
+  "count": 74,
   "notEnforced": 21
  },
  "testCountsFrom": "jest --json",
@@ -23061,11 +23198,15 @@
   },
   {
    "file": "e2e-dispensing.mjs",
-   "checks": 91
+   "checks": 103
   },
   {
    "file": "e2e-enterprise.mjs",
    "checks": 96
+  },
+  {
+   "file": "e2e-inventory.mjs",
+   "checks": 73
   },
   {
    "file": "e2e-lifecycle.mjs",
@@ -23085,7 +23226,7 @@
   },
   {
    "file": "e2e-workflow.mjs",
-   "checks": 65
+   "checks": 67
   }
  ],
  "pages": [

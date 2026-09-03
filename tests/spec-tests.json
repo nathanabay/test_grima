@@ -1,14 +1,14 @@
 {
- "generated": "2026-09-03T09:17:55.563Z",
+ "generated": "2026-09-03T13:28:08.547Z",
  "totals": {
   "requirements": 1000,
-  "implemented": 785,
-  "partial": 145,
+  "implemented": 790,
+  "partial": 140,
   "notImplemented": 70,
   "withNamedTests": 930,
   "implementedWithoutNamedTests": 0,
   "unitAndIntegrationCases": 331,
-  "endToEndChecks": 472,
+  "endToEndChecks": 559,
   "pagesVerifiedInBrowser": 43
  },
  "suites": [
@@ -210,7 +210,7 @@
    "id": "dispensing",
    "kind": "end-to-end",
    "path": "scripts/e2e-dispensing.mjs",
-   "cases": 91,
+   "cases": 103,
    "describes": []
   },
   {
@@ -218,6 +218,13 @@
    "kind": "end-to-end",
    "path": "scripts/e2e-enterprise.mjs",
    "cases": 96,
+   "describes": []
+  },
+  {
+   "id": "inventory",
+   "kind": "end-to-end",
+   "path": "scripts/e2e-inventory.mjs",
+   "cases": 73,
    "describes": []
   },
   {
@@ -252,7 +259,7 @@
    "id": "workflow",
    "kind": "end-to-end",
    "path": "scripts/e2e-workflow.mjs",
-   "cases": 65,
+   "cases": 67,
    "describes": []
   },
   {
@@ -1919,14 +1926,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "fefo.spec",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/fefo.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -1936,31 +1938,21 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "fefo.spec",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/fefo.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
   "PHARM-BATCH-015": {
    "number": 115,
    "feature": "Batch damaged quantity.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "fefo.spec",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/fefo.spec.ts"
-    },
-    {
-     "named": "e2e-workflow (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -2001,34 +1993,24 @@
   "PHARM-BATCH-018": {
    "number": 118,
    "feature": "Batch disposal quantity.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "fefo.spec",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/fefo.spec.ts"
-    },
-    {
-     "named": "e2e-workflow (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
   "PHARM-BATCH-019": {
    "number": 119,
    "feature": "Batch return quantity.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "fefo.spec",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/fefo.spec.ts"
-    },
-    {
-     "named": "e2e-workflow (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -2174,14 +2156,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "fefo.spec",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/fefo.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -2239,34 +2216,24 @@
   "PHARM-BATCH-032": {
    "number": 132,
    "feature": "Batch consumption velocity.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "fefo.spec",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/fefo.spec.ts"
-    },
-    {
-     "named": "e2e-workflow (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
   "PHARM-BATCH-033": {
    "number": 133,
    "feature": "Batch days-of-cover calculation.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "fefo.spec",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/fefo.spec.ts"
-    },
-    {
-     "named": "e2e-workflow (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6196,14 +6163,9 @@
    "status": "PARTIALLY IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6281,14 +6243,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6298,14 +6255,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6536,14 +6488,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6553,14 +6500,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6570,14 +6512,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6587,14 +6524,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6672,14 +6604,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6689,14 +6616,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6706,14 +6628,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6723,14 +6640,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },
@@ -6757,14 +6669,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "ledger.integration",
+     "named": "e2e-inventory",
      "partial": false,
-     "resolved": "apps/api/test/ledger.integration.spec.ts"
-    },
-    {
-     "named": "e2e-workflow",
-     "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-inventory.mjs"
     }
    ]
   },

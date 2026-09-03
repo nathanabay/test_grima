@@ -228,6 +228,9 @@ export class PickingService {
       throw new ConflictException(`Wave ${wave.waveNo} is ${wave.status} and cannot be released again`);
     }
 
+    const waveHours = await this.config.getNumber('inventory.pickWaveReservationHours');
+    const waveExpiresAt = waveHours > 0 ? new Date(Date.now() + waveHours * 3_600_000) : null;
+
     const updated = await this.prisma.$transaction(async (tx) => {
       for (const task of wave.tasks) {
         if (task.status === 'CANCELLED' || !task.productId || !task.batchId) continue;
@@ -244,6 +247,9 @@ export class PickingService {
           referenceType: 'PICK_WAVE',
           referenceId: wave.id,
           createdById: user.id,
+          // §19: a wave abandoned when the van left used to hold its stock for
+          // ever. The hold lapses; the wave is left for a person to close.
+          expiresAt: waveExpiresAt,
         });
       }
 

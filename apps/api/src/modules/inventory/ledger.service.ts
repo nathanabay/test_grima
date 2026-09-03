@@ -410,6 +410,15 @@ export class LedgerService {
       referenceType: string;
       referenceId: string;
       createdById?: string;
+      /**
+       * When this hold lapses if nobody completes or cancels the document.
+       *
+       * A reservation with no expiry is a permanent write-down of available
+       * stock: the till holds a basket, the customer walks away, and those
+       * units are unsellable until somebody notices. Callers that genuinely
+       * hold stock indefinitely — a confirmed allocation — pass null and say so.
+       */
+      expiresAt?: Date | null;
     },
   ): Promise<void> {
     const quantity = this.toDecimal(input.quantity);
@@ -449,19 +458,63 @@ export class LedgerService {
         quantity,
         referenceType: input.referenceType,
         referenceId: input.referenceId,
+        expiresAt: input.expiresAt ?? null,
         createdById: input.createdById ?? null,
       },
     });
   }
 
-  /** Release reservations for a document (on cancel, or on conversion to a sale). */
-  async releaseReservations(
+  /**
+   * Release reservations that have lapsed (§19).
+   *
+   * `expiresAt` existed on the model from the beginning and nothing ever set it
+   * or read it, so an abandoned basket at the till or a pick wave that died
+   * held its stock out of `available` for good. This runs on the scheduler and
+   * is idempotent: a reservation already released is skipped.
+   *
+   * Only the reservation is released. The document it belongs to is left alone
+   * — deciding that a held sale is abandoned is not the same as deciding to
+   * cancel it, and this job is not entitled to make the second decision.
+   */
+  async releaseExpiredReservations(now = new Date()): Promise<{
+    released: number;
+    quantity: string;
+    byReference: Record<string, number>;
+  }> {
+    const due = await this.prisma.stockReservation.findMany({
+      where: { releasedAt: null, expiresAt: { not: null, lt: now } },
+      select: { id: true, referenceType: true, referenceId: true, quantity: true },
+      take: 500,
+    });
+    if (!due.length) return { released: 0, quantity: '0', byReference: {} };
+
+    const byReference: Record<string, number> = {};
+    let quantity = new Prisma.Decimal(0);
+
+    for (const reservation of due) {
+      await this.prisma.$transaction(async (tx) =>
+        this.releaseReservationRows(tx, [reservation.id]),
+      );
+      quantity = quantity.plus(reservation.quantity);
+      byReference[reservation.referenceType] = (byReference[reservation.referenceType] ?? 0) + 1;
+    }
+
+    this.logger.log(
+      `Released ${due.length} lapsed reservation(s) totalling ${quantity.toString()} unit(s)`,
+    );
+    return { released: due.length, quantity: quantity.toString(), byReference };
+  }
+
+  /**
+   * Release specific reservations by id, decrementing the balance row each one
+   * incremented. The shared core of the document release and the expiry sweep.
+   */
+  async releaseReservationRows(
     tx: Prisma.TransactionClient,
-    referenceType: string,
-    referenceId: string,
-  ): Promise<void> {
+    ids: string[],
+  ): Promise<number> {
     const reservations = await tx.stockReservation.findMany({
-      where: { referenceType, referenceId, releasedAt: null },
+      where: { id: { in: ids }, releasedAt: null },
     });
 
     for (const reservation of reservations) {
@@ -471,8 +524,6 @@ export class LedgerService {
         reservation.warehouseId,
         reservation.batchId,
       );
-      // Prefer the row the reservation actually incremented. The lookup below
-      // is only for reservations written before balanceId existed.
       const balance = reservation.balanceId
         ? await tx.inventoryBalance.findUnique({ where: { id: reservation.balanceId } })
         : await tx.inventoryBalance.findFirst({
@@ -495,6 +546,24 @@ export class LedgerService {
         data: { releasedAt: new Date() },
       });
     }
+
+    return reservations.length;
+  }
+
+  /** Release reservations for a document (on cancel, or on conversion to a sale). */
+  async releaseReservations(
+    tx: Prisma.TransactionClient,
+    referenceType: string,
+    referenceId: string,
+  ): Promise<void> {
+    const reservations = await tx.stockReservation.findMany({
+      where: { referenceType, referenceId, releasedAt: null },
+      select: { id: true },
+    });
+    // The balance row each reservation incremented is the one decremented; the
+    // shared core prefers the recorded balanceId and falls back to the lookup
+    // only for rows written before that column existed.
+    await this.releaseReservationRows(tx, reservations.map((r) => r.id));
   }
 
   /**
@@ -528,17 +597,49 @@ export class LedgerService {
    */
   async verifyIntegrity(warehouseId?: string): Promise<{
     checked: number;
+    positions: number;
     mismatches: Array<{
       productId: string;
       batchId: string | null;
       warehouseId: string;
       cached: string;
       ledger: string;
+      difference: string;
     }>;
   }> {
     const balances = await this.prisma.inventoryBalance.findMany({
       where: warehouseId ? { warehouseId } : {},
+      select: { productId: true, batchId: true, warehouseId: true, onHand: true },
     });
+
+    /**
+     * Compared at the grain the ledger actually replays.
+     *
+     * `reconstructBalance` sums movements by product, batch and warehouse; it
+     * has no location, because a movement between two bins in one warehouse is
+     * not a movement in or out of that warehouse. Comparing it against a single
+     * per-location balance row therefore reported drift on data that was
+     * perfectly consistent, every time a batch was split across two bins — and
+     * an integrity check that cries wolf is one nobody reads. The cached rows
+     * are aggregated to the same grain before the comparison.
+     */
+    const cached = new Map<
+      string,
+      { productId: string; batchId: string | null; warehouseId: string; onHand: Prisma.Decimal }
+    >();
+    for (const balance of balances) {
+      const key = `${balance.productId}|${balance.batchId ?? ''}|${balance.warehouseId}`;
+      const entry = cached.get(key);
+      if (entry) entry.onHand = entry.onHand.plus(balance.onHand);
+      else {
+        cached.set(key, {
+          productId: balance.productId,
+          batchId: balance.batchId,
+          warehouseId: balance.warehouseId,
+          onHand: balance.onHand,
+        });
+      }
+    }
 
     const mismatches: Array<{
       productId: string;
@@ -546,25 +647,27 @@ export class LedgerService {
       warehouseId: string;
       cached: string;
       ledger: string;
+      difference: string;
     }> = [];
 
-    for (const balance of balances) {
+    for (const position of cached.values()) {
       const ledger = await this.reconstructBalance(
-        balance.productId,
-        balance.warehouseId,
-        balance.batchId ?? undefined,
+        position.productId,
+        position.warehouseId,
+        position.batchId ?? undefined,
       );
-      if (!ledger.equals(balance.onHand)) {
+      if (!ledger.equals(position.onHand)) {
         mismatches.push({
-          productId: balance.productId,
-          batchId: balance.batchId,
-          warehouseId: balance.warehouseId,
-          cached: balance.onHand.toString(),
+          productId: position.productId,
+          batchId: position.batchId,
+          warehouseId: position.warehouseId,
+          cached: position.onHand.toString(),
           ledger: ledger.toString(),
+          difference: position.onHand.minus(ledger).toString(),
         });
       }
     }
 
-    return { checked: balances.length, mismatches };
+    return { checked: cached.size, positions: balances.length, mismatches };
   }
 }

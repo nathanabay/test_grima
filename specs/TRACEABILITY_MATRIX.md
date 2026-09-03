@@ -125,13 +125,13 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-BATCH-010` | 110 | Batch warehouse tracking. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-011` | 111 | Batch bin tracking. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-012` | 112 | Batch quantity tracking. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
-| `PHARM-BATCH-013` | 113 | Batch reserved quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
-| `PHARM-BATCH-014` | 114 | Batch available quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
-| `PHARM-BATCH-015` | 115 | Batch damaged quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
+| `PHARM-BATCH-013` | 113 | Batch reserved quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-BATCH-014` | 114 | Batch available quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-BATCH-015` | 115 | Batch damaged quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
 | `PHARM-BATCH-016` | 116 | Batch quarantine quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-017` | 117 | Batch recalled quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
-| `PHARM-BATCH-018` | 118 | Batch disposal quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-BATCH-019` | 119 | Batch return quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
+| `PHARM-BATCH-018` | 118 | Batch disposal quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-BATCH-019` | 119 | Batch return quantity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
 | `PHARM-BATCH-020` | 120 | Batch quality status. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-021` | 121 | Batch certificate-of-analysis attachment. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-022` | 122 | Batch regulatory-document attachment. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
@@ -140,12 +140,12 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-BATCH-025` | 125 | Batch rejection workflow. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-026` | 126 | Batch blocking. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-027` | 127 | Batch unblocking authorization. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
-| `PHARM-BATCH-028` | 128 | Batch genealogy. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
+| `PHARM-BATCH-028` | 128 | Batch genealogy. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
 | `PHARM-BATCH-029` | 129 | Batch movement timeline. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-030` | 130 | Batch inventory valuation. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-031` | 131 | Batch expiry risk score. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
-| `PHARM-BATCH-032` | 132 | Batch consumption velocity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-BATCH-033` | 133 | Batch days-of-cover calculation. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
+| `PHARM-BATCH-032` | 132 | Batch consumption velocity. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-BATCH-033` | 133 | Batch days-of-cover calculation. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
 | `PHARM-BATCH-034` | 134 | Batch-level profitability. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-BATCH-035` | 135 | Batch recall history. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
 | `PHARM-BATCH-036` | 136 | Unique serial-number tracking. | `08-batches` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | fefo.spec, e2e-workflow | IMPLEMENTED |
@@ -428,13 +428,13 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-LEDG-013` | 413 | Recall entries. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
 | `PHARM-LEDG-014` | 414 | Disposal entries. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
 | `PHARM-LEDG-015` | 415 | Stock-count entries. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
-| `PHARM-LEDG-016` | 416 | Manufacturing adjustment support. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
+| `PHARM-LEDG-016` | 416 | Manufacturing adjustment support. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | — | e2e-inventory | PARTIALLY IMPLEMENTED |
 | `PHARM-LEDG-017` | 417 | Donation receipt entries. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-LEDG-018` | 418 | Donation issue entries. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-LEDG-019` | 419 | Sample issue entries. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-LEDG-020` | 420 | Internal-use entries. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-LEDG-021` | 421 | Stock reservation ledger. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
-| `PHARM-LEDG-022` | 422 | Stock release ledger. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
+| `PHARM-LEDG-021` | 421 | Stock reservation ledger. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-LEDG-022` | 422 | Stock release ledger. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
 | `PHARM-LEDG-023` | 423 | Transaction reference IDs. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
 | `PHARM-LEDG-024` | 424 | Transaction idempotency keys. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
 | `PHARM-LEDG-025` | 425 | Database transactional integrity. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
@@ -448,20 +448,20 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-LEDG-033` | 433 | Adjustment instead of deletion. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
 | `PHARM-LEDG-034` | 434 | Opening-balance migration. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
 | `PHARM-LEDG-035` | 435 | Closing-balance snapshots. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-LEDG-036` | 436 | Inventory reconciliation. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
-| `PHARM-LEDG-037` | 437 | Ledger reconstruction. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
-| `PHARM-LEDG-038` | 438 | Stock balance verification. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
-| `PHARM-LEDG-039` | 439 | Inventory integrity checker. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
+| `PHARM-LEDG-036` | 436 | Inventory reconciliation. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-LEDG-037` | 437 | Ledger reconstruction. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-LEDG-038` | 438 | Stock balance verification. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-LEDG-039` | 439 | Inventory integrity checker. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
 | `PHARM-LEDG-040` | 440 | Orphan transaction detection. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-LEDG-041` | 441 | Invalid-batch detection. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
 | `PHARM-LEDG-042` | 442 | Broken-transfer detection. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-LEDG-043` | 443 | Cost recalculation utilities. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
-| `PHARM-LEDG-044` | 444 | Stock ledger search. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
-| `PHARM-LEDG-045` | 445 | Stock ledger filtering. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
-| `PHARM-LEDG-046` | 446 | Stock ledger export. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
-| `PHARM-LEDG-047` | 447 | Transaction drilldown. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
+| `PHARM-LEDG-044` | 444 | Stock ledger search. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-LEDG-045` | 445 | Stock ledger filtering. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-LEDG-046` | 446 | Stock ledger export. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
+| `PHARM-LEDG-047` | 447 | Transaction drilldown. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
 | `PHARM-LEDG-048` | 448 | Source-document drilldown. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
-| `PHARM-LEDG-049` | 449 | User-action drilldown. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
+| `PHARM-LEDG-049` | 449 | User-action drilldown. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-inventory | IMPLEMENTED |
 | `PHARM-LEDG-050` | 450 | Inventory forensic timeline. | `10-inventory` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ledger.integration, e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-001` | 451 | Full physical counts. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-COUNT-002` | 452 | Cycle counting. | `19-stock-counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |

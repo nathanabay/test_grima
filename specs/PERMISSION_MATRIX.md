@@ -11,7 +11,7 @@ what to render, never whether to allow.
 
 Generated 2026-09-03 from the schema, the route table and the permission catalogue.
 
-**203 permissions across 48 resources, granted through 12 roles.**
+**204 permissions across 48 resources, granted through 12 roles.**
 
 ## Resources
 
@@ -33,7 +33,7 @@ Generated 2026-09-03 from the schema, the route table and the permission catalog
 | procurement | rfq | RFQs | CREATE, READ, EDIT, DELETE |
 | procurement | quotation | Supplier Quotations | CREATE, READ, EDIT, DELETE, APPROVE |
 | procurement | purchase_order | Purchase Orders | CREATE, READ, EDIT, DELETE, APPROVE, REJECT, CANCEL, PRINT |
-| inventory | balance | Stock Balances | READ, PRINT, EXPORT |
+| inventory | balance | Stock Balances | READ, PRINT, EXPORT, EDIT |
 | inventory | ledger | Stock Ledger | READ, PRINT, EXPORT |
 | inventory | batch | Batches | READ, EDIT, APPROVE |
 | inventory | goods_receipt | Goods Receiving | CREATE, READ, EDIT, DELETE, APPROVE, PRINT |
@@ -72,7 +72,7 @@ Generated 2026-09-03 from the schema, the route table and the permission catalog
 
 Complete system access.
 
-Holds 203 of 203 permissions.
+Holds 204 of 204 permissions.
 
 - **admin**: automation.CREATE, automation.DELETE, automation.EDIT, automation.READ, backup.CREATE, backup.READ, branch.CREATE, branch.DELETE, branch.EDIT, branch.READ, role.CREATE, role.DELETE, role.EDIT, role.READ, setting.EDIT, setting.READ, user.APPROVE, user.CREATE, user.DELETE, user.EDIT, user.READ, warehouse.CREATE, warehouse.DELETE, warehouse.EDIT, warehouse.READ
 - **analytics**: dashboard.READ, forecast.READ, report.EXPORT, report.PRINT, report.READ
@@ -80,7 +80,7 @@ Holds 203 of 203 permissions.
 - **catalog**: attribute.CREATE, attribute.DELETE, attribute.EDIT, attribute.READ, manufacturer.CREATE, manufacturer.DELETE, manufacturer.EDIT, manufacturer.READ, price.APPROVE, price.EDIT, price.READ, product.CREATE, product.DELETE, product.EDIT, product.EXPORT, product.IMPORT, product.READ
 - **dispensing**: controlled.CREATE, controlled.EXPORT, controlled.PRINT, controlled.READ, dispensing.CANCEL, dispensing.CREATE, dispensing.PRINT, dispensing.READ, prescription.APPROVE, prescription.CANCEL, prescription.CREATE, prescription.DELETE, prescription.EDIT, prescription.READ, prescription.REJECT
 - **finance**: account.CREATE, account.DELETE, account.EDIT, account.READ, invoice.APPROVE, invoice.CREATE, invoice.DELETE, invoice.EDIT, invoice.READ, journal.APPROVE, journal.CANCEL, journal.CREATE, journal.DELETE, journal.EDIT, journal.READ, report.EXPORT, report.PRINT, report.READ
-- **inventory**: adjustment.APPROVE, adjustment.CANCEL, adjustment.CREATE, adjustment.DELETE, adjustment.EDIT, adjustment.READ, adjustment.REJECT, balance.EXPORT, balance.PRINT, balance.READ, batch.APPROVE, batch.EDIT, batch.READ, count.APPROVE, count.CANCEL, count.CREATE, count.DELETE, count.EDIT, count.READ, count.REJECT, expiry.EXPORT, expiry.PRINT, expiry.READ, fefo_override.CREATE, goods_receipt.APPROVE, goods_receipt.CREATE, goods_receipt.DELETE, goods_receipt.EDIT, goods_receipt.PRINT, goods_receipt.READ, ledger.EXPORT, ledger.PRINT, ledger.READ, serial.EDIT, serial.EXPORT, serial.IMPORT, serial.READ, task.CANCEL, task.CREATE, task.DELETE, task.EDIT, task.READ, transfer.APPROVE, transfer.CANCEL, transfer.CREATE, transfer.DELETE, transfer.EDIT, transfer.PRINT, transfer.READ, transfer.REJECT
+- **inventory**: adjustment.APPROVE, adjustment.CANCEL, adjustment.CREATE, adjustment.DELETE, adjustment.EDIT, adjustment.READ, adjustment.REJECT, balance.EDIT, balance.EXPORT, balance.PRINT, balance.READ, batch.APPROVE, batch.EDIT, batch.READ, count.APPROVE, count.CANCEL, count.CREATE, count.DELETE, count.EDIT, count.READ, count.REJECT, expiry.EXPORT, expiry.PRINT, expiry.READ, fefo_override.CREATE, goods_receipt.APPROVE, goods_receipt.CREATE, goods_receipt.DELETE, goods_receipt.EDIT, goods_receipt.PRINT, goods_receipt.READ, ledger.EXPORT, ledger.PRINT, ledger.READ, serial.EDIT, serial.EXPORT, serial.IMPORT, serial.READ, task.CANCEL, task.CREATE, task.DELETE, task.EDIT, task.READ, transfer.APPROVE, transfer.CANCEL, transfer.CREATE, transfer.DELETE, transfer.EDIT, transfer.PRINT, transfer.READ, transfer.REJECT
 - **procurement**: purchase_order.APPROVE, purchase_order.CANCEL, purchase_order.CREATE, purchase_order.DELETE, purchase_order.EDIT, purchase_order.PRINT, purchase_order.READ, purchase_order.REJECT, purchase_request.APPROVE, purchase_request.CANCEL, purchase_request.CREATE, purchase_request.DELETE, purchase_request.EDIT, purchase_request.READ, purchase_request.REJECT, quotation.APPROVE, quotation.CREATE, quotation.DELETE, quotation.EDIT, quotation.READ, rfq.CREATE, rfq.DELETE, rfq.EDIT, rfq.READ, supplier.APPROVE, supplier.CREATE, supplier.DELETE, supplier.EDIT, supplier.READ
 - **quality**: cold_chain.APPROVE, cold_chain.EDIT, cold_chain.READ, disposal.APPROVE, disposal.CREATE, disposal.DELETE, disposal.EDIT, disposal.PRINT, disposal.READ, incident.APPROVE, incident.CREATE, incident.DELETE, incident.EDIT, incident.READ, quarantine.APPROVE, quarantine.CREATE, quarantine.READ, recall.APPROVE, recall.CREATE, recall.DELETE, recall.EDIT, recall.READ, return.APPROVE, return.CREATE, return.DELETE, return.EDIT, return.READ
 - **sales**: cash_session.APPROVE, cash_session.CREATE, cash_session.EDIT, cash_session.READ, patient.CREATE, patient.DELETE, patient.EDIT, patient.READ, payment.CREATE, payment.READ, sale.CANCEL, sale.CREATE, sale.PRINT, sale.READ
@@ -89,14 +89,14 @@ Holds 203 of 203 permissions.
 
 Manages pharmacy configuration, employees and operations.
 
-Holds 183 of 203 permissions.
+Holds 184 of 204 permissions.
 
 - **admin**: automation.CREATE, automation.DELETE, automation.EDIT, automation.READ, branch.CREATE, branch.DELETE, branch.EDIT, branch.READ, role.CREATE, role.DELETE, role.EDIT, role.READ, setting.EDIT, setting.READ, user.APPROVE, user.CREATE, user.DELETE, user.EDIT, user.READ, warehouse.CREATE, warehouse.DELETE, warehouse.EDIT, warehouse.READ
 - **analytics**: dashboard.READ, forecast.READ, report.EXPORT, report.PRINT, report.READ
 - **audit**: log.EXPORT, log.PRINT, log.READ
 - **catalog**: attribute.CREATE, attribute.DELETE, attribute.EDIT, attribute.READ, manufacturer.CREATE, manufacturer.DELETE, manufacturer.EDIT, manufacturer.READ, price.APPROVE, price.EDIT, price.READ, product.CREATE, product.DELETE, product.EDIT, product.EXPORT, product.IMPORT, product.READ
 - **dispensing**: controlled.CREATE, controlled.EXPORT, controlled.PRINT, controlled.READ, dispensing.CANCEL, dispensing.CREATE, dispensing.PRINT, dispensing.READ, prescription.APPROVE, prescription.CANCEL, prescription.CREATE, prescription.DELETE, prescription.EDIT, prescription.READ, prescription.REJECT
-- **inventory**: adjustment.APPROVE, adjustment.CANCEL, adjustment.CREATE, adjustment.DELETE, adjustment.EDIT, adjustment.READ, adjustment.REJECT, balance.EXPORT, balance.PRINT, balance.READ, batch.APPROVE, batch.EDIT, batch.READ, count.APPROVE, count.CANCEL, count.CREATE, count.DELETE, count.EDIT, count.READ, count.REJECT, expiry.EXPORT, expiry.PRINT, expiry.READ, fefo_override.CREATE, goods_receipt.APPROVE, goods_receipt.CREATE, goods_receipt.DELETE, goods_receipt.EDIT, goods_receipt.PRINT, goods_receipt.READ, ledger.EXPORT, ledger.PRINT, ledger.READ, serial.EDIT, serial.EXPORT, serial.IMPORT, serial.READ, task.CANCEL, task.CREATE, task.DELETE, task.EDIT, task.READ, transfer.APPROVE, transfer.CANCEL, transfer.CREATE, transfer.DELETE, transfer.EDIT, transfer.PRINT, transfer.READ, transfer.REJECT
+- **inventory**: adjustment.APPROVE, adjustment.CANCEL, adjustment.CREATE, adjustment.DELETE, adjustment.EDIT, adjustment.READ, adjustment.REJECT, balance.EDIT, balance.EXPORT, balance.PRINT, balance.READ, batch.APPROVE, batch.EDIT, batch.READ, count.APPROVE, count.CANCEL, count.CREATE, count.DELETE, count.EDIT, count.READ, count.REJECT, expiry.EXPORT, expiry.PRINT, expiry.READ, fefo_override.CREATE, goods_receipt.APPROVE, goods_receipt.CREATE, goods_receipt.DELETE, goods_receipt.EDIT, goods_receipt.PRINT, goods_receipt.READ, ledger.EXPORT, ledger.PRINT, ledger.READ, serial.EDIT, serial.EXPORT, serial.IMPORT, serial.READ, task.CANCEL, task.CREATE, task.DELETE, task.EDIT, task.READ, transfer.APPROVE, transfer.CANCEL, transfer.CREATE, transfer.DELETE, transfer.EDIT, transfer.PRINT, transfer.READ, transfer.REJECT
 - **procurement**: purchase_order.APPROVE, purchase_order.CANCEL, purchase_order.CREATE, purchase_order.DELETE, purchase_order.EDIT, purchase_order.PRINT, purchase_order.READ, purchase_order.REJECT, purchase_request.APPROVE, purchase_request.CANCEL, purchase_request.CREATE, purchase_request.DELETE, purchase_request.EDIT, purchase_request.READ, purchase_request.REJECT, quotation.APPROVE, quotation.CREATE, quotation.DELETE, quotation.EDIT, quotation.READ, rfq.CREATE, rfq.DELETE, rfq.EDIT, rfq.READ, supplier.APPROVE, supplier.CREATE, supplier.DELETE, supplier.EDIT, supplier.READ
 - **quality**: cold_chain.APPROVE, cold_chain.EDIT, cold_chain.READ, disposal.APPROVE, disposal.CREATE, disposal.DELETE, disposal.EDIT, disposal.PRINT, disposal.READ, incident.APPROVE, incident.CREATE, incident.DELETE, incident.EDIT, incident.READ, quarantine.APPROVE, quarantine.CREATE, quarantine.READ, recall.APPROVE, recall.CREATE, recall.DELETE, recall.EDIT, recall.READ, return.APPROVE, return.CREATE, return.DELETE, return.EDIT, return.READ
 - **sales**: cash_session.APPROVE, cash_session.CREATE, cash_session.EDIT, cash_session.READ, patient.CREATE, patient.DELETE, patient.EDIT, patient.READ, payment.CREATE, payment.READ, sale.CANCEL, sale.CREATE, sale.PRINT, sale.READ
@@ -105,12 +105,12 @@ Holds 183 of 203 permissions.
 
 Prescription validation, dispensing and pharmaceutical stock operations.
 
-Holds 42 of 203 permissions.
+Holds 43 of 204 permissions.
 
 - **analytics**: dashboard.READ
 - **catalog**: product.READ
 - **dispensing**: controlled.CREATE, controlled.EXPORT, controlled.PRINT, controlled.READ, dispensing.CANCEL, dispensing.CREATE, dispensing.PRINT, dispensing.READ, prescription.APPROVE, prescription.CANCEL, prescription.CREATE, prescription.DELETE, prescription.EDIT, prescription.READ, prescription.REJECT
-- **inventory**: balance.EXPORT, balance.PRINT, balance.READ, batch.READ, expiry.EXPORT, expiry.PRINT, expiry.READ, fefo_override.CREATE, ledger.EXPORT, ledger.PRINT, ledger.READ, serial.EDIT, serial.READ
+- **inventory**: balance.EDIT, balance.EXPORT, balance.PRINT, balance.READ, batch.READ, expiry.EXPORT, expiry.PRINT, expiry.READ, fefo_override.CREATE, ledger.EXPORT, ledger.PRINT, ledger.READ, serial.EDIT, serial.READ
 - **quality**: quarantine.CREATE, quarantine.READ, recall.READ, return.CREATE, return.READ
 - **sales**: patient.CREATE, patient.DELETE, patient.EDIT, patient.READ, sale.CREATE, sale.PRINT, sale.READ
 
@@ -118,17 +118,17 @@ Holds 42 of 203 permissions.
 
 Receiving, picking and permitted dispensing workflows.
 
-Holds 17 of 203 permissions.
+Holds 18 of 204 permissions.
 
 - **catalog**: product.READ
 - **dispensing**: prescription.READ
-- **inventory**: balance.EXPORT, balance.PRINT, balance.READ, count.CREATE, count.EDIT, count.READ, expiry.READ, goods_receipt.CREATE, goods_receipt.EDIT, goods_receipt.PRINT, goods_receipt.READ, serial.READ, transfer.CREATE, transfer.PRINT, transfer.READ
+- **inventory**: balance.EDIT, balance.EXPORT, balance.PRINT, balance.READ, count.CREATE, count.EDIT, count.READ, expiry.READ, goods_receipt.CREATE, goods_receipt.EDIT, goods_receipt.PRINT, goods_receipt.READ, serial.READ, transfer.CREATE, transfer.PRINT, transfer.READ
 
 ### Procurement Officer (`PROCUREMENT_OFFICER`)
 
 Suppliers, RFQs, quotations and purchase orders.
 
-Holds 36 of 203 permissions.
+Holds 36 of 204 permissions.
 
 - **analytics**: dashboard.READ, forecast.READ
 - **catalog**: product.READ
@@ -139,28 +139,28 @@ Holds 36 of 203 permissions.
 
 Receiving, transfers, inventory counts and warehouse management.
 
-Holds 62 of 203 permissions.
+Holds 63 of 204 permissions.
 
 - **admin**: warehouse.EDIT, warehouse.READ
 - **analytics**: dashboard.READ, report.EXPORT, report.PRINT, report.READ
 - **catalog**: product.READ
-- **inventory**: adjustment.APPROVE, adjustment.CANCEL, adjustment.CREATE, adjustment.DELETE, adjustment.EDIT, adjustment.READ, adjustment.REJECT, balance.EXPORT, balance.PRINT, balance.READ, batch.APPROVE, batch.EDIT, batch.READ, count.APPROVE, count.CANCEL, count.CREATE, count.DELETE, count.EDIT, count.READ, count.REJECT, expiry.EXPORT, expiry.PRINT, expiry.READ, fefo_override.CREATE, goods_receipt.APPROVE, goods_receipt.CREATE, goods_receipt.DELETE, goods_receipt.EDIT, goods_receipt.PRINT, goods_receipt.READ, ledger.EXPORT, ledger.PRINT, ledger.READ, serial.EDIT, serial.EXPORT, serial.IMPORT, serial.READ, task.CANCEL, task.CREATE, task.DELETE, task.EDIT, task.READ, transfer.APPROVE, transfer.CANCEL, transfer.CREATE, transfer.DELETE, transfer.EDIT, transfer.PRINT, transfer.READ, transfer.REJECT
+- **inventory**: adjustment.APPROVE, adjustment.CANCEL, adjustment.CREATE, adjustment.DELETE, adjustment.EDIT, adjustment.READ, adjustment.REJECT, balance.EDIT, balance.EXPORT, balance.PRINT, balance.READ, batch.APPROVE, batch.EDIT, batch.READ, count.APPROVE, count.CANCEL, count.CREATE, count.DELETE, count.EDIT, count.READ, count.REJECT, expiry.EXPORT, expiry.PRINT, expiry.READ, fefo_override.CREATE, goods_receipt.APPROVE, goods_receipt.CREATE, goods_receipt.DELETE, goods_receipt.EDIT, goods_receipt.PRINT, goods_receipt.READ, ledger.EXPORT, ledger.PRINT, ledger.READ, serial.EDIT, serial.EXPORT, serial.IMPORT, serial.READ, task.CANCEL, task.CREATE, task.DELETE, task.EDIT, task.READ, transfer.APPROVE, transfer.CANCEL, transfer.CREATE, transfer.DELETE, transfer.EDIT, transfer.PRINT, transfer.READ, transfer.REJECT
 - **quality**: quarantine.APPROVE, quarantine.CREATE, quarantine.READ, return.CREATE, return.READ
 
 ### Storekeeper (`STOREKEEPER`)
 
 Day-to-day warehouse transactions.
 
-Holds 12 of 203 permissions.
+Holds 13 of 204 permissions.
 
 - **catalog**: product.READ
-- **inventory**: balance.EXPORT, balance.PRINT, balance.READ, count.CREATE, count.EDIT, count.READ, goods_receipt.CREATE, goods_receipt.EDIT, goods_receipt.READ, transfer.CREATE, transfer.READ
+- **inventory**: balance.EDIT, balance.EXPORT, balance.PRINT, balance.READ, count.CREATE, count.EDIT, count.READ, goods_receipt.CREATE, goods_receipt.EDIT, goods_receipt.READ, transfer.CREATE, transfer.READ
 
 ### Cashier (`CASHIER`)
 
 POS and payment processing.
 
-Holds 16 of 203 permissions.
+Holds 16 of 204 permissions.
 
 - **catalog**: product.READ
 - **inventory**: balance.READ
@@ -170,7 +170,7 @@ Holds 16 of 203 permissions.
 
 Invoices, payments, expenses and financial reports.
 
-Holds 29 of 203 permissions.
+Holds 29 of 204 permissions.
 
 - **analytics**: dashboard.READ, forecast.READ, report.EXPORT, report.PRINT, report.READ
 - **catalog**: price.APPROVE, price.EDIT, price.READ
@@ -182,7 +182,7 @@ Holds 29 of 203 permissions.
 
 Batch quarantine, recalls, damaged medicines and quality incidents.
 
-Holds 43 of 203 permissions.
+Holds 43 of 204 permissions.
 
 - **analytics**: dashboard.READ
 - **audit**: log.READ
@@ -193,7 +193,7 @@ Holds 43 of 203 permissions.
 
 Read-only access to transactions and audit logs.
 
-Holds 69 of 203 permissions.
+Holds 69 of 204 permissions.
 
 - **admin**: automation.READ, backup.READ, branch.READ, role.READ, setting.READ, user.READ, warehouse.READ
 - **analytics**: dashboard.READ, forecast.READ, report.EXPORT, report.PRINT, report.READ
@@ -210,12 +210,12 @@ Holds 69 of 203 permissions.
 
 Full operational access restricted to the assigned branch.
 
-Holds 98 of 203 permissions.
+Holds 99 of 204 permissions.
 
 - **analytics**: dashboard.READ, forecast.READ, report.EXPORT, report.PRINT, report.READ
 - **catalog**: product.READ
 - **dispensing**: controlled.CREATE, controlled.EXPORT, controlled.PRINT, controlled.READ, dispensing.CANCEL, dispensing.CREATE, dispensing.PRINT, dispensing.READ, prescription.APPROVE, prescription.CANCEL, prescription.CREATE, prescription.DELETE, prescription.EDIT, prescription.READ, prescription.REJECT
-- **inventory**: adjustment.APPROVE, adjustment.CANCEL, adjustment.CREATE, adjustment.DELETE, adjustment.EDIT, adjustment.READ, adjustment.REJECT, balance.EXPORT, balance.PRINT, balance.READ, batch.APPROVE, batch.EDIT, batch.READ, count.APPROVE, count.CANCEL, count.CREATE, count.DELETE, count.EDIT, count.READ, count.REJECT, expiry.EXPORT, expiry.PRINT, expiry.READ, fefo_override.CREATE, goods_receipt.APPROVE, goods_receipt.CREATE, goods_receipt.DELETE, goods_receipt.EDIT, goods_receipt.PRINT, goods_receipt.READ, ledger.EXPORT, ledger.PRINT, ledger.READ, serial.EDIT, serial.EXPORT, serial.IMPORT, serial.READ, task.CANCEL, task.CREATE, task.DELETE, task.EDIT, task.READ, transfer.APPROVE, transfer.CANCEL, transfer.CREATE, transfer.DELETE, transfer.EDIT, transfer.PRINT, transfer.READ, transfer.REJECT
+- **inventory**: adjustment.APPROVE, adjustment.CANCEL, adjustment.CREATE, adjustment.DELETE, adjustment.EDIT, adjustment.READ, adjustment.REJECT, balance.EDIT, balance.EXPORT, balance.PRINT, balance.READ, batch.APPROVE, batch.EDIT, batch.READ, count.APPROVE, count.CANCEL, count.CREATE, count.DELETE, count.EDIT, count.READ, count.REJECT, expiry.EXPORT, expiry.PRINT, expiry.READ, fefo_override.CREATE, goods_receipt.APPROVE, goods_receipt.CREATE, goods_receipt.DELETE, goods_receipt.EDIT, goods_receipt.PRINT, goods_receipt.READ, ledger.EXPORT, ledger.PRINT, ledger.READ, serial.EDIT, serial.EXPORT, serial.IMPORT, serial.READ, task.CANCEL, task.CREATE, task.DELETE, task.EDIT, task.READ, transfer.APPROVE, transfer.CANCEL, transfer.CREATE, transfer.DELETE, transfer.EDIT, transfer.PRINT, transfer.READ, transfer.REJECT
 - **procurement**: purchase_request.APPROVE, purchase_request.CANCEL, purchase_request.CREATE, purchase_request.DELETE, purchase_request.EDIT, purchase_request.READ, purchase_request.REJECT
 - **quality**: recall.READ, return.APPROVE, return.CREATE, return.DELETE, return.EDIT, return.READ
 - **sales**: cash_session.APPROVE, cash_session.CREATE, cash_session.EDIT, cash_session.READ, patient.CREATE, patient.DELETE, patient.EDIT, patient.READ, payment.CREATE, payment.READ, sale.CANCEL, sale.CREATE, sale.PRINT, sale.READ
@@ -301,6 +301,7 @@ a feature nobody can reach, so the empty rows matter more than the full ones.
 | `inventory.balance.READ` | SUPER_ADMIN, PHARMACY_ADMIN, PHARMACIST, PHARMACY_TECHNICIAN, PROCUREMENT_OFFICER, WAREHOUSE_MANAGER, STOREKEEPER, CASHIER, QA_OFFICER, AUDITOR, BRANCH_MANAGER |
 | `inventory.balance.PRINT` | SUPER_ADMIN, PHARMACY_ADMIN, PHARMACIST, PHARMACY_TECHNICIAN, PROCUREMENT_OFFICER, WAREHOUSE_MANAGER, STOREKEEPER, QA_OFFICER, AUDITOR, BRANCH_MANAGER |
 | `inventory.balance.EXPORT` | SUPER_ADMIN, PHARMACY_ADMIN, PHARMACIST, PHARMACY_TECHNICIAN, PROCUREMENT_OFFICER, WAREHOUSE_MANAGER, STOREKEEPER, QA_OFFICER, AUDITOR, BRANCH_MANAGER |
+| `inventory.balance.EDIT` | SUPER_ADMIN, PHARMACY_ADMIN, PHARMACIST, PHARMACY_TECHNICIAN, WAREHOUSE_MANAGER, STOREKEEPER, BRANCH_MANAGER |
 | `inventory.ledger.READ` | SUPER_ADMIN, PHARMACY_ADMIN, PHARMACIST, WAREHOUSE_MANAGER, QA_OFFICER, AUDITOR, BRANCH_MANAGER |
 | `inventory.ledger.PRINT` | SUPER_ADMIN, PHARMACY_ADMIN, PHARMACIST, WAREHOUSE_MANAGER, QA_OFFICER, AUDITOR, BRANCH_MANAGER |
 | `inventory.ledger.EXPORT` | SUPER_ADMIN, PHARMACY_ADMIN, PHARMACIST, WAREHOUSE_MANAGER, QA_OFFICER, AUDITOR, BRANCH_MANAGER |

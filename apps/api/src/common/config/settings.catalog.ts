@@ -96,6 +96,34 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     max: 180,
   },
 
+  // ---- Stock reservations (§19) ----
+  {
+    key: 'inventory.heldSaleReservationHours',
+    group: 'Inventory',
+    label: 'Held sale holds stock for (hours)',
+    description:
+      'How long a basket held at the till keeps its stock out of available before the hold ' +
+      'lapses and the units go back on sale. The held sale itself is left alone — lapsing the ' +
+      'hold is not the same as cancelling the sale. 0 means a hold never lapses, which is how ' +
+      'stock quietly disappears from a shop floor.',
+    type: 'number',
+    default: 24,
+    min: 0,
+    max: 720,
+  },
+  {
+    key: 'inventory.pickWaveReservationHours',
+    group: 'Inventory',
+    label: 'Pick wave holds stock for (hours)',
+    description:
+      'How long an open pick wave keeps its stock reserved before the hold lapses. Set it longer ' +
+      'than the longest picking round a shift actually runs.',
+    type: 'number',
+    default: 72,
+    min: 0,
+    max: 720,
+  },
+
   // ---- Dispensing (§7) ----
   {
     key: 'dispensing.prescriptionValidityDays',

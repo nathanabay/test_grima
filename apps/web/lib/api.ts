@@ -87,9 +87,21 @@ async function refreshAccessToken(): Promise<boolean> {
 
 export async function api<T = any>(
   path: string,
-  options: { method?: string; body?: unknown; retry?: boolean } = {},
+  options: {
+    method?: string;
+    body?: unknown;
+    retry?: boolean;
+    /**
+     * Return the response body as text rather than parsing it.
+     *
+     * For the CSV and print endpoints. Without it the caller is relying on
+     * `safeJson` happening to hand back the raw string when the body is not
+     * JSON, which works but reads like an accident.
+     */
+    raw?: boolean;
+  } = {},
 ): Promise<T> {
-  const { method = 'GET', body, retry = true } = options;
+  const { method = 'GET', body, retry = true, raw = false } = options;
 
   const res = await fetch(`${BASE}/api${path}`, {
     method,
@@ -117,7 +129,7 @@ export async function api<T = any>(
   if (!res.ok) {
     throw new ApiError(res.status, messageOf(parsed, res.statusText), parsed);
   }
-  return parsed as T;
+  return (raw ? text : parsed) as T;
 }
 
 function safeJson(text: string): unknown {

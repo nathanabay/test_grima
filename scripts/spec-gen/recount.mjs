@@ -217,6 +217,150 @@ const REAUDIT = {
   },
 };
 
+
+/**
+ * The inventory re-audit.
+ *
+ * Same discipline as the dispensing pass: rows are moved in whichever direction
+ * the code supports. Reviewing the stock screens found claims resting on a
+ * column nothing wrote, a filter nobody had built, and an integrity checker
+ * that reported drift on consistent data — alongside genuine gaps that are now
+ * closed.
+ */
+const INVENTORY_REAUDIT = {
+  113: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'InventoryBalance.reserved, with GET /inventory/reservations naming what holds each unit ' +
+      'and who holds it',
+    tests: 'e2e-inventory',
+  },
+  114: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'onHand minus reserved, exposed as available; the difference is explained rather than ' +
+      'merely reported',
+    tests: 'e2e-inventory',
+  },
+  128: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'POST /inventory/batches/:id/split writes Batch.parentBatchId, moving the quantity through ' +
+      'the ledger; the batch record shows the parent and the children',
+    tests: 'e2e-inventory',
+    note: 'the column existed from the beginning and nothing could write it',
+  },
+  115: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'the batch record totals what left it by movement type, aggregated in the database from ' +
+      'the ledger rather than stored beside it',
+    tests: 'e2e-inventory',
+  },
+  118: {
+    status: 'IMPLEMENTED',
+    evidence: 'movementTotals.disposed on the batch record, read from DISPOSAL movements',
+    tests: 'e2e-inventory',
+  },
+  119: {
+    status: 'IMPLEMENTED',
+    evidence: 'movementTotals.returned on the batch record, read from RETURN_OUT movements',
+    tests: 'e2e-inventory',
+  },
+  132: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'the batch record reports units supplied per day, measured from the first supply from that ' +
+      'batch rather than over a flat window',
+    tests: 'e2e-inventory',
+  },
+  133: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'days of cover from the batch\'s own velocity, shown against its days to expiry so a batch ' +
+      'that will expire before it is used says so',
+    tests: 'e2e-inventory',
+  },
+  416: {
+    status: 'PARTIALLY IMPLEMENTED',
+    evidence:
+      'repack and split post two ADJUSTMENT movements and record the genealogy; there is still no ' +
+      'MANUFACTURING transaction type',
+    tests: 'e2e-inventory',
+  },
+  421: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'StockReservation with an expiry, an hourly job that releases what has lapsed, and a screen ' +
+      'that shows what is holding stock',
+    tests: 'e2e-inventory',
+    note: 'expiresAt was on the model and nothing set it, so an abandoned hold never lapsed',
+  },
+  422: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'releaseReservationRows decrements the balance row the hold incremented, from a document ' +
+      'release, the lapse job, or POST /inventory/reservations/:id/release',
+    tests: 'e2e-inventory',
+  },
+  436: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'GET /inventory/ledger/integrity replays the ledger against the balance cache, aggregated to ' +
+      'the grain the replay uses',
+    tests: 'e2e-inventory',
+  },
+  437: {
+    status: 'IMPLEMENTED',
+    evidence: 'reconstructBalance rebuilds a position from the transactions alone',
+    tests: 'e2e-inventory',
+  },
+  438: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'the integrity check reports drift with the difference, and corrects nothing — a stock ' +
+      'figure is corrected by a count or an adjustment',
+    tests: 'e2e-inventory',
+    note: 'it compared per-location rows against a location-blind replay, so a split batch always looked wrong',
+  },
+  439: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'ledger/integrity, plus GET /inventory/anomalies for negative stock, over-reservation, ' +
+      'holds at zero and expired stock still counted',
+    tests: 'e2e-inventory',
+  },
+  444: {
+    status: 'IMPLEMENTED',
+    evidence: 'GET /inventory/ledger?search= over document number, product, SKU and batch number',
+    tests: 'e2e-inventory',
+    note: 'the ledger had no search parameter at all',
+  },
+  445: {
+    status: 'IMPLEMENTED',
+    evidence: 'the ledger filters by product, batch, warehouse, branch, type, reference and date',
+    tests: 'e2e-inventory',
+  },
+  446: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'GET /inventory/ledger.csv behind inventory.ledger.EXPORT, the same scoped read with a cap',
+    tests: 'e2e-inventory',
+  },
+  447: {
+    status: 'IMPLEMENTED',
+    evidence:
+      'every ledger row carries referenceHref, the route of the document it came from, so a ' +
+      'reader can open it rather than go and find it',
+    tests: 'e2e-inventory',
+  },
+  449: {
+    status: 'IMPLEMENTED',
+    evidence: 'performedById is resolved to the person on the read, alongside the audit trail',
+    tests: 'e2e-inventory',
+  },
+};
+
 for (const file of ['specs/TRACEABILITY_MATRIX.md', 'specs/FEATURE_MATRIX.md']) {
   let text = await readFile(file, 'utf8');
   const lines = text.split('\n');
@@ -257,8 +401,8 @@ for (const file of ['specs/TRACEABILITY_MATRIX.md', 'specs/FEATURE_MATRIX.md']) 
       }
       lines[i] = `| ${cols.slice(1, -1).join(' | ')} |`;
       changed++;
-    } else if (REAUDIT[num]) {
-      const { status, evidence, tests } = REAUDIT[num];
+    } else if (REAUDIT[num] || INVENTORY_REAUDIT[num]) {
+      const { status, evidence, tests } = REAUDIT[num] ?? INVENTORY_REAUDIT[num];
       if (file.includes('TRACEABILITY')) {
         const full = status === 'IMPLEMENTED';
         cols[5] = '✓'; cols[6] = '✓'; cols[7] = '✓'; cols[8] = '✓';

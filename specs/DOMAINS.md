@@ -13,7 +13,7 @@ what state they are in, and which tables and routes serve them.
 | [`05-organizations`](05-organizations/spec.md) | 0 | 0 | 0 | 0 |
 | [`06-products`](06-products/spec.md) | 100 | 94 | 5 | 1 |
 | [`07-units`](07-units/spec.md) | 0 | 0 | 0 | 0 |
-| [`08-batches`](08-batches/spec.md) | 50 | 38 | 12 | 0 |
+| [`08-batches`](08-batches/spec.md) | 50 | 43 | 7 | 0 |
 | [`09-serialization`](09-serialization/spec.md) | 0 | 0 | 0 | 0 |
 | [`10-inventory`](10-inventory/spec.md) | 50 | 41 | 9 | 0 |
 | [`11-fefo`](11-fefo/spec.md) | 50 | 43 | 2 | 5 |

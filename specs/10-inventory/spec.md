@@ -20,6 +20,7 @@ Requirement range `PHARM-LEDG-001` – `PHARM-LEDG-050`.
 - `GET /inventory/products/:productId/stock` — inventory.balance.READ
 - `GET /inventory/products/:productId/branches` — inventory.balance.READ
 - `GET /inventory/ledger` — inventory.ledger.READ
+- `GET /inventory/ledger/batch/:batchId` — inventory.ledger.READ
 - `GET /inventory/ledger/integrity` — inventory.ledger.READ
 - `GET /inventory/expiry` — inventory.expiry.READ
 - `GET /inventory/expiry/calendar` — inventory.expiry.READ
@@ -30,9 +31,15 @@ Requirement range `PHARM-LEDG-001` – `PHARM-LEDG-050`.
 - `POST /inventory/fefo/allocate` — inventory.balance.READ
 - `GET /inventory/batches` — inventory.batch.READ
 - `GET /inventory/batches/:id` — inventory.batch.READ
+- `POST /inventory/batches/:id/split` — inventory.batch.EDIT
 - `POST /inventory/batches/:id/quarantine` — quality.quarantine.CREATE
 - `POST /inventory/batches/:id/release` — quality.quarantine.APPROVE
 - `POST /inventory/batches/:id/block` — inventory.batch.EDIT
+- `GET /inventory/balances.csv` — inventory.balance.EXPORT
+- `GET /inventory/ledger.csv` — inventory.ledger.EXPORT
+- `GET /inventory/reservations` — inventory.balance.READ
+- `POST /inventory/reservations/:id/release` — inventory.balance.EDIT
+- `GET /inventory/anomalies` — inventory.balance.READ
 - `POST /inventory/expiry/sweep` — inventory.expiry.READ, inventory.adjustment.APPROVE
 
 ## Screens

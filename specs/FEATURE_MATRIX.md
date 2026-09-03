@@ -16,10 +16,10 @@ Status values:
 
 ## Totals
 
-- IMPLEMENTED: **785**
-- PARTIALLY IMPLEMENTED: **145**
+- IMPLEMENTED: **790**
+- PARTIALLY IMPLEMENTED: **140**
 - NOT IMPLEMENTED: **70**
-- Weighted (partial counts a half): **857.5 / 1000**
+- Weighted (partial counts a half): **860.0 / 1000**
 
 ## Pack 1 — PRODUCT MASTER
 
@@ -153,13 +153,13 @@ Status values:
 | `PHARM-BATCH-010` | 110 | Batch warehouse tracking. | IMPLEMENTED | InventoryBalance.warehouseId per batch |
 | `PHARM-BATCH-011` | 111 | Batch bin tracking. | IMPLEMENTED | InventoryBalance.locationId per batch |
 | `PHARM-BATCH-012` | 112 | Batch quantity tracking. | IMPLEMENTED | Batch.receivedQuantity + InventoryBalance.onHand |
-| `PHARM-BATCH-013` | 113 | Batch reserved quantity. | IMPLEMENTED | InventoryBalance.reserved |
-| `PHARM-BATCH-014` | 114 | Batch available quantity. | IMPLEMENTED | onHand minus reserved, exposed as available |
-| `PHARM-BATCH-015` | 115 | Batch damaged quantity. | PARTIALLY IMPLEMENTED | derivable from DAMAGE ledger rows; no per-batch damaged-quantity field or report |
+| `PHARM-BATCH-013` | 113 | Batch reserved quantity. | IMPLEMENTED | InventoryBalance.reserved, with GET /inventory/reservations naming what holds each unit and who holds it |
+| `PHARM-BATCH-014` | 114 | Batch available quantity. | IMPLEMENTED | onHand minus reserved, exposed as available; the difference is explained rather than merely reported |
+| `PHARM-BATCH-015` | 115 | Batch damaged quantity. | IMPLEMENTED | the batch record totals what left it by movement type, aggregated in the database from the ledger rather than stored beside it |
 | `PHARM-BATCH-016` | 116 | Batch quarantine quantity. | IMPLEMENTED | BatchStatus QUARANTINED with quarantineReason |
 | `PHARM-BATCH-017` | 117 | Batch recalled quantity. | IMPLEMENTED | RecallBatch link + BatchStatus RECALLED |
-| `PHARM-BATCH-018` | 118 | Batch disposal quantity. | PARTIALLY IMPLEMENTED | derivable from DISPOSAL ledger rows; no per-batch disposed-quantity field |
-| `PHARM-BATCH-019` | 119 | Batch return quantity. | PARTIALLY IMPLEMENTED | derivable from RETURN_IN/RETURN_OUT ledger rows; no per-batch return-quantity field |
+| `PHARM-BATCH-018` | 118 | Batch disposal quantity. | IMPLEMENTED | movementTotals.disposed on the batch record, read from DISPOSAL movements |
+| `PHARM-BATCH-019` | 119 | Batch return quantity. | IMPLEMENTED | movementTotals.returned on the batch record, read from RETURN_OUT movements |
 | `PHARM-BATCH-020` | 120 | Batch quality status. | IMPLEMENTED | BatchStatus + qualityNotes |
 | `PHARM-BATCH-021` | 121 | Batch certificate-of-analysis attachment. | IMPLEMENTED | Document entityType BATCH |
 | `PHARM-BATCH-022` | 122 | Batch regulatory-document attachment. | IMPLEMENTED | Document entityType BATCH |
@@ -168,12 +168,12 @@ Status values:
 | `PHARM-BATCH-025` | 125 | Batch rejection workflow. | IMPLEMENTED | BatchStatus REJECTED via changeStatus transition rules |
 | `PHARM-BATCH-026` | 126 | Batch blocking. | IMPLEMENTED | batches/:id/block |
 | `PHARM-BATCH-027` | 127 | Batch unblocking authorization. | IMPLEMENTED | unblock requires inventory.batch.RELEASE and records the actor |
-| `PHARM-BATCH-028` | 128 | Batch genealogy. | IMPLEMENTED | Batch.parentBatchId + childBatches |
+| `PHARM-BATCH-028` | 128 | Batch genealogy. | IMPLEMENTED | POST /inventory/batches/:id/split writes Batch.parentBatchId, moving the quantity through the ledger; the batch record shows the parent and the children |
 | `PHARM-BATCH-029` | 129 | Batch movement timeline. | IMPLEMENTED | Batch.transactions + TimelineService BATCH |
 | `PHARM-BATCH-030` | 130 | Batch inventory valuation. | IMPLEMENTED | CostLayer.batchId carries cost per batch |
 | `PHARM-BATCH-031` | 131 | Batch expiry risk score. | IMPLEMENTED | shared/expiry.ts expiryRiskScore, used by the redistribution engine |
-| `PHARM-BATCH-032` | 132 | Batch consumption velocity. | PARTIALLY IMPLEMENTED | consumption velocity is computed per product, not per batch |
-| `PHARM-BATCH-033` | 133 | Batch days-of-cover calculation. | PARTIALLY IMPLEMENTED | daysOfCover is computed per product in the STOCK_LEVEL trigger, not per batch |
+| `PHARM-BATCH-032` | 132 | Batch consumption velocity. | IMPLEMENTED | the batch record reports units supplied per day, measured from the first supply from that batch rather than over a flat window |
+| `PHARM-BATCH-033` | 133 | Batch days-of-cover calculation. | IMPLEMENTED | days of cover from the batch's own velocity, shown against its days to expiry so a batch that will expire before it is used says so |
 | `PHARM-BATCH-034` | 134 | Batch-level profitability. | PARTIALLY IMPLEMENTED | SaleItem carries batchId, unitCost and unitPrice so it is derivable; no batch profitability report |
 | `PHARM-BATCH-035` | 135 | Batch recall history. | IMPLEMENTED | Batch.recallLinks |
 | `PHARM-BATCH-036` | 136 | Unique serial-number tracking. | IMPLEMENTED | SerialNumber model, unique per batch |
@@ -498,13 +498,13 @@ Status values:
 | `PHARM-LEDG-013` | 413 | Recall entries. | IMPLEMENTED | TransactionType RECALL |
 | `PHARM-LEDG-014` | 414 | Disposal entries. | IMPLEMENTED | TransactionType DISPOSAL |
 | `PHARM-LEDG-015` | 415 | Stock-count entries. | IMPLEMENTED | TransactionType STOCK_COUNT |
-| `PHARM-LEDG-016` | 416 | Manufacturing adjustment support. | PARTIALLY IMPLEMENTED | repack and split are modelled through batch genealogy; there is no manufacturing type |
+| `PHARM-LEDG-016` | 416 | Manufacturing adjustment support. | PARTIALLY IMPLEMENTED | repack and split post two ADJUSTMENT movements and record the genealogy; there is still no MANUFACTURING transaction type |
 | `PHARM-LEDG-017` | 417 | Donation receipt entries. | PARTIALLY IMPLEMENTED | recordable as an ADJUSTMENT with a reason; there is no donation type |
 | `PHARM-LEDG-018` | 418 | Donation issue entries. | PARTIALLY IMPLEMENTED | recordable as an ADJUSTMENT with a reason; there is no donation type |
 | `PHARM-LEDG-019` | 419 | Sample issue entries. | PARTIALLY IMPLEMENTED | recordable as an ADJUSTMENT with a reason; there is no sample type |
 | `PHARM-LEDG-020` | 420 | Internal-use entries. | PARTIALLY IMPLEMENTED | recordable as an ADJUSTMENT with a reason; there is no internal-use type |
-| `PHARM-LEDG-021` | 421 | Stock reservation ledger. | IMPLEMENTED | TransactionType RESERVATION with StockReservation |
-| `PHARM-LEDG-022` | 422 | Stock release ledger. | IMPLEMENTED | TransactionType RESERVATION_RELEASE |
+| `PHARM-LEDG-021` | 421 | Stock reservation ledger. | IMPLEMENTED | StockReservation with an expiry, an hourly job that releases what has lapsed, and a screen that shows what is holding stock |
+| `PHARM-LEDG-022` | 422 | Stock release ledger. | IMPLEMENTED | releaseReservationRows decrements the balance row the hold incremented, from a document release, the lapse job, or POST /inventory/reservations/:id/release |
 | `PHARM-LEDG-023` | 423 | Transaction reference IDs. | IMPLEMENTED | referenceType, referenceId and referenceNo on every row |
 | `PHARM-LEDG-024` | 424 | Transaction idempotency keys. | IMPLEMENTED | InventoryTransaction.idempotencyKey unique, plus the IdempotencyKey table |
 | `PHARM-LEDG-025` | 425 | Database transactional integrity. | IMPLEMENTED | every movement runs inside one interactive transaction |
@@ -518,20 +518,20 @@ Status values:
 | `PHARM-LEDG-033` | 433 | Adjustment instead of deletion. | IMPLEMENTED | corrections are adjustments; no row is deleted |
 | `PHARM-LEDG-034` | 434 | Opening-balance migration. | IMPLEMENTED | the seed writes opening balances as PURCHASE_RECEIPT rows through the ledger |
 | `PHARM-LEDG-035` | 435 | Closing-balance snapshots. | PARTIALLY IMPLEMENTED | balanceAfter is a snapshot per row; there is no period closing snapshot |
-| `PHARM-LEDG-036` | 436 | Inventory reconciliation. | IMPLEMENTED | ledger/integrity replays the ledger against the balance cache |
-| `PHARM-LEDG-037` | 437 | Ledger reconstruction. | IMPLEMENTED | ledger/integrity reconstructs the balance from the transactions |
-| `PHARM-LEDG-038` | 438 | Stock balance verification. | IMPLEMENTED | ledger/integrity reports drift rather than correcting it |
-| `PHARM-LEDG-039` | 439 | Inventory integrity checker. | IMPLEMENTED | ledger/integrity is the integrity checker |
+| `PHARM-LEDG-036` | 436 | Inventory reconciliation. | IMPLEMENTED | GET /inventory/ledger/integrity replays the ledger against the balance cache, aggregated to the grain the replay uses |
+| `PHARM-LEDG-037` | 437 | Ledger reconstruction. | IMPLEMENTED | reconstructBalance rebuilds a position from the transactions alone |
+| `PHARM-LEDG-038` | 438 | Stock balance verification. | IMPLEMENTED | the integrity check reports drift with the difference, and corrects nothing — a stock figure is corrected by a count or an adjustment |
+| `PHARM-LEDG-039` | 439 | Inventory integrity checker. | IMPLEMENTED | ledger/integrity, plus GET /inventory/anomalies for negative stock, over-reservation, holds at zero and expired stock still counted |
 | `PHARM-LEDG-040` | 440 | Orphan transaction detection. | PARTIALLY IMPLEMENTED | foreign keys make an orphan impossible; there is no detection report |
 | `PHARM-LEDG-041` | 441 | Invalid-batch detection. | IMPLEMENTED | the ledger refuses a batch that is not allocatable |
 | `PHARM-LEDG-042` | 442 | Broken-transfer detection. | PARTIALLY IMPLEMENTED | transfers are two-sided in one transaction so a half transfer cannot persist; there is no broken-transfer report |
 | `PHARM-LEDG-043` | 443 | Cost recalculation utilities. | IMPLEMENTED | accounting/valuation/reconciliation plus the cost-layer reconciliation in the seed |
-| `PHARM-LEDG-044` | 444 | Stock ledger search. | IMPLEMENTED | inventory/ledger with search |
-| `PHARM-LEDG-045` | 445 | Stock ledger filtering. | IMPLEMENTED | ledger filters by product, batch, warehouse, type and date |
-| `PHARM-LEDG-046` | 446 | Stock ledger export. | IMPLEMENTED | the stock-ledger report exports to CSV |
-| `PHARM-LEDG-047` | 447 | Transaction drilldown. | IMPLEMENTED | every ledger row carries its reference and links to it |
+| `PHARM-LEDG-044` | 444 | Stock ledger search. | IMPLEMENTED | GET /inventory/ledger?search= over document number, product, SKU and batch number |
+| `PHARM-LEDG-045` | 445 | Stock ledger filtering. | IMPLEMENTED | the ledger filters by product, batch, warehouse, branch, type, reference and date |
+| `PHARM-LEDG-046` | 446 | Stock ledger export. | IMPLEMENTED | GET /inventory/ledger.csv behind inventory.ledger.EXPORT, the same scoped read with a cap |
+| `PHARM-LEDG-047` | 447 | Transaction drilldown. | IMPLEMENTED | every ledger row carries referenceHref, the route of the document it came from, so a reader can open it rather than go and find it |
 | `PHARM-LEDG-048` | 448 | Source-document drilldown. | IMPLEMENTED | the timeline links each entry to its source document |
-| `PHARM-LEDG-049` | 449 | User-action drilldown. | IMPLEMENTED | performedById on every row plus the audit trail |
+| `PHARM-LEDG-049` | 449 | User-action drilldown. | IMPLEMENTED | performedById is resolved to the person on the read, alongside the audit trail |
 | `PHARM-LEDG-050` | 450 | Inventory forensic timeline. | IMPLEMENTED | TimelineService assembles the forensic view for a product, batch, patient or supplier |
 
 ## Pack 10 — STOCK COUNTS & LOSS CONTROL

@@ -66,19 +66,20 @@ of them is wrong and the disagreement is the finding.
 
 ## End-to-end suites
 
-9 suites, 472 checks, run against a seeded API on port 4000.
+10 suites, 559 checks, run against a seeded API on port 4000.
 
 | Suite | Checks |
 | --- | --- |
 | `scripts/e2e-capa-workflow.mjs` | 19 |
 | `scripts/e2e-damage-pos.mjs` | 24 |
-| `scripts/e2e-dispensing.mjs` | 91 |
+| `scripts/e2e-dispensing.mjs` | 103 |
 | `scripts/e2e-enterprise.mjs` | 96 |
+| `scripts/e2e-inventory.mjs` | 73 |
 | `scripts/e2e-lifecycle.mjs` | 89 |
 | `scripts/e2e-pos.mjs` | 34 |
 | `scripts/e2e-procurement.mjs` | 20 |
 | `scripts/e2e-warehouse.mjs` | 34 |
-| `scripts/e2e-workflow.mjs` | 65 |
+| `scripts/e2e-workflow.mjs` | 67 |
 
 ## Browser verification
 

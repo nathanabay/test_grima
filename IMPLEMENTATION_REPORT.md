@@ -20,18 +20,18 @@ existing or a function being written.
 
 | | |
 | --- | --- |
-| Requirements implemented | **785 / 1,000** |
-| Partially implemented | **145** |
+| Requirements implemented | **790 / 1,000** |
+| Partially implemented | **140** |
 | Not implemented | **70** |
-| Weighted (a partial counts a half) | **857.5 / 1,000** |
-| Unit and integration tests | 332, all passing |
-| End-to-end checks | 492 across 9 suites, all passing on a freshly seeded database |
-| Browser verification | 39 pages × 6 widths × 2 themes, 0 failures |
+| Weighted (a partial counts a half) | **860.0 / 1,000** |
+| Unit and integration tests | 334, all passing |
+| End-to-end checks | 568 across 10 suites, all passing on a freshly seeded database |
+| Browser verification | 40 pages × 6 widths × 2 themes, 0 failures |
 | Production builds | API and web, both clean |
 | Database tables | 115, across 21 migrations |
-| API routes | 377, each served at `/api` and `/api/v1` |
-| Permissions | 203, across 12 roles |
-| Lines of TypeScript | 68,919 across the API, web and shared packages (plus 5,285 of verification tooling and 8,145 of specification) |
+| API routes | 385, each served at `/api` and `/api/v1` |
+| Permissions | 204, across 12 roles |
+| Lines of TypeScript | 71,404 across the API, web and shared packages (plus 6,038 of verification tooling and 8,172 of specification) |
 
 Both feature matrices are exactly 1,000 rows and agree row for row.
 
@@ -57,8 +57,9 @@ master documents are generated from the code itself.
 **Verification.** Browser verification across every page, a code review and a
 security review — which between them found 26 defects, all fixed.
 
-**Dispensing.** A later pass audited the dispensing module against the code
-rather than against the matrix, and the matrix lost. Section 25 reports it.
+**Dispensing and inventory.** Two later passes audited those modules against the
+code rather than against the matrix, and the matrix lost both times. Sections 3a
+and 3b report them.
 
 ## 3a. The dispensing pass
 
@@ -120,6 +121,71 @@ collected.
 expiry and directions on it always belong to the same row, with auxiliary and
 cold-chain wording, substitution notice, and reprints counted rather than
 prevented.
+
+## 3b. The inventory pass
+
+The stock screen listed positions and nothing else: no filters worth the name,
+no way to see what was holding stock, no batch record, and a Value column that
+disagreed with the balance sheet.
+
+**Three defects that mattered more than the features:**
+
+- **The stock ledger had no authorization at all.** `GET /inventory/ledger` did
+  not take the current user. Anyone holding `inventory.ledger.READ` — which the
+  branch roles do — could read every movement in the organisation: each branch,
+  each batch, each unit cost. The batch list, batch-read-by-id, the FEFO probe
+  endpoints and the integrity replay were open the same way, and a FEFO
+  recommendation names batch numbers, quantities and expiry dates one product at
+  a time. All of them are scoped now, and asking for another branch by id is
+  refused rather than quietly widened.
+- **"Below reorder" returned the wrong answer.** The filter ran after
+  pagination, over the fifty rows already fetched, while `total` reported the
+  unfiltered count — so the screen that tells a pharmacy what to order showed an
+  arbitrary subset with a wrong total. It also compared a product-level reorder
+  level against a per-bin balance row, so a product split across three locations
+  looked short on each of them. Reorder is resolved per product across the
+  branch now, before the page is fetched.
+- **Reserved stock was never released.** `expiresAt` was on the reservation
+  model, never set and never swept. A basket abandoned at the till, or a pick
+  wave that died when the van left, held its stock out of `available`
+  permanently — and no screen showed a reservation or let anyone release one.
+  Holds now lapse on a configurable window, an hourly job releases them, and the
+  document they belong to is deliberately left alone: lapsing a hold is not
+  cancelling a sale.
+
+**Two more found while writing the tests:**
+
+- Stock was valued at `available × averageCost` on the screen and at
+  `onHand × averageCost` in accounting, so the Value column understated the
+  balance sheet by exactly the reserved quantity. A reservation is a promise
+  about where stock is going, not a disposal.
+- `verifyIntegrity` compared per-location balance rows against a ledger replay
+  that ignores location, so a batch split across two bins reported drift on
+  perfectly consistent data — every single run. The cached rows are aggregated
+  to the grain the replay uses before comparing. This was carried as a known
+  open defect in section 22 of the previous report; it is closed.
+
+**A batch record**, which did not exist: where the stock is, what it cost, what
+moved, what it was split from, which serials belong to it, how fast it is
+moving against how long it has left, and who decided its status on what
+evidence. Releasing a batch now names the certificate of analysis it was
+released on — "released" with nothing behind it is the record an inspector asks
+about and nobody can answer.
+
+**Batch splitting**, which closes a column the schema had carried from the
+beginning and nothing could write: `parentBatchId`. A split moves quantity
+through the ledger into a child batch that keeps the parent's expiry, cost and
+supplier, so a repack cannot launder an expiry date.
+
+**The screens**: filters on warehouse, batch status, expiry window, controlled
+and cold chain, all in the URL so a filter can be sent to somebody; totals over
+the whole filtered set rather than the page; stock age; a row drawer showing
+what is holding a position, how it got here and who else has the product; a
+reservations view; an anomalies view for negative stock, over-reservation, holds
+at zero and expired stock still counted; CSV export fetched with the
+Authorization header rather than a token in a URL. The three `window.prompt`
+calls on the batch screen — one of which asked the reader to type a quarantine
+category by hand from a list printed in the prompt — are a proper dialog.
 
 ## 4. Architecture
 
@@ -443,7 +509,7 @@ accusation dressed as a system output is how a colleague gets wrongly suspended.
 
 ## 22. What is not done
 
-**70 requirements are not implemented and 145 are partial.** All are listed in
+**70 requirements are not implemented and 140 are partial.** All are listed in
 `specs/KNOWN_EXTERNAL_DEPENDENCIES.md` with the reason and the action.
 
 Grouped by cause:
@@ -465,13 +531,10 @@ Two features moved to partial rather than done, and the gap is stated:
   do not follow a user to another device. Server-side storage needs a `UserView`
   table and a small CRUD surface.
 
-**Two code-review findings not fixed**, both pre-existing and both stated rather
-than quietly carried:
+**One code-review finding not fixed**, pre-existing and stated rather than
+quietly carried. The `verifyIntegrity` location bug that stood here is closed —
+see section 3b.
 
-- `verifyIntegrity` compares per-location balance rows against a ledger replay
-  that ignores location, so a batch split across bins reports as drift on
-  consistent data. *Action:* pass `locationId` into `reconstructBalance`, or
-  aggregate cached balances by product/batch/warehouse before comparing.
 - Out-of-hours detection and cron scheduling both resolve times in the server's
   local zone rather than the organisation's, which is stored and unused. On a
   UTC container an 08:00 Addis dispensing is flagged as out-of-hours and a
@@ -507,10 +570,12 @@ that did not exist:**
 
 Every claim above was checked, not recalled:
 
-- 332 unit and integration tests — run, all passing.
-- Nine end-to-end suites, 492 checks — run in sequence against a database
+- 334 unit and integration tests — run, all passing.
+- Ten end-to-end suites, 568 checks — run in sequence against a database
   seeded from empty, all passing with nothing skipped.
-- Browser verification — run, 0 failures across 39 pages, 6 widths, 2 themes.
+- Browser verification — run, 0 failures across 40 pages, 6 widths, 2 themes.
+  The sweep now resolves a real batch id, so the batch record — the page a
+  recall is worked from — is rendered rather than assumed.
 - Both production builds — run, clean.
 - Migrations — applied to an empty database, then seeded and finalised.
 - Permission sync — confirmed to add the one new permission on a database
@@ -527,7 +592,11 @@ count went from 742 to 780 because 38 features were built, and both matrices
 were regenerated from the code rather than edited by hand.
 
 **The dispensing pass moved it to 785, and two of its eighteen changes were
-downward.** Re-auditing that module found rows marked IMPLEMENTED whose evidence
+downward. The inventory pass moved it to 790, and fifteen of its twenty changes
+moved nothing at all** — they replaced evidence that named a column nothing
+wrote, a filter nobody had built and a checker that reported drift on consistent
+data, with evidence that is now true. The score barely moved because most of
+that work was making the matrix honest rather than adding rows to it. Re-auditing that module found rows marked IMPLEMENTED whose evidence
 named a setting with no key, a field nothing read, and a scan step nobody had
 built. Those rows are corrected here in the direction the code actually
 supports. A net gain of five, from a pass that closed a dozen real gaps, is what
@@ -544,7 +613,9 @@ position that matrix puts it, and refuses to report a total that is not 1,000.
 The reviews found 26 defects in work this session produced or touched, and every
 one is listed above rather than summarised away. Three were authorization holes
 that would have let one branch destroy another's stock. The dispensing pass
-added eight more, two of them outside dispensing. Finding them is the system
+added eight more, two of them outside dispensing; the inventory pass added five,
+one of which had every branch role reading the whole organisation's stock ledger
+and its costs. Finding them is the system
 working as intended; shipping without looking would have been the failure.
 
-Three known defects remain open, with the exact action for each.
+Two known defects remain open, with the exact action for each.

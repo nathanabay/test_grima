@@ -1,5 +1,10 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, TransactionType } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { BatchStatus, Prisma, TransactionType } from '@prisma/client';
 import {
   bucketFor,
   classifyExpiry,
@@ -11,17 +16,35 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { ScopeService } from '../../common/guards/scope.service';
 import { ConfigService } from '../../common/config/config.service';
+import { AuditService } from '../../common/audit/audit.service';
+import { LedgerService } from './ledger.service';
 
 export interface StockQuery {
   productId?: string;
   warehouseId?: string;
   branchId?: string;
+  locationId?: string;
   search?: string;
   onlyBelowReorder?: boolean;
   onlyOutOfStock?: boolean;
+  onlyControlled?: boolean;
+  onlyColdChain?: boolean;
+  /** Batch status, e.g. only RELEASED stock. */
+  batchStatus?: BatchStatus;
+  /** Only positions whose batch expires within this many days. */
+  expiringWithinDays?: number;
+  sort?: 'product' | 'expiry' | 'onHand' | 'available' | 'value' | 'age';
+  direction?: 'asc' | 'desc';
   page?: number;
   pageSize?: number;
 }
+
+/** Sorts Prisma can do in the database. `value` and `age` are derived. */
+const DB_SORT: Record<string, (d: 'asc' | 'desc') => Prisma.InventoryBalanceOrderByWithRelationInput[]> = {
+  product: (d) => [{ product: { genericName: d } }, { batch: { expiryDate: 'asc' } }],
+  expiry: (d) => [{ batch: { expiryDate: d } }],
+  onHand: (d) => [{ onHand: d }],
+};
 
 @Injectable()
 export class InventoryService {
@@ -29,6 +52,8 @@ export class InventoryService {
     private readonly prisma: PrismaService,
     private readonly scope: ScopeService,
     private readonly config: ConfigService,
+    private readonly ledgerService: LedgerService,
+    private readonly audit: AuditService,
   ) {}
 
   /** Paginated stock balances, always scoped to what the user may see. */
@@ -36,21 +61,71 @@ export class InventoryService {
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(200, query.pageSize ?? 50);
 
+    /**
+     * "Below reorder" is a question about a PRODUCT, not about a shelf.
+     *
+     * The filter used to run over the current page after it had been fetched,
+     * so asking "what do I need to order" returned whatever happened to be
+     * below reorder among the first fifty rows, with a total that counted
+     * everything. It also compared the product's reorder level against a single
+     * balance row, so a product split across three bins looked short on each of
+     * them while the branch actually held three times the level.
+     *
+     * The product ids are resolved first, from the branch-wide total per
+     * product, and the page is then a normal query with those ids in it.
+     */
+    let belowReorderIds: string[] | null = null;
+    if (query.onlyBelowReorder) {
+      belowReorderIds = await this.productsBelowReorder(user, {
+        warehouseId: query.warehouseId,
+        branchId: query.branchId,
+      });
+      if (!belowReorderIds.length) {
+        return { data: [], total: 0, page, pageSize, summary: this.emptySummary() };
+      }
+    }
+
+    const search = query.search?.trim();
     const where: Prisma.InventoryBalanceWhereInput = {
       ...(query.productId ? { productId: query.productId } : {}),
       ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
+      ...(query.locationId ? { locationId: query.locationId } : {}),
       ...(query.branchId ? { branchId: query.branchId } : {}),
       ...(this.scope.isUnscoped(user) ? {} : { branchId: { in: user.branchIds } }),
       ...(query.onlyOutOfStock ? { onHand: { lte: 0 } } : {}),
-      ...(query.search
+      ...(belowReorderIds ? { productId: { in: belowReorderIds } } : {}),
+      ...(query.batchStatus || query.expiringWithinDays !== undefined
+        ? {
+            batch: {
+              ...(query.batchStatus ? { status: query.batchStatus } : {}),
+              ...(query.expiringWithinDays !== undefined
+                ? {
+                    expiryDate: {
+                      lte: new Date(Date.now() + query.expiringWithinDays * 86_400_000),
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      ...(query.onlyControlled || query.onlyColdChain
         ? {
             product: {
-              OR: [
-                { genericName: { contains: query.search, mode: 'insensitive' } },
-                { brandName: { contains: query.search, mode: 'insensitive' } },
-                { sku: { contains: query.search, mode: 'insensitive' } },
-              ],
+              ...(query.onlyControlled ? { isControlled: true } : {}),
+              ...(query.onlyColdChain ? { isColdChain: true } : {}),
             },
+          }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              { product: { genericName: { contains: search, mode: 'insensitive' as const } } },
+              { product: { brandName: { contains: search, mode: 'insensitive' as const } } },
+              { product: { sku: { contains: search, mode: 'insensitive' as const } } },
+              // A storekeeper reads the batch number off the box, so it is
+              // searchable from the same field as the product name.
+              { batch: { batchNumber: { contains: search, mode: 'insensitive' as const } } },
+            ],
           }
         : {}),
     };
@@ -76,18 +151,26 @@ export class InventoryService {
             },
           },
           batch: {
-            select: { id: true, batchNumber: true, expiryDate: true, status: true },
+            select: {
+              id: true,
+              batchNumber: true,
+              expiryDate: true,
+              status: true,
+              receivedDate: true,
+              purchaseCost: true,
+            },
           },
           warehouse: { select: { id: true, name: true, code: true, branchId: true } },
           location: { select: { id: true, code: true, name: true } },
         },
-        orderBy: [{ product: { genericName: 'asc' } }, { batch: { expiryDate: 'asc' } }],
+        orderBy: (DB_SORT[query.sort ?? 'product'] ?? DB_SORT.product)(query.direction ?? 'asc'),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       this.prisma.inventoryBalance.count({ where }),
     ]);
 
+    const now = Date.now();
     const data = rows.map((row) => {
       const available = row.onHand.minus(row.reserved);
       return {
@@ -95,15 +178,146 @@ export class InventoryService {
         available,
         expiryBucket: row.batch ? classifyExpiry(row.batch.expiryDate) : null,
         daysToExpiry: row.batch ? daysUntil(row.batch.expiryDate) : null,
-        stockValue: available.times(row.product.averageCost),
+        /**
+         * Valued at what is held, not at what is unreserved.
+         *
+         * This used to multiply `available`, so every hold at the till or open
+         * pick wave silently wrote value off the stock screen while the ledger
+         * and the balance sheet still carried it. A reservation is a promise
+         * about where stock is going, not a disposal.
+         */
+        stockValue: row.onHand.times(row.product.averageCost),
+        /** How long this stock has been sitting, for slow-mover triage. */
+        ageDays: row.batch?.receivedDate
+          ? Math.floor((now - row.batch.receivedDate.getTime()) / 86_400_000)
+          : null,
       };
     });
 
-    const filtered = query.onlyBelowReorder
-      ? data.filter((d) => d.available.lessThanOrEqualTo(d.product.reorderLevel))
-      : data;
+    // `value` and `age` are derived, so they are ordered after the page is
+    // fetched. That is honest about what it does — it sorts the page, not the
+    // whole result — and the column header says so.
+    if (query.sort === 'value' || query.sort === 'age' || query.sort === 'available') {
+      const sign = query.direction === 'desc' ? -1 : 1;
+      data.sort((a, b) => {
+        if (query.sort === 'value') return sign * a.stockValue.comparedTo(b.stockValue);
+        if (query.sort === 'available') return sign * a.available.comparedTo(b.available);
+        return sign * ((a.ageDays ?? -1) - (b.ageDays ?? -1));
+      });
+    }
 
-    return { data: filtered, total, page, pageSize };
+    return {
+      data,
+      total,
+      page,
+      pageSize,
+      summary: await this.balanceSummary(where),
+      /** Named so a screen can say which sorts are page-local. */
+      sortedAcrossAllPages: !['value', 'age', 'available'].includes(query.sort ?? 'product'),
+    };
+  }
+
+  private emptySummary() {
+    return {
+      positions: 0,
+      products: 0,
+      units: '0',
+      reserved: '0',
+      value: '0',
+      expiringWithin90Days: 0,
+      outOfStock: 0,
+      negative: 0,
+    };
+  }
+
+  /**
+   * Totals for the whole filtered set, not for the page.
+   *
+   * A stock screen whose header counts only the rows currently visible answers
+   * a question nobody asked.
+   */
+  private async balanceSummary(where: Prisma.InventoryBalanceWhereInput) {
+    const rows = await this.prisma.inventoryBalance.findMany({
+      where,
+      select: {
+        productId: true,
+        onHand: true,
+        reserved: true,
+        product: { select: { averageCost: true } },
+        batch: { select: { expiryDate: true } },
+      },
+    });
+
+    const horizon = new Date(Date.now() + 90 * 86_400_000);
+    let units = new Prisma.Decimal(0);
+    let reserved = new Prisma.Decimal(0);
+    let value = new Prisma.Decimal(0);
+    let expiring = 0;
+    let outOfStock = 0;
+    let negative = 0;
+    const products = new Set<string>();
+
+    for (const row of rows) {
+      units = units.plus(row.onHand);
+      reserved = reserved.plus(row.reserved);
+      value = value.plus(row.onHand.times(row.product.averageCost));
+      products.add(row.productId);
+      if (row.onHand.lessThanOrEqualTo(0)) outOfStock += 1;
+      if (row.onHand.lessThan(0)) negative += 1;
+      if (row.batch && row.onHand.greaterThan(0) && row.batch.expiryDate <= horizon) expiring += 1;
+    }
+
+    return {
+      positions: rows.length,
+      products: products.size,
+      units: units.toString(),
+      reserved: reserved.toString(),
+      value: value.toDecimalPlaces(2).toString(),
+      expiringWithin90Days: expiring,
+      outOfStock,
+      negative,
+    };
+  }
+
+  /**
+   * The products whose branch-wide available total is at or below their reorder
+   * level (§12).
+   *
+   * Totalled per product across every position the reader can see, because a
+   * reorder level is set for a product and a pharmacy orders products, not
+   * shelves.
+   */
+  async productsBelowReorder(
+    user: AuthenticatedUser,
+    options: { warehouseId?: string; branchId?: string } = {},
+  ): Promise<string[]> {
+    const totals = await this.prisma.inventoryBalance.groupBy({
+      by: ['productId'],
+      where: {
+        ...(options.warehouseId ? { warehouseId: options.warehouseId } : {}),
+        ...(options.branchId ? { branchId: options.branchId } : {}),
+        ...(this.scope.isUnscoped(user) ? {} : { branchId: { in: user.branchIds } }),
+      },
+      _sum: { onHand: true, reserved: true },
+    });
+    if (!totals.length) return [];
+
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: totals.map((t) => t.productId) } },
+      select: { id: true, reorderLevel: true },
+    });
+    const levelById = new Map(products.map((p) => [p.id, p.reorderLevel]));
+
+    return totals
+      .filter((t) => {
+        const level = levelById.get(t.productId);
+        if (!level) return false;
+        const available = (t._sum.onHand ?? new Prisma.Decimal(0)).minus(
+          t._sum.reserved ?? new Prisma.Decimal(0),
+        );
+        return available.lessThanOrEqualTo(level);
+      })
+      .map((t) => t.productId);
   }
 
   /** Aggregate on-hand across batches for one product (the "do we have it" view). */
@@ -137,43 +351,401 @@ export class InventoryService {
     };
   }
 
-  /** Stock ledger for a product/batch, newest first (§19). */
-  async ledger(query: {
-    productId?: string;
-    batchId?: string;
-    warehouseId?: string;
-    from?: Date;
-    to?: Date;
-    page?: number;
-    pageSize?: number;
-  }) {
+  /**
+   * Open stock reservations, so a held quantity has a name against it (§19).
+   *
+   * `available` sits below `onHand` for a reason, and until this existed the
+   * only way to find out what the reason was, was to read the database. A
+   * storekeeper looking at "40 on hand, 12 available" needs to see the baskets
+   * and the pick wave holding the difference.
+   */
+  async reservations(
+    user: AuthenticatedUser,
+    query: {
+      productId?: string;
+      batchId?: string;
+      warehouseId?: string;
+      referenceType?: string;
+      includeReleased?: boolean;
+      onlyLapsed?: boolean;
+      page?: number;
+      pageSize?: number;
+    } = {},
+  ) {
     const page = Math.max(1, query.page ?? 1);
-    const pageSize = Math.min(500, query.pageSize ?? 100);
+    const pageSize = Math.min(200, query.pageSize ?? 50);
+    if (query.warehouseId) await this.scope.assertWarehouse(user, query.warehouseId);
 
-    const where: Prisma.InventoryTransactionWhereInput = {
+    // StockReservation carries no branch, so the reader's scope is applied
+    // through the warehouses they can reach.
+    let warehouseIds: string[] | undefined;
+    if (!this.scope.isUnscoped(user)) {
+      const warehouses = await this.prisma.warehouse.findMany({
+        where: { branchId: { in: user.branchIds } },
+        select: { id: true },
+      });
+      warehouseIds = warehouses.map((w) => w.id);
+      if (!warehouseIds.length) return { data: [], total: 0, page, pageSize };
+    }
+
+    const where: Prisma.StockReservationWhereInput = {
+      ...(warehouseIds ? { warehouseId: { in: warehouseIds } } : {}),
       ...(query.productId ? { productId: query.productId } : {}),
       ...(query.batchId ? { batchId: query.batchId } : {}),
       ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
+      ...(query.referenceType ? { referenceType: query.referenceType } : {}),
+      ...(query.includeReleased ? {} : { releasedAt: null }),
+      ...(query.onlyLapsed ? { expiresAt: { not: null, lt: new Date() } } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.stockReservation.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.stockReservation.count({ where }),
+    ]);
+
+    const [products, batches, warehouses, actors] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.productId))] } },
+        select: { id: true, sku: true, genericName: true, strength: true },
+      }),
+      this.prisma.batch.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.batchId))] } },
+        select: { id: true, batchNumber: true, expiryDate: true },
+      }),
+      this.prisma.warehouse.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.warehouseId))] } },
+        select: { id: true, name: true },
+      }),
+      this.prisma.user.findMany({
+        where: {
+          id: { in: [...new Set(rows.map((r) => r.createdById).filter((v): v is string => !!v))] },
+        },
+        select: { id: true, fullName: true },
+      }),
+    ]);
+    const productById = new Map(products.map((p) => [p.id, p]));
+    const batchById = new Map(batches.map((b) => [b.id, b]));
+    const warehouseById = new Map(warehouses.map((w) => [w.id, w]));
+    const actorById = new Map(actors.map((a) => [a.id, a.fullName]));
+
+    const now = Date.now();
+    return {
+      data: rows.map((row) => ({
+        ...row,
+        product: productById.get(row.productId) ?? null,
+        batch: batchById.get(row.batchId) ?? null,
+        warehouse: warehouseById.get(row.warehouseId) ?? null,
+        createdBy: row.createdById ? (actorById.get(row.createdById) ?? null) : null,
+        heldForMinutes: Math.round((now - row.createdAt.getTime()) / 60_000),
+        lapsed: !!row.expiresAt && row.expiresAt.getTime() < now,
+        referenceHref: this.referenceHref(row.referenceType, row.referenceId),
+      })),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  /**
+   * Release one reservation by hand (§19).
+   *
+   * For the hold nothing will ever come back for: a till that crashed mid-sale,
+   * a pick wave abandoned when the van left. The document is deliberately left
+   * as it is — releasing the stock is not the same decision as cancelling the
+   * order it was held for, and this is not entitled to make the second one.
+   */
+  async releaseReservation(id: string, reason: string, user: AuthenticatedUser) {
+    if (!reason?.trim()) {
+      throw new BadRequestException('Say why the reservation is being released by hand');
+    }
+    const reservation = await this.prisma.stockReservation.findUnique({ where: { id } });
+    if (!reservation) throw new NotFoundException('Reservation not found');
+    await this.scope.assertWarehouse(user, reservation.warehouseId);
+    if (reservation.releasedAt) {
+      throw new ConflictException(`Already released on ${reservation.releasedAt.toISOString()}`);
+    }
+
+    await this.prisma.$transaction(async (tx) =>
+      this.ledgerService.releaseReservationRows(tx, [id]),
+    );
+
+    const warehouse = await this.prisma.warehouse.findUnique({
+      where: { id: reservation.warehouseId },
+      select: { branchId: true },
+    });
+
+    await this.audit.record({
+      userId: user.id,
+      userLabel: user.fullName,
+      module: 'inventory',
+      action: 'RESERVATION_RELEASED',
+      entityType: 'StockReservation',
+      entityId: id,
+      previousValue: {
+        referenceType: reservation.referenceType,
+        referenceId: reservation.referenceId,
+        quantity: reservation.quantity.toString(),
+      },
+      newValue: { releasedAt: new Date() },
+      reason: reason.trim(),
+      branchId: warehouse?.branchId ?? null,
+    });
+
+    return {
+      released: true,
+      quantity: reservation.quantity.toString(),
+      note:
+        `The stock is available again. ${reservation.referenceType} was left as it is — ` +
+        `releasing the hold is not the same as cancelling the document.`,
+    };
+  }
+
+  /**
+   * Positions that need a person to look at them (§19).
+   *
+   * Negative stock is arithmetically impossible and always means a posting went
+   * in the wrong order or a count was applied twice. A position at zero that
+   * still has something reserved against it is the same problem wearing a
+   * different hat.
+   */
+  async anomalies(user: AuthenticatedUser, options: { warehouseId?: string } = {}) {
+    if (options.warehouseId) await this.scope.assertWarehouse(user, options.warehouseId);
+    const where: Prisma.InventoryBalanceWhereInput = {
+      ...this.scope.branchFilter(user),
+      ...(options.warehouseId ? { warehouseId: options.warehouseId } : {}),
+    };
+
+    const rows = await this.prisma.inventoryBalance.findMany({
+      where,
+      include: {
+        product: { select: { id: true, sku: true, genericName: true, strength: true } },
+        batch: { select: { id: true, batchNumber: true, expiryDate: true, status: true } },
+        warehouse: { select: { id: true, name: true } },
+      },
+    });
+
+    const recently = Date.now() - 30 * 86_400_000;
+    const negative = rows.filter((r) => r.onHand.lessThan(0));
+    const overReserved = rows.filter((r) => r.reserved.greaterThan(r.onHand));
+    const heldAtZero = rows.filter(
+      (r) =>
+        r.onHand.equals(0) &&
+        r.reserved.greaterThan(0) &&
+        !!r.lastMovementAt &&
+        r.lastMovementAt.getTime() > recently,
+    );
+    const expiredButHeld = rows.filter(
+      (r) =>
+        r.onHand.greaterThan(0) &&
+        !!r.batch &&
+        r.batch.expiryDate.getTime() < Date.now() &&
+        r.batch.status !== BatchStatus.EXPIRED &&
+        r.batch.status !== BatchStatus.DESTROYED,
+    );
+
+    const describe = (list: typeof rows) =>
+      list.slice(0, 100).map((r) => ({
+        balanceId: r.id,
+        product: r.product,
+        batch: r.batch,
+        warehouse: r.warehouse,
+        onHand: r.onHand.toString(),
+        reserved: r.reserved.toString(),
+        lastMovementAt: r.lastMovementAt,
+      }));
+
+    return {
+      checked: rows.length,
+      negative: {
+        count: negative.length,
+        rows: describe(negative),
+        meaning: 'A movement was posted out of order, or a count was applied twice.',
+      },
+      overReserved: {
+        count: overReserved.length,
+        rows: describe(overReserved),
+        meaning: 'More is reserved than is held; a release did not decrement the row it should have.',
+      },
+      heldAtZero: {
+        count: heldAtZero.length,
+        rows: describe(heldAtZero),
+        meaning: 'Nothing on hand and something still reserved against it.',
+      },
+      expiredButAvailable: {
+        count: expiredButHeld.length,
+        rows: describe(expiredButHeld),
+        meaning: 'Past its expiry date and not yet swept. Run the expiry sweep.',
+      },
+      note:
+        'Each of these is a prompt to investigate, not a correction. Nothing here changes a ' +
+        'balance — a stock figure is corrected by a count or an adjustment, and both of those ' +
+        'are somebody’s decision.',
+    };
+  }
+
+  /**
+   * Stock ledger for a product/batch, newest first (§19).
+   *
+   * §4: the ledger used to take no user at all. Every movement in the
+   * organisation — each branch, each unit cost — was readable by anyone holding
+   * `inventory.ledger.READ`, which the branch roles do. It is filtered on the
+   * reader's branches now, in the query, and asking for a branch outside them is
+   * refused rather than quietly widened.
+   */
+  async ledger(
+    user: AuthenticatedUser,
+    query: {
+      productId?: string;
+      batchId?: string;
+      warehouseId?: string;
+      branchId?: string;
+      type?: TransactionType;
+      referenceType?: string;
+      referenceId?: string;
+      search?: string;
+      from?: Date;
+      to?: Date;
+      page?: number;
+      pageSize?: number;
+    },
+  ) {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(500, query.pageSize ?? 100);
+    if (query.branchId) this.scope.assertBranch(user, query.branchId);
+    if (query.warehouseId) await this.scope.assertWarehouse(user, query.warehouseId);
+
+    const search = query.search?.trim();
+    const where: Prisma.InventoryTransactionWhereInput = {
+      ...this.scope.branchFilter(user),
+      ...(query.productId ? { productId: query.productId } : {}),
+      ...(query.batchId ? { batchId: query.batchId } : {}),
+      ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
+      ...(query.branchId ? { branchId: query.branchId } : {}),
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.referenceType ? { referenceType: query.referenceType } : {}),
+      ...(query.referenceId ? { referenceId: query.referenceId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { referenceNo: { contains: search, mode: 'insensitive' as const } },
+              { product: { genericName: { contains: search, mode: 'insensitive' as const } } },
+              { product: { sku: { contains: search, mode: 'insensitive' as const } } },
+              { batch: { batchNumber: { contains: search, mode: 'insensitive' as const } } },
+            ],
+          }
+        : {}),
       ...(query.from || query.to
         ? { occurredAt: { ...(query.from ? { gte: query.from } : {}), ...(query.to ? { lte: query.to } : {}) } }
         : {}),
     };
 
-    const [data, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       this.prisma.inventoryTransaction.findMany({
         where,
         include: {
-          product: { select: { sku: true, genericName: true, brandName: true } },
-          batch: { select: { batchNumber: true, expiryDate: true } },
+          product: { select: { id: true, sku: true, genericName: true, brandName: true, strength: true } },
+          batch: { select: { id: true, batchNumber: true, expiryDate: true } },
         },
-        orderBy: { occurredAt: 'desc' },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       this.prisma.inventoryTransaction.count({ where }),
     ]);
 
-    return { data, total, page, pageSize };
+    // Who moved it. Resolved once rather than per row.
+    const actorIds = [...new Set(rows.map((r) => r.performedById).filter((v): v is string => !!v))];
+    const actors = actorIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: actorIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const actorById = new Map(actors.map((a) => [a.id, a.fullName]));
+
+    return {
+      data: rows.map((row) => ({
+        ...row,
+        performedBy: row.performedById ? (actorById.get(row.performedById) ?? null) : null,
+        /**
+         * Where this movement came from, as something a screen can link to.
+         *
+         * The ledger already stores referenceType and referenceId; without the
+         * route a reader who sees "SALE" has to go and find the sale by hand.
+         */
+        referenceHref: this.referenceHref(row.referenceType, row.referenceId),
+      })),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  /** Ledger reference → the screen that shows that document, or null. */
+  private referenceHref(type: string | null, id: string | null): string | null {
+    if (!type || !id) return null;
+    const routes: Record<string, string> = {
+      GOODS_RECEIPT: '/receiving',
+      SALE: '/pos',
+      DISPENSING: '/dispensing',
+      DISPENSING_REVERSAL: '/dispensing',
+      STOCK_ADJUSTMENT: '/adjustments',
+      STOCK_COUNT: '/counts',
+      TRANSFER: '/transfers',
+      DAMAGE_REPORT: '/damage',
+      DISPOSAL: '/disposal',
+      RECALL: '/recalls',
+      RETURN: '/returns',
+    };
+    const base = routes[type];
+    return base ? `${base}?highlight=${id}` : null;
+  }
+
+  /**
+   * The ledger for one batch at one warehouse, oldest first, with the running
+   * balance after each movement (§19).
+   *
+   * The stored `balanceAfter` is the running balance for the product+batch
+   * +warehouse the movement was posted against, so it is read rather than
+   * recomputed — a recomputation that disagreed with the stored figure would be
+   * hiding exactly the drift the integrity check exists to find.
+   */
+  async batchLedger(
+    user: AuthenticatedUser,
+    batchId: string,
+    options: { warehouseId?: string; limit?: number } = {},
+  ) {
+    if (options.warehouseId) await this.scope.assertWarehouse(user, options.warehouseId);
+    const rows = await this.prisma.inventoryTransaction.findMany({
+      where: {
+        batchId,
+        ...this.scope.branchFilter(user),
+        ...(options.warehouseId ? { warehouseId: options.warehouseId } : {}),
+      },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+      take: Math.min(1000, options.limit ?? 500),
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      occurredAt: row.occurredAt,
+      type: row.type,
+      quantityIn: row.quantityIn,
+      quantityOut: row.quantityOut,
+      balanceAfter: row.balanceAfter,
+      unitCost: row.unitCost,
+      referenceType: row.referenceType,
+      referenceNo: row.referenceNo,
+      referenceHref: this.referenceHref(row.referenceType, row.referenceId),
+      reason: row.reason,
+      warehouseId: row.warehouseId,
+      locationId: row.locationId,
+    }));
   }
 
   /**

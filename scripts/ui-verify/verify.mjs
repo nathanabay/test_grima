@@ -258,7 +258,34 @@ await mkdir(OUT, { recursive: true });
  * runtime asks for; downloading another copy is both slow and pointless.
  */
 const CHROMIUM = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const pages = ONLY ? [ONLY] : PAGES;
+
+/**
+ * Record pages live behind an id, so one real id is resolved before the sweep.
+ *
+ * Without this the batch record — the page a recall and an inspection are
+ * actually worked from — is the one screen nothing ever renders in a browser.
+ */
+async function resolveRecordPages() {
+  try {
+    const login = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ identifier: USER, password: 'PharmaCore#2026' }),
+    });
+    const auth = await login.json();
+    if (!auth.accessToken) return [];
+    const res = await fetch(`${API}/inventory/batches?pageSize=1`, {
+      headers: { authorization: `Bearer ${auth.accessToken}` },
+    });
+    const body = await res.json();
+    const id = body?.data?.[0]?.id;
+    return id ? [`/batches/${id}`] : [];
+  } catch {
+    return [];
+  }
+}
+
+const pages = ONLY ? [ONLY] : [...PAGES, ...(await resolveRecordPages())];
 
 console.log(`Verifying ${pages.length} page(s) at ${BREAKPOINTS.length} width(s) as "${USER}"\n`);
 

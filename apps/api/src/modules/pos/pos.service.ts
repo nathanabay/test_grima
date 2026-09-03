@@ -652,6 +652,10 @@ export class PosService {
     if (!input.lines?.length) throw new BadRequestException('There is nothing to hold');
     this.scope.assertBranch(user, input.branchId);
 
+    const holdHours = await this.config.getNumber('inventory.heldSaleReservationHours');
+    const holdExpiresAt =
+      holdHours > 0 ? new Date(Date.now() + holdHours * 3_600_000) : null;
+
     return this.prisma.$transaction(async (tx) => {
       const saleNo = await this.docNumbers.next(tx, 'SALE');
       const sale = await tx.sale.create({
@@ -700,6 +704,9 @@ export class PosService {
             referenceType: 'HELD_SALE',
             referenceId: sale.id,
             createdById: user.id,
+            // §19: a basket nobody comes back for used to hold its stock for
+            // ever. The hold lapses; the held sale is left for a person.
+            expiresAt: holdExpiresAt,
           });
 
           await tx.saleItem.create({

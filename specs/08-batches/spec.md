@@ -5,7 +5,7 @@
 
 # Batches
 
-**50 requirements: 38 implemented, 12 partial, 0 not implemented.**
+**50 requirements: 43 implemented, 7 partial, 0 not implemented.**
 
 Requirement range `PHARM-BATCH-001` – `PHARM-BATCH-050`.
 
@@ -22,6 +22,7 @@ Requirement range `PHARM-BATCH-001` – `PHARM-BATCH-050`.
 - `GET /inventory/products/:productId/stock` — inventory.balance.READ
 - `GET /inventory/products/:productId/branches` — inventory.balance.READ
 - `GET /inventory/ledger` — inventory.ledger.READ
+- `GET /inventory/ledger/batch/:batchId` — inventory.ledger.READ
 - `GET /inventory/ledger/integrity` — inventory.ledger.READ
 - `GET /inventory/expiry` — inventory.expiry.READ
 - `GET /inventory/expiry/calendar` — inventory.expiry.READ
@@ -32,9 +33,15 @@ Requirement range `PHARM-BATCH-001` – `PHARM-BATCH-050`.
 - `POST /inventory/fefo/allocate` — inventory.balance.READ
 - `GET /inventory/batches` — inventory.batch.READ
 - `GET /inventory/batches/:id` — inventory.batch.READ
+- `POST /inventory/batches/:id/split` — inventory.batch.EDIT
 - `POST /inventory/batches/:id/quarantine` — quality.quarantine.CREATE
 - `POST /inventory/batches/:id/release` — quality.quarantine.APPROVE
 - `POST /inventory/batches/:id/block` — inventory.batch.EDIT
+- `GET /inventory/balances.csv` — inventory.balance.EXPORT
+- `GET /inventory/ledger.csv` — inventory.ledger.EXPORT
+- `GET /inventory/reservations` — inventory.balance.READ
+- `POST /inventory/reservations/:id/release` — inventory.balance.EDIT
+- `GET /inventory/anomalies` — inventory.balance.READ
 - `POST /inventory/expiry/sweep` — inventory.expiry.READ, inventory.adjustment.APPROVE
 - `GET /serials/vocabulary` — inventory.serial.READ
 - `GET /serials` — inventory.serial.READ
@@ -69,11 +76,11 @@ Requirement range `PHARM-BATCH-001` – `PHARM-BATCH-050`.
 | `PHARM-BATCH-012` | 112 | Batch quantity tracking. | IMPLEMENTED |
 | `PHARM-BATCH-013` | 113 | Batch reserved quantity. | IMPLEMENTED |
 | `PHARM-BATCH-014` | 114 | Batch available quantity. | IMPLEMENTED |
-| `PHARM-BATCH-015` | 115 | Batch damaged quantity. | PARTIALLY IMPLEMENTED |
+| `PHARM-BATCH-015` | 115 | Batch damaged quantity. | IMPLEMENTED |
 | `PHARM-BATCH-016` | 116 | Batch quarantine quantity. | IMPLEMENTED |
 | `PHARM-BATCH-017` | 117 | Batch recalled quantity. | IMPLEMENTED |
-| `PHARM-BATCH-018` | 118 | Batch disposal quantity. | PARTIALLY IMPLEMENTED |
-| `PHARM-BATCH-019` | 119 | Batch return quantity. | PARTIALLY IMPLEMENTED |
+| `PHARM-BATCH-018` | 118 | Batch disposal quantity. | IMPLEMENTED |
+| `PHARM-BATCH-019` | 119 | Batch return quantity. | IMPLEMENTED |
 | `PHARM-BATCH-020` | 120 | Batch quality status. | IMPLEMENTED |
 | `PHARM-BATCH-021` | 121 | Batch certificate-of-analysis attachment. | IMPLEMENTED |
 | `PHARM-BATCH-022` | 122 | Batch regulatory-document attachment. | IMPLEMENTED |
@@ -86,8 +93,8 @@ Requirement range `PHARM-BATCH-001` – `PHARM-BATCH-050`.
 | `PHARM-BATCH-029` | 129 | Batch movement timeline. | IMPLEMENTED |
 | `PHARM-BATCH-030` | 130 | Batch inventory valuation. | IMPLEMENTED |
 | `PHARM-BATCH-031` | 131 | Batch expiry risk score. | IMPLEMENTED |
-| `PHARM-BATCH-032` | 132 | Batch consumption velocity. | PARTIALLY IMPLEMENTED |
-| `PHARM-BATCH-033` | 133 | Batch days-of-cover calculation. | PARTIALLY IMPLEMENTED |
+| `PHARM-BATCH-032` | 132 | Batch consumption velocity. | IMPLEMENTED |
+| `PHARM-BATCH-033` | 133 | Batch days-of-cover calculation. | IMPLEMENTED |
 | `PHARM-BATCH-034` | 134 | Batch-level profitability. | PARTIALLY IMPLEMENTED |
 | `PHARM-BATCH-035` | 135 | Batch recall history. | IMPLEMENTED |
 | `PHARM-BATCH-036` | 136 | Unique serial-number tracking. | IMPLEMENTED |
@@ -108,15 +115,10 @@ Requirement range `PHARM-BATCH-001` – `PHARM-BATCH-050`.
 
 ## Partial
 
-12 requirement(s) work but are narrower than the feature asks:
+7 requirement(s) work but are narrower than the feature asks:
 
 - `PHARM-BATCH-001` (101) Mandatory batch tracking where configured.
 - `PHARM-BATCH-009` (109) Batch landed-cost tracking.
-- `PHARM-BATCH-015` (115) Batch damaged quantity.
-- `PHARM-BATCH-018` (118) Batch disposal quantity.
-- `PHARM-BATCH-019` (119) Batch return quantity.
-- `PHARM-BATCH-032` (132) Batch consumption velocity.
-- `PHARM-BATCH-033` (133) Batch days-of-cover calculation.
 - `PHARM-BATCH-034` (134) Batch-level profitability.
 - `PHARM-BATCH-043` (143) Duplicate-serial detection.
 - `PHARM-BATCH-044` (144) Invalid-serial alerts.

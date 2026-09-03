@@ -53,7 +53,10 @@ export const RESOURCE_CATALOG: ResourceDefinition[] = [
   { module: 'procurement', resource: 'quotation', label: 'Supplier Quotations', actions: [...CRUD, 'APPROVE'] },
   { module: 'procurement', resource: 'purchase_order', label: 'Purchase Orders', actions: [...CRUD_APPROVE, 'PRINT'] },
 
-  { module: 'inventory', resource: 'balance', label: 'Stock Balances', actions: REPORTING },
+  // EDIT is releasing a stock reservation by hand — the hold nothing will ever
+  // come back for. It does not change a quantity on hand; correcting one of
+  // those is a count or an adjustment, which have their own permissions.
+  { module: 'inventory', resource: 'balance', label: 'Stock Balances', actions: [...REPORTING, 'EDIT'] },
   { module: 'inventory', resource: 'ledger', label: 'Stock Ledger', actions: REPORTING },
   { module: 'inventory', resource: 'batch', label: 'Batches', actions: ['READ', 'EDIT', 'APPROVE'] },
   { module: 'inventory', resource: 'goods_receipt', label: 'Goods Receiving', actions: [...CRUD, 'APPROVE', 'PRINT'] },
@@ -169,7 +172,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     description: 'Prescription validation, dispensing and pharmaceutical stock operations.',
     permissions: [
       ...moduleCodes('dispensing'),
-      ...resourceCodes('inventory', 'balance'),
+      ...resourceCodes('inventory', 'balance', ['READ', 'PRINT', 'EXPORT', 'EDIT']),
       ...resourceCodes('inventory', 'ledger'),
       ...resourceCodes('inventory', 'batch', ['READ']),
       ...resourceCodes('inventory', 'serial', ['READ', 'EDIT']),
@@ -189,7 +192,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     name: 'Pharmacy Technician',
     description: 'Receiving, picking and permitted dispensing workflows.',
     permissions: [
-      ...resourceCodes('inventory', 'balance'),
+      ...resourceCodes('inventory', 'balance', ['READ', 'PRINT', 'EXPORT', 'EDIT']),
       ...resourceCodes('inventory', 'goods_receipt', ['CREATE', 'READ', 'EDIT', 'PRINT']),
       ...resourceCodes('inventory', 'transfer', ['CREATE', 'READ', 'PRINT']),
       ...resourceCodes('inventory', 'count', ['CREATE', 'READ', 'EDIT']),
@@ -205,7 +208,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     description: 'Suppliers, RFQs, quotations and purchase orders.',
     permissions: [
       ...moduleCodes('procurement'),
-      ...resourceCodes('inventory', 'balance'),
+      ...resourceCodes('inventory', 'balance', ['READ', 'PRINT', 'EXPORT']),
       ...resourceCodes('inventory', 'expiry', ['READ']),
       ...resourceCodes('catalog', 'product', ['READ']),
       ...resourceCodes('analytics', 'forecast'),
@@ -231,7 +234,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     name: 'Storekeeper',
     description: 'Day-to-day warehouse transactions.',
     permissions: [
-      ...resourceCodes('inventory', 'balance'),
+      ...resourceCodes('inventory', 'balance', ['READ', 'PRINT', 'EXPORT', 'EDIT']),
       ...resourceCodes('inventory', 'goods_receipt', ['CREATE', 'READ', 'EDIT']),
       ...resourceCodes('inventory', 'transfer', ['CREATE', 'READ']),
       ...resourceCodes('inventory', 'count', ['CREATE', 'READ', 'EDIT']),
@@ -271,7 +274,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
       ...moduleCodes('quality'),
       ...resourceCodes('inventory', 'batch'),
       ...resourceCodes('inventory', 'serial', ['READ', 'EDIT']),
-      ...resourceCodes('inventory', 'balance'),
+      ...resourceCodes('inventory', 'balance', ['READ', 'PRINT', 'EXPORT']),
       ...resourceCodes('inventory', 'ledger'),
       ...resourceCodes('inventory', 'expiry'),
       ...resourceCodes('analytics', 'dashboard'),

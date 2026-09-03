@@ -13,6 +13,7 @@ import { AutomationService } from '../automation/automation.service';
 import { ConfigService } from '../../common/config/config.service';
 import { ReportBuilderService } from '../intelligence/report-builder.service';
 import { PrescriptionsService } from '../dispensing/prescriptions.service';
+import { LedgerService } from '../inventory/ledger.service';
 
 /**
  * Rule engine and scheduled jobs (§58).
@@ -38,6 +39,7 @@ export class RulesService implements OnModuleInit {
     private readonly config: ConfigService,
     private readonly reportBuilder: ReportBuilderService,
     private readonly prescriptions: PrescriptionsService,
+    private readonly ledger: LedgerService,
   ) {}
 
   /**
@@ -73,6 +75,15 @@ export class RulesService implements OnModuleInit {
       description: 'Marks expired batches and removes them from available stock.',
       schedule: 'Daily at 02:00',
       run: () => this.runExpirySweep(),
+    });
+    this.runner.register({
+      key: 'inventory.releaseLapsedReservations',
+      label: 'Release lapsed stock reservations',
+      description:
+        'Puts back stock held by a basket nobody returned for, or a pick wave nobody closed. ' +
+        'The document is left alone — lapsing the hold is not cancelling the order.',
+      schedule: 'Hourly',
+      run: () => this.ledger.releaseExpiredReservations(),
     });
     this.runner.register({
       key: 'prescriptions.expire',
@@ -307,6 +318,11 @@ export class RulesService implements OnModuleInit {
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async expirySweepCron() {
     return this.runner.execute('expiry.sweep');
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async lapsedReservationsCron() {
+    return this.runner.execute('inventory.releaseLapsedReservations');
   }
 
   @Cron('30 2 * * *')
