@@ -1,5 +1,7 @@
 'use client';
 
+import { StatusBadge, type StatusTone } from '@/components/status';
+
 /**
  * The clinical warnings panel (§24).
  *
@@ -34,11 +36,18 @@ const TONE: Record<string, string> = {
   LOW: 'border-border bg-surface-sunken',
 };
 
-const BADGE: Record<string, string> = {
-  CRITICAL: 'bg-danger text-white',
-  HIGH: 'bg-warn text-white',
-  MEDIUM: 'bg-surface text-ink-muted border border-border',
-  LOW: 'bg-surface text-ink-muted border border-border',
+/**
+ * Severity to the product's own status tones.
+ *
+ * Deliberately not white-on-saturated-fill: the design system tints the
+ * background and keeps the text in the accent colour, which is the only
+ * treatment that holds its contrast in both themes.
+ */
+const BADGE_TONE: Record<string, StatusTone> = {
+  CRITICAL: 'out',
+  HIGH: 'expired',
+  MEDIUM: 'near',
+  LOW: 'info',
 };
 
 export function ClinicalWarnings({
@@ -92,13 +101,7 @@ export function ClinicalWarnings({
         {sorted.map((w) => (
           <li key={w.code} className={`rounded-md border p-2.5 ${TONE[w.severity] ?? TONE.LOW}`}>
             <div className="flex flex-wrap items-baseline gap-2">
-              <span
-                className={`rounded px-1.5 py-0.5 text-caption font-semibold uppercase ${
-                  BADGE[w.severity] ?? BADGE.LOW
-                }`}
-              >
-                {w.severity}
-              </span>
+              <StatusBadge tone={BADGE_TONE[w.severity] ?? 'info'}>{w.severity}</StatusBadge>
               <span className="text-small font-medium">{w.product}</span>
             </div>
             <p className="mt-1 text-small">{w.message}</p>

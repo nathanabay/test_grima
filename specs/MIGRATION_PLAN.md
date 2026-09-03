@@ -52,7 +52,7 @@ migration rather than living in somebody's memory.
 
 ## Applied migrations
 
-19 migrations, in order.
+21 migrations, in order.
 
 | # | Migration | Statements | Notes |
 | --- | --- | --- | --- |
@@ -75,6 +75,8 @@ migration rather than living in somebody's memory.
 | 17 | `cold chain calibration maintenance` | 7 | additive |
 | 18 | `pos cash and sale limits` | 0 | additive |
 | 19 | `pos cash and sale limits` | 5 | additive |
+| 20 | `dispensing clinical safety` | 7 | additive |
+| 21 | `dispensing refills and substitution` | 5 | additive |
 
 No migration in the history drops a column, renames a table, or adds a
 `NOT NULL` column without a default. Every one is additive and can be applied

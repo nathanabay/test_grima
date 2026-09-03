@@ -300,6 +300,83 @@ let dispensed = null;
     reprinted.ok && reprinted.body.labelPrintCount > printed.body.labelPrintCount);
 }
 
+{
+  const rx = await newPrescription({}, [{ productId: product.id, prescribedQty: 2 }]);
+  await pharmacist('POST', `/prescriptions/${rx.body.id}/review`, { decision: 'APPROVE' });
+  const full = (await pharmacist('GET', `/prescriptions/${rx.body.id}`)).body;
+  const otherPatient = (await pharmacist('GET', '/patients?pageSize=5')).body.data
+    .find((p) => p.id !== patient.id);
+  if (!otherPatient) {
+    skip('a supply cannot name a different patient from the prescription', 'only one patient in this dataset');
+  } else {
+    const wrongPatient = await pharmacist('POST', '/dispensing', {
+      prescriptionId: rx.body.id, patientId: otherPatient.id, branchId: branch.id,
+      warehouseId: warehouse.id, idempotencyKey: key(),
+      lines: [{ productId: product.id, prescriptionItemId: full.items[0].id, quantity: 2 }],
+    });
+    check('a supply cannot name a different patient from the prescription',
+      wrongPatient.status === 400, `HTTP ${wrongPatient.status}`);
+  }
+}
+
+{
+  // Product.maxDispenseQty sat in the schema unread: the catalogue could set a
+  // ceiling and the counter would hand out whatever it was asked for.
+  const setLimit = await admin('PATCH', `/products/${product.id}`, { maxDispenseQty: 2 });
+  if (!setLimit.ok) {
+    skip('a per-product supply ceiling is enforced', `could not set the limit: HTTP ${setLimit.status}`);
+  } else {
+    const rx = await newPrescription({}, [{ productId: product.id, prescribedQty: 5 }]);
+    await pharmacist('POST', `/prescriptions/${rx.body.id}/review`, { decision: 'APPROVE' });
+    const full = (await pharmacist('GET', `/prescriptions/${rx.body.id}`)).body;
+    const over = await pharmacist('POST', '/dispensing', {
+      prescriptionId: rx.body.id, patientId: patient.id, branchId: branch.id,
+      warehouseId: warehouse.id, idempotencyKey: key(),
+      lines: [{ productId: product.id, prescriptionItemId: full.items[0].id, quantity: 5 }],
+    });
+    check('a per-product supply ceiling is enforced', over.status === 409, `HTTP ${over.status}`);
+
+    const within = await pharmacist('POST', '/dispensing', {
+      prescriptionId: rx.body.id, patientId: patient.id, branchId: branch.id,
+      warehouseId: warehouse.id, idempotencyKey: key(),
+      lines: [{ productId: product.id, prescriptionItemId: full.items[0].id, quantity: 2 }],
+    });
+    check('a supply within the ceiling is allowed', within.ok, `HTTP ${within.status}`);
+    await admin('PATCH', `/products/${product.id}`, { maxDispenseQty: 0 });
+  }
+}
+
+{
+  // The early-refill check is off by default, so it is switched on for the
+  // duration of the check and put back afterwards.
+  // GET /admin/settings returns the stored overrides as a key/value object.
+  const before = (await admin('GET', '/admin/settings')).body;
+  const previous = before?.settings?.['dispensing.minRefillIntervalDays'] ?? 0;
+  const set = await admin('POST', '/admin/settings', {
+    key: 'dispensing.minRefillIntervalDays', value: 30,
+  });
+  if (!set.ok) {
+    skip('an early repeat raises a warning', `could not set the interval: HTTP ${set.status}`);
+  } else {
+    const rx = await newPrescription({}, [{ productId: product.id, prescribedQty: 2 }]);
+    await pharmacist('POST', `/prescriptions/${rx.body.id}/review`, { decision: 'APPROVE' });
+    const full = (await pharmacist('GET', `/prescriptions/${rx.body.id}`)).body;
+    const preview = await pharmacist('POST', '/dispensing/preview', {
+      prescriptionId: rx.body.id, patientId: patient.id, branchId: branch.id,
+      warehouseId: warehouse.id,
+      lines: [{ productId: product.id, prescriptionItemId: full.items[0].id, quantity: 2 }],
+    });
+    const early = (preview.body?.warnings ?? []).filter((w) => w.code.startsWith('EARLY_REFILL'));
+    check('an early repeat raises a warning', early.length > 0,
+      JSON.stringify((preview.body?.warnings ?? []).map((w) => w.code)));
+    check('the warning is advisory rather than a refusal',
+      early.every((w) => w.severity !== 'CRITICAL'), early.map((w) => w.severity).join(','));
+    await admin('POST', '/admin/settings', {
+      key: 'dispensing.minRefillIntervalDays', value: previous,
+    });
+  }
+}
+
 // ============================================================
 console.log('\nSUBSTITUTION (§23)');
 // ============================================================
@@ -536,6 +613,67 @@ console.log('\nCONTROLLED MEDICINES (§28)');
     });
     check('the dispenser cannot witness their own controlled supply',
       selfWitness.status === 400, `HTTP ${selfWitness.status}`);
+
+    // Until the register is opened its running balance is zero, so the first
+    // supply would take it negative and is refused. That is the guard doing its
+    // job, and it is also why the register has to be openable at all.
+    const unopened = await pharmacist('POST', '/dispensing', {
+      ...body, idempotencyKey: key(), witnessedById: me2.id,
+    });
+    check('a supply is refused while the register is unopened',
+      unopened.status === 400 && /negative/i.test(String(unopened.body?.error)),
+      `HTTP ${unopened.status}`);
+
+    const opened = await pharmacist('POST', '/controlled-register/opening', {
+      productId: controlled.id, branchId: branch.id, witnessedById: me2.id,
+      notes: 'End-to-end check',
+    });
+    check('the register can be opened from stock on hand', opened.ok,
+      `HTTP ${opened.status} ${JSON.stringify(opened.body).slice(0, 160)}`);
+    check('the opening balance is read rather than typed',
+      Number(opened.body?.openingBalance) > 0, String(opened.body?.openingBalance));
+
+    const reopen = await pharmacist('POST', '/controlled-register/opening', {
+      productId: controlled.id, branchId: branch.id, witnessedById: me2.id,
+    });
+    check('the register cannot be opened twice', reopen.status === 409, `HTTP ${reopen.status}`);
+
+    const notControlled = await pharmacist('POST', '/controlled-register/opening', {
+      productId: product.id, branchId: branch.id, witnessedById: me2.id,
+    });
+    check('an uncontrolled product has no register to open',
+      notControlled.status === 400, `HTTP ${notControlled.status}`);
+
+    const witnessed = await pharmacist('POST', '/dispensing', {
+      ...body, idempotencyKey: key(), witnessedById: me2.id,
+    });
+    check('a witnessed controlled supply is allowed', witnessed.ok,
+      `HTTP ${witnessed.status} ${JSON.stringify(witnessed.body).slice(0, 160)}`);
+
+    // The register is what a regulator reads. Until this suite existed nothing
+    // created a controlled dispensing, so the register stayed empty and the
+    // reversal guard in e2e-lifecycle could never run.
+    const register = (await pharmacist('GET',
+      `/controlled-register?productId=${controlled.id}&branchId=${branch.id}`)).body;
+    const entry = (register.data ?? []).find((e) => e.entryType === 'DISPENSE');
+    check('the supply is written to the controlled register', !!entry,
+      `${register.data?.length ?? 0} entries`);
+    check('the register names the witness', entry?.witnessedById === me2.id,
+      String(entry?.witnessedById));
+    check('the running balance moves with the supply',
+      entry !== undefined && Number(entry.quantityOut) > 0, String(entry?.quantityOut));
+
+    const reversedEntry = await pharmacist('POST', `/controlled-register/${entry.id}/reverse`, {
+      reason: 'End-to-end check of the register reversal guard',
+      witnessedById: me2.id,
+    });
+    check('a register entry can be reversed', reversedEntry.ok, `HTTP ${reversedEntry.status}`);
+    check('the reversal points at the entry it cancels',
+      reversedEntry.body?.reversalOfId === entry.id);
+    const twice = await pharmacist('POST', `/controlled-register/${entry.id}/reverse`, {
+      reason: 'again', witnessedById: me2.id,
+    });
+    check('an entry cannot be reversed twice', twice.status === 409, `HTTP ${twice.status}`);
   }
 }
 

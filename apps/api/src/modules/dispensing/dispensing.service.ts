@@ -240,6 +240,15 @@ export class DispensingService {
             where: { id: input.prescriptionId },
             include: { items: true },
           });
+          // §24: the patient on the supply must be the patient on the
+          // prescription. The caller used to be able to send a different id and
+          // have it stored — the dispensing would then name one person and the
+          // prescription another, which is the shape of a wrong-patient supply.
+          if (input.patientId && input.patientId !== prescription.patientId) {
+            throw new BadRequestException(
+              'The patient being supplied is not the patient on this prescription',
+            );
+          }
           if (
             !(
               [
@@ -288,6 +297,7 @@ export class DispensingService {
               isControlled: true,
               retailPrice: true,
               isActive: true,
+              maxDispenseQty: true,
             },
           });
 
@@ -341,6 +351,19 @@ export class DispensingService {
           }
           const quantity = line.quantity * (unit ? Number(unit.factorToBase) : 1);
           if (quantity <= 0) throw new BadRequestException('Quantity must be greater than zero');
+
+          // §24: a per-product ceiling on a single supply. Zero means no
+          // ceiling. The field existed on the product for a while and nothing
+          // read it, so the catalogue could set a limit and the counter would
+          // hand out any quantity it was asked for.
+          const ceiling = Number(product.maxDispenseQty);
+          if (ceiling > 0 && quantity > ceiling) {
+            throw new ConflictException(
+              `${product.genericName} is limited to ${ceiling} ${product.baseUnit.toLowerCase()}(s) ` +
+                `per supply; ${quantity} was asked for. Split it across supplies or raise the ` +
+                `limit on the product.`,
+            );
+          }
 
           // Check the prescribed quantity is not exceeded, and that what is
           // being handed over is what was prescribed — or a substitution the

@@ -11,6 +11,26 @@ const client = (t) => async (m, p, b) => {
   return { ok: r.ok, status: r.status, body: j };
 };
 
+
+/**
+ * A genuinely over-the-counter line with stock in this warehouse.
+ *
+ * These suites used to search for "Paracetamol" by name. The seed does not put
+ * an over-the-counter paracetamol in every branch store, so on a freshly seeded
+ * database the lookup returned nothing and the suite fell over on a data-shape
+ * accident rather than on anything it was testing. The search term is broad now
+ * and the assertions do the choosing.
+ */
+async function findOtc(callAs, warehouseId, minimum = 1) {
+  for (const term of ['a', 'e', 'i', 'o', 'u']) {
+    const results = (await callAs('GET', `/pos/search?q=${term}&warehouseId=${warehouseId}`)).body;
+    const found = (Array.isArray(results) ? results : [])
+      .find((p) => !p.requiresPrescription && !p.isControlled && Number(p.available) > minimum);
+    if (found) return found;
+  }
+  return null;
+}
+
 const admin = client(await login('admin'));
 const qa = client(await login('qa'));
 const cashier = client(await login('cashier'));
@@ -67,9 +87,17 @@ check('damage summary computed', summary.body.totalValue > 0,
   `${summary.body.reports} report(s), ${summary.body.totalUnits} units, value ${summary.body.totalValue}`);
 
 console.log('\n===== §22 HOLD / RESUME CART =====\n');
-const otc = (await cashier('GET', `/pos/search?q=Paracetamol&warehouseId=${wh.id}`)).body
-  .find(p => !p.requiresPrescription && !p.isControlled && p.available > 5);
-const availBefore = otc.available;
+const otc = await findOtc(cashier, wh.id, 5);
+if (!otc) {
+  console.error(`\nNo over-the-counter product with stock in ${wh.name} — cannot exercise the till.`);
+  process.exit(1);
+}
+// Re-read the same product from the same warehouse each time, so the numbers
+// compared are the same shelf before and after.
+const availability = async () =>
+  Number(((await cashier('GET', `/pos/search?q=${encodeURIComponent(otc.genericName)}&warehouseId=${wh.id}`)).body
+    .find(p => p.id === otc.id) ?? {}).available ?? 0);
+const availBefore = Number(otc.available);
 
 const held = await cashier('POST','/pos/hold', {
   branchId: branch.id, warehouseId: wh.id,
@@ -77,7 +105,7 @@ const held = await cashier('POST','/pos/hold', {
 });
 check('cart held', held.ok, held.body.saleNo);
 
-const afterHold = (await cashier('GET', `/pos/search?q=Paracetamol&warehouseId=${wh.id}`)).body.find(p => p.id === otc.id);
+const afterHold = { available: await availability() };
 check('held stock is RESERVED, not sellable by another till', afterHold.available === availBefore - 3,
   `${availBefore} -> ${afterHold.available} available`);
 
@@ -86,7 +114,7 @@ check('held carts are listed', heldList.body.some(h => h.id === held.body.id), `
 
 const resumed = await cashier('POST', `/pos/held/${held.body.id}/resume`);
 check('resuming returns the cart lines', resumed.ok && resumed.body.lines.length === 1);
-const afterResume = (await cashier('GET', `/pos/search?q=Paracetamol&warehouseId=${wh.id}`)).body.find(p => p.id === otc.id);
+const afterResume = { available: await availability() };
 check('resuming releases the reservation', afterResume.available === availBefore, `${afterResume.available} available`);
 
 console.log('\n===== §22 PARTIAL REFUND =====\n');
@@ -97,7 +125,7 @@ const sale = await cashier('POST','/pos/checkout', {
 });
 check('sale completed', sale.ok, `${sale.body.saleNo} total ${sale.body.grandTotal}`);
 const soldBatch = sale.body.items[0].batchId;
-const afterSale = (await cashier('GET', `/pos/search?q=Paracetamol&warehouseId=${wh.id}`)).body.find(p => p.id === otc.id);
+const afterSale = { available: await availability() };
 
 const noReasonRefund = await cashier('POST', `/pos/sales/${sale.body.id}/refund`, {
   lines: [{ saleItemId: sale.body.items[0].id, quantity: 1 }], reason: '',
@@ -113,7 +141,7 @@ const partial = await cashier('POST', `/pos/sales/${sale.body.id}/refund`, {
   lines: [{ saleItemId: sale.body.items[0].id, quantity: 2 }], reason: 'Customer returned two unopened packs',
 });
 check('partial refund recorded', partial.body?.status === 'PARTIALLY_REFUNDED', partial.body?.status);
-const afterRefund = (await cashier('GET', `/pos/search?q=Paracetamol&warehouseId=${wh.id}`)).body.find(p => p.id === otc.id);
+const afterRefund = { available: await availability() };
 check('refunded units returned to the SAME batch', afterRefund.available === afterSale.available + 2,
   `${afterSale.available} -> ${afterRefund.available}`);
 const ledger = await admin('GET', `/inventory/ledger?batchId=${soldBatch}&pageSize=3`);

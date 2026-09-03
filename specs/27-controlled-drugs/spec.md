@@ -5,7 +5,7 @@
 
 # Controlled drugs
 
-**50 requirements: 38 implemented, 9 partial, 3 not implemented.**
+**50 requirements: 39 implemented, 8 partial, 3 not implemented.**
 
 Requirement range `PHARM-CTRL-001` – `PHARM-CTRL-050`.
 
@@ -58,7 +58,7 @@ Requirement range `PHARM-CTRL-001` – `PHARM-CTRL-050`.
 | `PHARM-CTRL-028` | 828 | Controlled register export restrictions. | IMPLEMENTED |
 | `PHARM-CTRL-029` | 829 | Controlled access logs. | IMPLEMENTED |
 | `PHARM-CTRL-030` | 830 | Suspicious transaction alerts. | IMPLEMENTED |
-| `PHARM-CTRL-031` | 831 | Excess-quantity alerts. | PARTIALLY IMPLEMENTED |
+| `PHARM-CTRL-031` | 831 | Excess-quantity alerts. | IMPLEMENTED |
 | `PHARM-CTRL-032` | 832 | Unusual-frequency alerts. | IMPLEMENTED |
 | `PHARM-CTRL-033` | 833 | Repeated-void alerts. | NOT IMPLEMENTED |
 | `PHARM-CTRL-034` | 834 | After-hours access alerts. | IMPLEMENTED |
@@ -90,13 +90,12 @@ Requirement range `PHARM-CTRL-001` – `PHARM-CTRL-050`.
 
 ## Partial
 
-9 requirement(s) work but are narrower than the feature asks:
+8 requirement(s) work but are narrower than the feature asks:
 
 - `PHARM-CTRL-008` (808) Controlled stock transfer.
 - `PHARM-CTRL-016` (816) Controlled serial tracking.
 - `PHARM-CTRL-018` (818) Shift reconciliation.
 - `PHARM-CTRL-019` (819) Physical controlled count.
-- `PHARM-CTRL-031` (831) Excess-quantity alerts.
 - `PHARM-CTRL-039` (839) Witness digital signatures.
 - `PHARM-CTRL-042` (842) Inspection readiness dashboard.
 - `PHARM-CTRL-049` (849) Compliance KPI dashboard.

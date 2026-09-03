@@ -20,18 +20,18 @@ existing or a function being written.
 
 | | |
 | --- | --- |
-| Requirements implemented | **780 / 1,000** |
-| Partially implemented | **149** |
-| Not implemented | **71** |
-| Weighted (a partial counts a half) | **854.5 / 1,000** |
-| Unit and integration tests | 325, all passing |
-| End-to-end checks | 345 across 7 suites, all passing |
+| Requirements implemented | **785 / 1,000** |
+| Partially implemented | **145** |
+| Not implemented | **70** |
+| Weighted (a partial counts a half) | **857.5 / 1,000** |
+| Unit and integration tests | 332, all passing |
+| End-to-end checks | 492 across 9 suites, all passing on a freshly seeded database |
 | Browser verification | 39 pages × 6 widths × 2 themes, 0 failures |
 | Production builds | API and web, both clean |
-| Database tables | 114, across 17 migrations |
-| API routes | 361, each served at `/api` and `/api/v1` |
-| Permissions | 202, across 12 roles |
-| Lines of TypeScript | 68,458 across the API, web and shared packages (plus 3,942 of verification tooling and 8,110 of specification) |
+| Database tables | 115, across 21 migrations |
+| API routes | 377, each served at `/api` and `/api/v1` |
+| Permissions | 203, across 12 roles |
+| Lines of TypeScript | 68,919 across the API, web and shared packages (plus 5,285 of verification tooling and 8,145 of specification) |
 
 Both feature matrices are exactly 1,000 rows and agree row for row.
 
@@ -56,6 +56,70 @@ master documents are generated from the code itself.
 
 **Verification.** Browser verification across every page, a code review and a
 security review — which between them found 26 defects, all fixed.
+
+**Dispensing.** A later pass audited the dispensing module against the code
+rather than against the matrix, and the matrix lost. Section 25 reports it.
+
+## 3a. The dispensing pass
+
+The dispensing screen could review a prescription and hand out medicine. It
+could not record one, check anything clinical, print a label, track a
+collection, issue a repeat or undo a mistake — and it read across branches.
+
+**Clinical checks (`clinical-checks.service.ts`).** Allergy, duplicate therapy,
+therapeutic class, curated interactions, maximum daily dose against the written
+regimen, paediatric suitability, renal/hepatic/pregnancy/breastfeeding cautions,
+look-alike/sound-alike, cold chain, prescription expiry, exhausted repeats and
+early repeat. Every one is advisory: none refuses a supply, because the
+pharmacist is the clinician and can see the patient. What the system insists on
+is that a CRITICAL warning cannot be passed silently — it needs a typed reason,
+kept on the dispensing and in the audit trail. `POST /dispensing/preview` runs
+the same checks the supply will run, so the screen cannot show one thing and the
+server enforce another.
+
+**The allergy check is a word match against a free-text field, and says so.** It
+is a prompt to look, not a clinical determination.
+
+**Six defects found in code that was already marked done:**
+
+| Defect | What it did |
+| --- | --- |
+| Idempotency key was `dsp-${id}-${Date.now()}` | A different key on every click, so a retry after a network error that had in fact succeeded dispensed the medicine to the patient a second time |
+| `patientId` was taken from the request, not checked | A supply could name one patient while its prescription named another |
+| Any product could be dispensed against any line | "Do not substitute" was recorded and never read |
+| `Product.maxDispenseQty` was never read | The catalogue could set a ceiling and the counter would hand out any quantity |
+| Prescriptions and dispensings were organisation-wide | Clinical data about a named patient, readable from any branch |
+| `patients.create` skipped the clinical-role guard `patients.update` applies | Allergies and notes could be written by a user who may not read them |
+
+**Two defects outside dispensing, found by testing it:**
+
+- `POST /admin/settings` wrote the row directly rather than through
+  `ConfigService`. The value was never validated against its definition, and the
+  configuration cache was never invalidated — so an administrator changed a
+  setting and the system went on using the old value until the API restarted.
+  The write now goes through the same path the batch save uses.
+- **The controlled register could never be opened.** Only dispensing wrote
+  register entries, and dispensing refuses to take the running balance negative.
+  A pharmacy holding controlled stock could therefore never make its first
+  supply. `POST /controlled-register/opening` records an opening balance read
+  from the stock the branch actually holds — not typed — once per product and
+  branch. Goods receipt of a controlled product still does not append a receipt
+  entry; that is stated in section 22 rather than fixed here.
+
+**Lifecycle.** Prescription entry with per-line directions and "do not
+substitute"; validity dates computed where the prescriber wrote none; an expired
+prescription cannot be approved; a daily job expires undispensed ones and leaves
+part-supplied ones alone; a queue ordered urgent first then longest waiting;
+ready-for-collection and collection recording who took it; repeats issued as new
+prescriptions pointing back at the original; reversal that posts stock back
+against the original picks, restores what is outstanding and appends a
+controlled-register reversal, refusing medicine the patient has already
+collected.
+
+**A printable label**, assembled server-side in one read so the product, batch,
+expiry and directions on it always belong to the same row, with auxiliary and
+cold-chain wording, substitution notice, and reprints counted rather than
+prevented.
 
 ## 4. Architecture
 
@@ -379,7 +443,7 @@ accusation dressed as a system output is how a colleague gets wrongly suspended.
 
 ## 22. What is not done
 
-**71 requirements are not implemented and 149 are partial.** All are listed in
+**70 requirements are not implemented and 145 are partial.** All are listed in
 `specs/KNOWN_EXTERNAL_DEPENDENCIES.md` with the reason and the action.
 
 Grouped by cause:
@@ -415,38 +479,72 @@ than quietly carried:
   `Intl.DateTimeFormat` before taking the hour, in
   `controlled-register.service.ts` and `cron-window.ts`.
 
-**One test gap:** the controlled-register reversal guard is not exercised
-end-to-end, because no suite creates a controlled dispensing and the seed leaves
-the register empty. The guard is covered by reasoning and by unit-level checks
-only. *Action:* extend `e2e-lifecycle.mjs` with a prescription → validate →
-dispense flow against a controlled product, then reverse the resulting entry.
+**The controlled-register test gap is closed.** `e2e-dispensing.mjs` opens the
+register, makes a witnessed controlled supply and reverses the entry;
+`e2e-lifecycle.mjs`'s reversal guard now runs instead of skipping.
+
+**Still open in the controlled register:** goods receipt of a controlled product
+does not append a RECEIPT entry, so the register only tracks what leaves and the
+opening balance has to be recorded deliberately. *Action:* call
+`ControlledRegisterService.record` from `receiving.service.ts` for controlled
+lines, and decide there whether the goods-receipt document's own signatures
+satisfy `controlled.requireDualAuthorization` or whether receiving a controlled
+line should ask for a witness of its own. Left out of the dispensing pass
+because it changes the receiving path, which has its own suites.
+
+**Two dispensing requirements are partial, and were marked done on evidence
+that did not exist:**
+
+- **Batch scan before dispensing.** The preview names the batch and expiry FEFO
+  will pick and a supplied batch is validated against stock, but there is no
+  scan-to-confirm step at the point of supply. The matrix claimed one.
+- **Product scan verification.** The supplied product is now checked against the
+  prescription line and a substitution needs a reason, but the check is not
+  driven by a scan. Before this release the product was not checked against the
+  line at all.
 
 ## 23. Verification performed for this report
 
 Every claim above was checked, not recalled:
 
-- 325 unit and integration tests — run, all passing.
-- Seven end-to-end suites — run against a database seeded from empty, all
-  passing.
+- 332 unit and integration tests — run, all passing.
+- Nine end-to-end suites, 492 checks — run in sequence against a database
+  seeded from empty, all passing with nothing skipped.
 - Browser verification — run, 0 failures across 39 pages, 6 widths, 2 themes.
 - Both production builds — run, clean.
 - Migrations — applied to an empty database, then seeded and finalised.
-- Permission sync — confirmed a no-op on a fresh seed, and confirmed to add 4
-  permissions and 23 role grants on a database predating them.
-- Audit chain — verified over 954 entries after a full run.
+- Permission sync — confirmed to add the one new permission on a database
+  predating it.
+- Audit chain — verified after a full run.
 - Feature counts — recomputed from the matrices, which agree row for row at
   exactly 1,000 rows.
 
 ## 24. Honest notes on this report
 
-The 780/1,000 figure counts a requirement as implemented when it has schema,
+The 785/1,000 figure counts a requirement as implemented when it has schema,
 service, API, permission, interface and evidence — not when a screen exists. The
 count went from 742 to 780 because 38 features were built, and both matrices
 were regenerated from the code rather than edited by hand.
 
+**The dispensing pass moved it to 785, and two of its eighteen changes were
+downward.** Re-auditing that module found rows marked IMPLEMENTED whose evidence
+named a setting with no key, a field nothing read, and a scan step nobody had
+built. Those rows are corrected here in the direction the code actually
+supports. A net gain of five, from a pass that closed a dozen real gaps, is what
+an honest re-audit looks like: the number moved less than the work did, because
+part of the work was undoing an earlier overstatement. A matrix that agrees with
+itself rather than with the code is worse than no matrix.
+
+The count itself was also wrong in the tooling. `recount.mjs` counted a status
+by matching it anywhere in the row and then subtracting the other statuses to
+undo an overlap that did not exist, and it read the wrong column in one of the
+two matrices. It now reads the one column that carries the answer, in whichever
+position that matrix puts it, and refuses to report a total that is not 1,000.
+
 The reviews found 26 defects in work this session produced or touched, and every
 one is listed above rather than summarised away. Three were authorization holes
-that would have let one branch destroy another's stock. Finding them is the
-system working as intended; shipping without looking would have been the failure.
+that would have let one branch destroy another's stock. The dispensing pass
+added eight more, two of them outside dispensing. Finding them is the system
+working as intended; shipping without looking would have been the failure.
 
-Two known defects and one test gap remain open, with the exact action for each.
+Three known defects remain open, with the exact action for each.

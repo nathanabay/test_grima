@@ -5,7 +5,7 @@
 
 # Analytics
 
-**50 requirements: 44 implemented, 4 partial, 2 not implemented.**
+**50 requirements: 45 implemented, 3 partial, 2 not implemented.**
 
 Requirement range `PHARM-ANLY-001` – `PHARM-ANLY-050`.
 
@@ -54,7 +54,7 @@ Requirement range `PHARM-ANLY-001` – `PHARM-ANLY-050`.
 | `PHARM-ANLY-027` | 877 | Supplier KPI analytics. | IMPLEMENTED |
 | `PHARM-ANLY-028` | 878 | Branch KPI analytics. | IMPLEMENTED |
 | `PHARM-ANLY-029` | 879 | Warehouse KPI analytics. | IMPLEMENTED |
-| `PHARM-ANLY-030` | 880 | Pharmacist productivity analytics. | PARTIALLY IMPLEMENTED |
+| `PHARM-ANLY-030` | 880 | Pharmacist productivity analytics. | IMPLEMENTED |
 | `PHARM-ANLY-031` | 881 | Cashier productivity analytics. | PARTIALLY IMPLEMENTED |
 | `PHARM-ANLY-032` | 882 | Demand forecasting. | IMPLEMENTED |
 | `PHARM-ANLY-033` | 883 | Moving-average forecast. | IMPLEMENTED |
@@ -86,9 +86,8 @@ Requirement range `PHARM-ANLY-001` – `PHARM-ANLY-050`.
 
 ## Partial
 
-4 requirement(s) work but are narrower than the feature asks:
+3 requirement(s) work but are narrower than the feature asks:
 
 - `PHARM-ANLY-020` (870) Service-level calculation.
 - `PHARM-ANLY-025` (875) Waste-rate calculation.
-- `PHARM-ANLY-030` (880) Pharmacist productivity analytics.
 - `PHARM-ANLY-031` (881) Cashier productivity analytics.

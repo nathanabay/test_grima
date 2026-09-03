@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { ConfigService } from '../../common/config/config.service';
 import { AuthService } from '../auth/auth.service';
 import { AuthenticatedUser } from '../../common/decorators';
 
@@ -10,6 +11,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly config: ConfigService,
   ) {}
 
   // ---- Organization hierarchy ----
@@ -327,16 +329,28 @@ export class AdminService {
     };
   }
 
+  /**
+   * Change one administrator setting.
+   *
+   * This used to write the row directly. Two things followed from that, and
+   * both are the failure the settings catalogue exists to prevent: the value
+   * was never validated against its definition, so a number outside its bounds
+   * or of the wrong type was accepted; and ConfigService's cache was never
+   * invalidated, so the system went on using the old value until the API was
+   * restarted. The screen agreed with the administrator and the system ignored
+   * them.
+   *
+   * The write now goes through ConfigService, which validates, stores and
+   * invalidates — the same path the configuration screen's batch save uses.
+   */
   async setSetting(key: string, value: unknown, actor: AuthenticatedUser) {
     const org = await this.prisma.organization.findFirstOrThrow();
-    const before = await this.prisma.systemSetting.findUnique({
-      where: { organizationId_key: { organizationId: org.id, key } },
-    });
+    const [applied] = await this.config.setMany({ [key]: value }, org.id);
 
-    const setting = await this.prisma.systemSetting.upsert({
+    // updatedById is not part of the shared write path, so it is stamped here.
+    const setting = await this.prisma.systemSetting.update({
       where: { organizationId_key: { organizationId: org.id, key } },
-      create: { organizationId: org.id, key, value: value as any, updatedById: actor.id },
-      update: { value: value as any, updatedById: actor.id },
+      data: { updatedById: actor.id },
     });
 
     await this.audit.record({
@@ -345,8 +359,8 @@ export class AdminService {
       action: 'EDIT',
       entityType: 'SystemSetting',
       entityId: setting.id,
-      previousValue: before?.value ?? null,
-      newValue: { key, value },
+      previousValue: applied.previous ?? null,
+      newValue: { key, value: applied.value },
     });
 
     return setting;

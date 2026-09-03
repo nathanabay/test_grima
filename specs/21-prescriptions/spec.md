@@ -5,7 +5,7 @@
 
 # Prescriptions
 
-**50 requirements: 42 implemented, 8 partial, 0 not implemented.**
+**50 requirements: 44 implemented, 6 partial, 0 not implemented.**
 
 Requirement range `PHARM-RX-001` – `PHARM-RX-050`.
 
@@ -16,10 +16,15 @@ Requirement range `PHARM-RX-001` – `PHARM-RX-050`.
 
 ## Routes
 
+- `GET /prescriptions/queue` — dispensing.prescription.READ
 - `GET /prescriptions` — dispensing.prescription.READ
 - `GET /prescriptions/:id` — dispensing.prescription.READ
 - `POST /prescriptions` — dispensing.prescription.CREATE
 - `POST /prescriptions/:id/review` — dispensing.prescription.APPROVE
+- `POST /prescriptions/:id/cancel` — dispensing.prescription.CANCEL
+- `POST /prescriptions/:id/ready` — dispensing.dispensing.CREATE
+- `POST /prescriptions/:id/collect` — dispensing.dispensing.CREATE
+- `POST /prescriptions/:id/refill` — dispensing.prescription.CREATE
 - `GET /fhir/MedicationRequest/:prescriptionId` — dispensing.prescription.READ
 
 ## Requirements
@@ -54,17 +59,17 @@ Requirement range `PHARM-RX-001` – `PHARM-RX-050`.
 | `PHARM-RX-026` | 626 | Prescription cancellation. | IMPLEMENTED |
 | `PHARM-RX-027` | 627 | Prescription amendment history. | PARTIALLY IMPLEMENTED |
 | `PHARM-RX-028` | 628 | Dispensing queue. | IMPLEMENTED |
-| `PHARM-RX-029` | 629 | Dispensing priority. | PARTIALLY IMPLEMENTED |
+| `PHARM-RX-029` | 629 | Dispensing priority. | IMPLEMENTED |
 | `PHARM-RX-030` | 630 | FEFO dispensing. | IMPLEMENTED |
-| `PHARM-RX-031` | 631 | Batch scan before dispensing. | IMPLEMENTED |
-| `PHARM-RX-032` | 632 | Product scan verification. | IMPLEMENTED |
+| `PHARM-RX-031` | 631 | Batch scan before dispensing. | PARTIALLY IMPLEMENTED |
+| `PHARM-RX-032` | 632 | Product scan verification. | PARTIALLY IMPLEMENTED |
 | `PHARM-RX-033` | 633 | Patient verification. | IMPLEMENTED |
 | `PHARM-RX-034` | 634 | Quantity verification. | IMPLEMENTED |
 | `PHARM-RX-035` | 635 | Dispensing-label generation. | IMPLEMENTED |
 | `PHARM-RX-036` | 636 | Patient-instruction printing. | IMPLEMENTED |
 | `PHARM-RX-037` | 637 | Dispensing receipt. | IMPLEMENTED |
 | `PHARM-RX-038` | 638 | Dispensing audit trail. | IMPLEMENTED |
-| `PHARM-RX-039` | 639 | Dispensing reversal workflow. | PARTIALLY IMPLEMENTED |
+| `PHARM-RX-039` | 639 | Dispensing reversal workflow. | IMPLEMENTED |
 | `PHARM-RX-040` | 640 | Wrong-item prevention. | IMPLEMENTED |
 | `PHARM-RX-041` | 641 | Wrong-strength warning. | PARTIALLY IMPLEMENTED |
 | `PHARM-RX-042` | 642 | Duplicate-dispense detection. | IMPLEMENTED |
@@ -74,18 +79,16 @@ Requirement range `PHARM-RX-001` – `PHARM-RX-050`.
 | `PHARM-RX-046` | 646 | Pharmacist notes. | IMPLEMENTED |
 | `PHARM-RX-047` | 647 | Dispensing timeline. | IMPLEMENTED |
 | `PHARM-RX-048` | 648 | Prescription search. | IMPLEMENTED |
-| `PHARM-RX-049` | 649 | Dispensing analytics. | PARTIALLY IMPLEMENTED |
-| `PHARM-RX-050` | 650 | Pharmacy workload dashboard. | PARTIALLY IMPLEMENTED |
+| `PHARM-RX-049` | 649 | Dispensing analytics. | IMPLEMENTED |
+| `PHARM-RX-050` | 650 | Pharmacy workload dashboard. | IMPLEMENTED |
 
 ## Partial
 
-8 requirement(s) work but are narrower than the feature asks:
+6 requirement(s) work but are narrower than the feature asks:
 
 - `PHARM-RX-006` (606) Prescriber records.
 - `PHARM-RX-008` (608) Healthcare-facility records.
 - `PHARM-RX-027` (627) Prescription amendment history.
-- `PHARM-RX-029` (629) Dispensing priority.
-- `PHARM-RX-039` (639) Dispensing reversal workflow.
+- `PHARM-RX-031` (631) Batch scan before dispensing.
+- `PHARM-RX-032` (632) Product scan verification.
 - `PHARM-RX-041` (641) Wrong-strength warning.
-- `PHARM-RX-049` (649) Dispensing analytics.
-- `PHARM-RX-050` (650) Pharmacy workload dashboard.

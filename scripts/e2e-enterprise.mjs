@@ -42,6 +42,26 @@ function client(token) {
 }
 const num = (v) => Number(v ?? 0);
 
+
+/**
+ * A genuinely over-the-counter line with stock in this warehouse.
+ *
+ * These suites used to search for "Paracetamol" by name. The seed does not put
+ * an over-the-counter paracetamol in every branch store, so on a freshly seeded
+ * database the lookup returned nothing and the suite fell over on a data-shape
+ * accident rather than on anything it was testing. The search term is broad now
+ * and the assertions do the choosing.
+ */
+async function findOtc(callAs, warehouseId, minimum = 1) {
+  for (const term of ['a', 'e', 'i', 'o', 'u']) {
+    const results = (await callAs('GET', `/pos/search?q=${term}&warehouseId=${warehouseId}`)).body;
+    const found = (Array.isArray(results) ? results : [])
+      .find((p) => !p.requiresPrescription && !p.isControlled && Number(p.available) > minimum);
+    if (found) return found;
+  }
+  return null;
+}
+
 const admin = client(await login('admin'));
 const cashier = client(await login('cashier'));
 const pharmacist = client(await login('pharmacist'));
@@ -147,13 +167,38 @@ check('every system account role is mapped', mapping.every((m) => !m.problem),
 
 const tb = (await admin('GET', '/accounting/trial-balance')).body;
 check('the trial balance balances', tb.balanced, `debit ${tb.totalDebit} credit ${tb.totalCredit}`);
-check('the ledger carries the seeded activity', tb.rows.length > 3, `${tb.rows.length} accounts with movement`);
 
 // Other suites may have left movements behind, so this posts what is
 // outstanding and asserts the queue drains rather than assuming it is empty.
+//
+// The posting run is capped per call, so one call does not necessarily empty a
+// backlog. Draining in a loop is what the scheduler does hour after hour; the
+// assertion is still that the queue reaches zero, not that it shrinks.
 const pendingBefore = (await admin('GET', '/accounting/unposted?limit=200')).body;
-const drain = (await admin('POST', '/accounting/post-pending', { limit: 500 })).body;
-const pendingAfter = (await admin('GET', '/accounting/unposted?limit=200')).body;
+let drain = { movements: 0, sales: 0, failed: 0, errors: [] };
+let pendingAfter = pendingBefore;
+for (let pass = 0; pass < 20; pass++) {
+  const run = (await admin('POST', '/accounting/post-pending', { limit: 500 })).body;
+  drain = {
+    movements: drain.movements + (run.movements ?? 0),
+    sales: drain.sales + (run.sales ?? 0),
+    failed: drain.failed + (run.failed ?? 0),
+    errors: [...drain.errors, ...(run.errors ?? [])],
+  };
+  pendingAfter = (await admin('GET', '/accounting/unposted?limit=200')).body;
+  if (pendingAfter.total === 0) break;
+  // A pass that posts nothing while work remains is a stuck queue, not a cap.
+  if (!(run.movements ?? 0) && !(run.sales ?? 0)) break;
+}
+// Asserted after the drain: on a freshly seeded database nothing has been
+// posted yet, so a trial balance read before posting is empty by design and
+// says nothing about whether posting works.
+const tbPosted = (await admin('GET', '/accounting/trial-balance')).body;
+check('the ledger carries the seeded activity once posted', tbPosted.rows.length > 3,
+  `${tbPosted.rows.length} accounts with movement`);
+check('it still balances after posting', tbPosted.balanced,
+  `debit ${tbPosted.totalDebit} credit ${tbPosted.totalCredit}`);
+
 check('every stock movement and sale reaches the ledger', pendingAfter.total === 0,
   `${pendingBefore.total} outstanding -> posted ${drain.movements} movement(s) and ${drain.sales} sale(s) -> ${pendingAfter.total} left`);
 check('posting reports its failures rather than swallowing them',
@@ -225,6 +270,14 @@ check('a preview says why non-matching subjects were skipped',
   Array.isArray(preview.nearMisses), `${preview.nearMisses?.length ?? 0} near miss(es)`);
 check('previewing does not act', (await admin('GET', '/automation/runs?limit=1')).body.length === runsBefore ||
   preview.matched === 0);
+
+// Run every rule once. Previewing deliberately does not act, so on a freshly
+// seeded database there is nothing in the run history until something runs —
+// the suite has to do that itself rather than rely on the hourly job having
+// already fired, or on another suite having left runs behind.
+const ranAll = await admin('POST', '/automation/run-all', {});
+check('every active rule can be run on demand', ranAll.ok,
+  `HTTP ${ranAll.status}`);
 
 const runs = (await admin('GET', '/automation/runs?limit=20')).body;
 check('runs are recorded with what they scanned and did', runs.length > 0 &&
@@ -547,8 +600,11 @@ if (anyBatch) {
 console.log('\nPAYMENT CAPTURE (no gateway is connected)');
 // ============================================================
 
-const otc = (await till('GET', `/pos/search?q=Paracetamol&warehouseId=${tillWarehouse.id}`)).body
-  .find((p) => !p.requiresPrescription && !p.isControlled && Number(p.available) > 5);
+const otc = await findOtc(till, tillWarehouse.id, 5);
+if (!otc) {
+  console.error(`\nNo over-the-counter product with stock in ${tillWarehouse.name} — cannot exercise the till.`);
+  process.exit(1);
+}
 
 const cardNoRef = await till('POST', '/pos/checkout', {
   branchId: tillBranch.id,

@@ -2776,6 +2776,54 @@
       "relation": true
      },
      {
+      "name": "maxDailyDose",
+      "type": "Decimal?",
+      "attributes": "@db.Decimal(18, 4)",
+      "doc": "The most that may be taken in 24 hours, in base units. Used to warn when a prescribed regimen exceeds it.",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "renalCaution",
+      "type": "Boolean",
+      "attributes": "@default(false)",
+      "doc": "Cautions surfaced at the point of dispensing. Advisory: they prompt the pharmacist to think, and are never a substitute for their judgement.",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "hepaticCaution",
+      "type": "Boolean",
+      "attributes": "@default(false)",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "pregnancyCaution",
+      "type": "Boolean",
+      "attributes": "@default(false)",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "breastfeedingCaution",
+      "type": "Boolean",
+      "attributes": "@default(false)",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "auxiliaryLabels",
+      "type": "String[]",
+      "attributes": "@default([])",
+      "doc": "Auxiliary label text: \"Take with food\", \"May cause drowsiness\".",
+      "optional": false,
+      "relation": true
+     },
+     {
       "name": "isAgeRestricted",
       "type": "Boolean",
       "attributes": "@default(false)",
@@ -8465,6 +8513,62 @@
       "relation": true
      },
      {
+      "name": "validUntil",
+      "type": "DateTime?",
+      "attributes": "",
+      "doc": "After this date the prescription may not be dispensed. Prescriptions do expire, and one written two years ago is not a licence to hand out medicine today.",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "isUrgent",
+      "type": "Boolean",
+      "attributes": "@default(false)",
+      "doc": "Moves the prescription up the queue. Set by the pharmacist, not the patient, so \"urgent\" keeps meaning something.",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "readyAt",
+      "type": "DateTime?",
+      "attributes": "",
+      "doc": "When everything on it was made up and is waiting to be collected.",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "collectedAt",
+      "type": "DateTime?",
+      "attributes": "",
+      "doc": "",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "collectedBy",
+      "type": "String?",
+      "attributes": "",
+      "doc": "",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "notes",
+      "type": "String?",
+      "attributes": "",
+      "doc": "",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "refillOfId",
+      "type": "String?",
+      "attributes": "@db.Uuid",
+      "doc": "The prescription this one was issued as a repeat of. A refill is a new prescription rather than a counter on the old one, so each supply keeps its own dates, its own items and its own audit trail.",
+      "optional": true,
+      "relation": true
+     },
+     {
       "name": "createdAt",
       "type": "DateTime",
       "attributes": "@default(now())",
@@ -8503,11 +8607,29 @@
       "doc": "",
       "optional": false,
       "relation": true
+     },
+     {
+      "name": "refillOf",
+      "type": "Prescription?",
+      "attributes": "@relation(\"PrescriptionRefills\", fields: [refillOfId], references: [id])",
+      "doc": "",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "refills",
+      "type": "Prescription[]",
+      "attributes": "@relation(\"PrescriptionRefills\")",
+      "doc": "",
+      "optional": false,
+      "relation": true
      }
     ],
     "indexes": [
      "@@index([status])",
      "@@index([patientId])",
+     "@@index([branchId, status])",
+     "@@index([validUntil])",
      "@@map(\"prescriptions\")"
     ]
    },
@@ -8594,6 +8716,14 @@
       "attributes": "",
       "doc": "",
       "optional": true,
+      "relation": true
+     },
+     {
+      "name": "allowSubstitution",
+      "type": "Boolean",
+      "attributes": "@default(true)",
+      "doc": "Whether the pharmacist may supply a generic equivalent. Prescribers write \"do not substitute\" for a reason, so it is recorded per line.",
+      "optional": false,
       "relation": true
      },
      {
@@ -8687,6 +8817,62 @@
       "relation": true
      },
      {
+      "name": "counsellingNotes",
+      "type": "String?",
+      "attributes": "",
+      "doc": "What the pharmacist actually told the patient. A counselling record that only says \"counselled\" records nothing.",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "witnessedById",
+      "type": "String?",
+      "attributes": "@db.Uuid",
+      "doc": "The second person present for a controlled-drug supply.",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "overriddenWarnings",
+      "type": "Json?",
+      "attributes": "",
+      "doc": "Clinical warnings that were raised and overridden, with the reason for each. An override with no reason is indistinguishable from not looking.",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "labelPrintCount",
+      "type": "Int",
+      "attributes": "@default(0)",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "reversedAt",
+      "type": "DateTime?",
+      "attributes": "",
+      "doc": "",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "reversedById",
+      "type": "String?",
+      "attributes": "@db.Uuid",
+      "doc": "",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "reversalReason",
+      "type": "String?",
+      "attributes": "",
+      "doc": "",
+      "optional": true,
+      "relation": true
+     },
+     {
       "name": "createdAt",
       "type": "DateTime",
       "attributes": "@default(now())",
@@ -8713,6 +8899,7 @@
     ],
     "indexes": [
      "@@index([patientId])",
+     "@@index([branchId, dispensedAt])",
      "@@map(\"dispensings\")"
     ]
    },
@@ -8789,6 +8976,22 @@
       "name": "overrideById",
       "type": "String?",
       "attributes": "@db.Uuid",
+      "doc": "",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "substitutedForProductId",
+      "type": "String?",
+      "attributes": "@db.Uuid",
+      "doc": "Set when the pharmacist supplied an equivalent instead of the product the prescriber wrote. The prescribed product is kept, not overwritten, so the record still shows what was asked for as well as what was handed over.",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "substitutionReason",
+      "type": "String?",
+      "attributes": "",
       "doc": "",
       "optional": true,
       "relation": true
@@ -14651,9 +14854,11 @@
      "UNDER_REVIEW",
      "APPROVED",
      "PARTIALLY_DISPENSED",
+     "READY_FOR_COLLECTION",
      "DISPENSED",
      "REJECTED",
-     "CANCELLED"
+     "CANCELLED",
+     "EXPIRED"
     ]
    },
    {
@@ -15042,6 +15247,22 @@
    "name": "20260903043627_pos_cash_and_sale_limits",
    "timestamp": "20260903043627",
    "label": "pos cash and sale limits",
+   "statements": 5,
+   "destructive": false,
+   "addsNotNullWithoutDefault": false
+  },
+  {
+   "name": "20260903073405_dispensing_clinical_safety",
+   "timestamp": "20260903073405",
+   "label": "dispensing clinical safety",
+   "statements": 7,
+   "destructive": false,
+   "addsNotNullWithoutDefault": false
+  },
+  {
+   "name": "20260903074319_dispensing_refills_and_substitution",
+   "timestamp": "20260903074319",
+   "label": "dispensing refills and substitution",
    "statements": 5,
    "destructive": false,
    "addsNotNullWithoutDefault": false
@@ -15542,6 +15763,34 @@
   },
   {
    "method": "GET",
+   "path": "/api/dispensing/:id/label"
+  },
+  {
+   "method": "POST",
+   "path": "/api/dispensing/:id/label"
+  },
+  {
+   "method": "POST",
+   "path": "/api/dispensing/:id/reverse"
+  },
+  {
+   "method": "GET",
+   "path": "/api/dispensing/patient/:patientId"
+  },
+  {
+   "method": "POST",
+   "path": "/api/dispensing/preview"
+  },
+  {
+   "method": "GET",
+   "path": "/api/dispensing/summary/today"
+  },
+  {
+   "method": "GET",
+   "path": "/api/dispensing/workload"
+  },
+  {
+   "method": "GET",
    "path": "/api/disposals"
   },
   {
@@ -15938,7 +16187,27 @@
   },
   {
    "method": "POST",
+   "path": "/api/prescriptions/:id/cancel"
+  },
+  {
+   "method": "POST",
+   "path": "/api/prescriptions/:id/collect"
+  },
+  {
+   "method": "POST",
+   "path": "/api/prescriptions/:id/ready"
+  },
+  {
+   "method": "POST",
+   "path": "/api/prescriptions/:id/refill"
+  },
+  {
+   "method": "POST",
    "path": "/api/prescriptions/:id/review"
+  },
+  {
+   "method": "GET",
+   "path": "/api/prescriptions/queue"
   },
   {
    "method": "GET",
@@ -17885,6 +18154,18 @@
    "tag": "Prescriptions & Dispensing",
    "method": "GET",
    "controllerPath": "",
+   "routePath": "prescriptions/queue",
+   "permissions": [
+    "dispensing.prescription.READ"
+   ],
+   "isPublic": false,
+   "summary": "The dispensing queue: urgent first, then longest waiting, with waiting times"
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "GET",
+   "controllerPath": "",
    "routePath": "prescriptions",
    "permissions": [
     "dispensing.prescription.READ"
@@ -17933,12 +18214,108 @@
    "tag": "Prescriptions & Dispensing",
    "method": "POST",
    "controllerPath": "",
+   "routePath": "prescriptions/:id/cancel",
+   "permissions": [
+    "dispensing.prescription.CANCEL"
+   ],
+   "isPublic": false,
+   "summary": "Cancel a prescription nothing has been supplied against"
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "POST",
+   "controllerPath": "",
+   "routePath": "prescriptions/:id/ready",
+   "permissions": [
+    "dispensing.dispensing.CREATE"
+   ],
+   "isPublic": false,
+   "summary": "Made up and on the collection shelf"
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "POST",
+   "controllerPath": "",
+   "routePath": "prescriptions/:id/collect",
+   "permissions": [
+    "dispensing.dispensing.CREATE"
+   ],
+   "isPublic": false,
+   "summary": "Handed over, recording who collected it"
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "POST",
+   "controllerPath": "",
+   "routePath": "prescriptions/:id/refill",
+   "permissions": [
+    "dispensing.prescription.CREATE"
+   ],
+   "isPublic": false,
+   "summary": "Issue the next repeat as a new prescription, within the allowance on the original"
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "POST",
+   "controllerPath": "",
+   "routePath": "dispensing/preview",
+   "permissions": [
+    "dispensing.dispensing.READ"
+   ],
+   "isPublic": false,
+   "summary": "Run the clinical checks and show what FEFO would allocate, without dispensing anything"
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "POST",
+   "controllerPath": "",
    "routePath": "dispensing",
    "permissions": [
     "dispensing.dispensing.CREATE"
    ],
    "isPublic": false,
    "summary": "Dispense medicines using FEFO allocation, with safety and controlled-drug checks"
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "GET",
+   "controllerPath": "",
+   "routePath": "dispensing/summary/today",
+   "permissions": [
+    "dispensing.dispensing.READ"
+   ],
+   "isPublic": false,
+   "summary": null
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "GET",
+   "controllerPath": "",
+   "routePath": "dispensing/workload",
+   "permissions": [
+    "dispensing.dispensing.READ"
+   ],
+   "isPublic": false,
+   "summary": "Dispensing volume per pharmacist — a workload measure, not a score"
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "GET",
+   "controllerPath": "",
+   "routePath": "dispensing/patient/:patientId",
+   "permissions": [
+    "dispensing.dispensing.READ"
+   ],
+   "isPublic": false,
+   "summary": "What this patient has been supplied, newest first"
   },
   {
    "module": "dispensing",
@@ -17963,6 +18340,42 @@
    ],
    "isPublic": false,
    "summary": null
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "POST",
+   "controllerPath": "",
+   "routePath": "dispensing/:id/reverse",
+   "permissions": [
+    "dispensing.dispensing.CANCEL"
+   ],
+   "isPublic": false,
+   "summary": "Reverse a dispensing: put the stock back, restore what is outstanding, and append a "
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "GET",
+   "controllerPath": "",
+   "routePath": "dispensing/:id/label",
+   "permissions": [
+    "dispensing.dispensing.PRINT"
+   ],
+   "isPublic": false,
+   "summary": "Everything the dispensing label needs — product, batch, expiry, directions and "
+  },
+  {
+   "module": "dispensing",
+   "tag": "Prescriptions & Dispensing",
+   "method": "POST",
+   "controllerPath": "",
+   "routePath": "dispensing/:id/label",
+   "permissions": [
+    "dispensing.dispensing.PRINT"
+   ],
+   "isPublic": false,
+   "summary": "Count a label print. Reprints are recorded, not prevented."
   },
   {
    "module": "dispensing",
@@ -21156,7 +21569,8 @@
     "actions": [
      "CREATE",
      "READ",
-     "PRINT"
+     "PRINT",
+     "CANCEL"
     ]
    },
    {
@@ -21496,6 +21910,7 @@
    "dispensing.dispensing.CREATE",
    "dispensing.dispensing.READ",
    "dispensing.dispensing.PRINT",
+   "dispensing.dispensing.CANCEL",
    "dispensing.controlled.CREATE",
    "dispensing.controlled.READ",
    "dispensing.controlled.PRINT",
@@ -21705,6 +22120,7 @@
      "dispensing.dispensing.CREATE",
      "dispensing.dispensing.READ",
      "dispensing.dispensing.PRINT",
+     "dispensing.dispensing.CANCEL",
      "dispensing.controlled.CREATE",
      "dispensing.controlled.READ",
      "dispensing.controlled.PRINT",
@@ -21912,6 +22328,7 @@
      "dispensing.dispensing.CREATE",
      "dispensing.dispensing.READ",
      "dispensing.dispensing.PRINT",
+     "dispensing.dispensing.CANCEL",
      "dispensing.controlled.CREATE",
      "dispensing.controlled.READ",
      "dispensing.controlled.PRINT",
@@ -21982,6 +22399,7 @@
      "dispensing.dispensing.CREATE",
      "dispensing.dispensing.READ",
      "dispensing.dispensing.PRINT",
+     "dispensing.dispensing.CANCEL",
      "dispensing.controlled.CREATE",
      "dispensing.controlled.READ",
      "dispensing.controlled.PRINT",
@@ -22434,6 +22852,7 @@
      "dispensing.dispensing.CREATE",
      "dispensing.dispensing.READ",
      "dispensing.dispensing.PRINT",
+     "dispensing.dispensing.CANCEL",
      "dispensing.controlled.CREATE",
      "dispensing.controlled.READ",
      "dispensing.controlled.PRINT",
@@ -22462,7 +22881,7 @@
   ]
  },
  "settings": {
-  "count": 68,
+  "count": 72,
   "notEnforced": 21
  },
  "testCountsFrom": "jest --json",
@@ -22619,7 +23038,7 @@
    "suites": [
     "Settings catalogue (§65)"
    ],
-   "cases": 70,
+   "cases": 73,
    "integration": false
   },
   {
@@ -22641,8 +23060,12 @@
    "checks": 24
   },
   {
+   "file": "e2e-dispensing.mjs",
+   "checks": 91
+  },
+  {
    "file": "e2e-enterprise.mjs",
-   "checks": 94
+   "checks": 96
   },
   {
    "file": "e2e-lifecycle.mjs",

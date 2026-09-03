@@ -1,14 +1,14 @@
 {
- "generated": "2026-09-03T04:54:57.994Z",
+ "generated": "2026-09-03T09:17:55.563Z",
  "totals": {
   "requirements": 1000,
-  "implemented": 780,
-  "partial": 149,
-  "notImplemented": 71,
-  "withNamedTests": 929,
+  "implemented": 785,
+  "partial": 145,
+  "notImplemented": 70,
+  "withNamedTests": 930,
   "implementedWithoutNamedTests": 0,
-  "unitAndIntegrationCases": 328,
-  "endToEndChecks": 379,
+  "unitAndIntegrationCases": 331,
+  "endToEndChecks": 472,
   "pagesVerifiedInBrowser": 43
  },
  "suites": [
@@ -178,7 +178,7 @@
    "id": "settings-enforced",
    "kind": "unit",
    "path": "apps/api/test/settings-enforced.spec.ts",
-   "cases": 70,
+   "cases": 73,
    "describes": [
     "Settings catalogue (§65)"
    ]
@@ -207,10 +207,17 @@
    "describes": []
   },
   {
+   "id": "dispensing",
+   "kind": "end-to-end",
+   "path": "scripts/e2e-dispensing.mjs",
+   "cases": 91,
+   "describes": []
+  },
+  {
    "id": "enterprise",
    "kind": "end-to-end",
    "path": "scripts/e2e-enterprise.mjs",
-   "cases": 94,
+   "cases": 96,
    "describes": []
   },
   {
@@ -8994,9 +9001,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9054,21 +9061,21 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
   "PHARM-RX-029": {
    "number": 629,
    "feature": "Dispensing priority.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "named": "e2e-dispensing",
+     "partial": false,
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9087,24 +9094,24 @@
   "PHARM-RX-031": {
    "number": 631,
    "feature": "Batch scan before dispensing.",
-   "status": "IMPLEMENTED",
+   "status": "PARTIALLY IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
   "PHARM-RX-032": {
    "number": 632,
    "feature": "Product scan verification.",
-   "status": "IMPLEMENTED",
+   "status": "PARTIALLY IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9114,9 +9121,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9138,9 +9145,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9150,9 +9157,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9183,12 +9190,12 @@
   "PHARM-RX-039": {
    "number": 639,
    "feature": "Dispensing reversal workflow.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "named": "e2e-dispensing",
+     "partial": false,
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9198,9 +9205,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9234,9 +9241,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9246,9 +9253,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9270,9 +9277,9 @@
    "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9303,24 +9310,24 @@
   "PHARM-RX-049": {
    "number": 649,
    "feature": "Dispensing analytics.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "named": "e2e-dispensing",
+     "partial": false,
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
   "PHARM-RX-050": {
    "number": 650,
    "feature": "Pharmacy workload dashboard.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-workflow.mjs"
+     "named": "e2e-dispensing",
+     "partial": false,
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -9693,8 +9700,14 @@
   "PHARM-CRM-033": {
    "number": 683,
    "feature": "Ready-for-collection status.",
-   "status": "NOT IMPLEMENTED",
-   "suites": []
+   "status": "IMPLEMENTED",
+   "suites": [
+    {
+     "named": "e2e-dispensing",
+     "partial": false,
+     "resolved": "scripts/e2e-dispensing.mjs"
+    }
+   ]
   },
   "PHARM-CRM-034": {
    "number": 684,
@@ -11560,17 +11573,12 @@
   "PHARM-CTRL-031": {
    "number": 831,
    "feature": "Excess-quantity alerts.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "e2e-workflow",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "scripts/e2e-workflow.mjs"
-    },
-    {
-     "named": "e2e-capa (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-capa-workflow.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },
@@ -12350,17 +12358,12 @@
   "PHARM-ANLY-030": {
    "number": 880,
    "feature": "Pharmacist productivity analytics.",
-   "status": "PARTIALLY IMPLEMENTED",
+   "status": "IMPLEMENTED",
    "suites": [
     {
-     "named": "intelligence.spec",
+     "named": "e2e-dispensing",
      "partial": false,
-     "resolved": "apps/api/test/intelligence.spec.ts"
-    },
-    {
-     "named": "e2e-enterprise (partial)",
-     "partial": true,
-     "resolved": "scripts/e2e-enterprise.mjs"
+     "resolved": "scripts/e2e-dispensing.mjs"
     }
    ]
   },

@@ -120,6 +120,20 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     max: 365,
   },
   {
+    key: 'dispensing.minRefillIntervalDays',
+    group: 'Dispensing',
+    label: 'Earliest repeat (days since the last supply)',
+    description:
+      'A repeat issued sooner than this raises an early-refill warning: the patient should still ' +
+      'have medicine left. It is a warning, not a refusal, because a lost or spoiled supply is a ' +
+      'legitimate reason to dispense again — and the pharmacist records that reason. 0 turns the ' +
+      'check off.',
+    type: 'number',
+    default: 0,
+    min: 0,
+    max: 180,
+  },
+  {
     key: 'dispensing.requireControlledWitness',
     group: 'Dispensing',
     label: 'Require a witness for controlled supply',

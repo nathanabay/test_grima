@@ -16,10 +16,10 @@ Status values:
 
 ## Totals
 
-- IMPLEMENTED: **780**
-- PARTIALLY IMPLEMENTED: **149**
-- NOT IMPLEMENTED: **71**
-- Weighted (partial counts a half): **854.5 / 1000**
+- IMPLEMENTED: **785**
+- PARTIALLY IMPLEMENTED: **145**
+- NOT IMPLEMENTED: **70**
+- Weighted (partial counts a half): **857.5 / 1000**
 
 ## Pack 1 — PRODUCT MASTER
 
@@ -733,34 +733,34 @@ Status values:
 | `PHARM-RX-020` | 620 | Refill allowance. | IMPLEMENTED | Prescription.refillsAllowed |
 | `PHARM-RX-021` | 621 | Refill tracking. | IMPLEMENTED | Prescription.refillsUsed |
 | `PHARM-RX-022` | 622 | Partial dispensing. | IMPLEMENTED | dispensedQty accumulates, so a prescription can be part filled |
-| `PHARM-RX-023` | 623 | Prescription status lifecycle. | IMPLEMENTED | PrescriptionStatus NEW VERIFIED PARTIALLY_DISPENSED DISPENSED REJECTED CANCELLED EXPIRED |
+| `PHARM-RX-023` | 623 | Prescription status lifecycle. | IMPLEMENTED | PrescriptionStatus NEW UNDER_REVIEW APPROVED PARTIALLY_DISPENSED READY_FOR_COLLECTION DISPENSED REJECTED CANCELLED EXPIRED |
 | `PHARM-RX-024` | 624 | Pharmacist verification. | IMPLEMENTED | prescriptions/:id/review with reviewedById |
 | `PHARM-RX-025` | 625 | Prescription rejection reasons. | IMPLEMENTED | Prescription.rejectionReason |
 | `PHARM-RX-026` | 626 | Prescription cancellation. | IMPLEMENTED | PrescriptionStatus CANCELLED |
 | `PHARM-RX-027` | 627 | Prescription amendment history. | PARTIALLY IMPLEMENTED | every change is in the audit chain; there is no amendment document |
-| `PHARM-RX-028` | 628 | Dispensing queue. | IMPLEMENTED | the prescriptions queue filtered by status |
-| `PHARM-RX-029` | 629 | Dispensing priority. | PARTIALLY IMPLEMENTED | the queue orders by age; there is no priority field |
+| `PHARM-RX-028` | 628 | Dispensing queue. | IMPLEMENTED | GET /prescriptions/queue: urgent first then longest waiting, with waiting times and counts |
+| `PHARM-RX-029` | 629 | Dispensing priority. | IMPLEMENTED | Prescription.isUrgent, set by the pharmacist; the queue orders by it before age |
 | `PHARM-RX-030` | 630 | FEFO dispensing. | IMPLEMENTED | dispensing allocates through the FEFO service |
-| `PHARM-RX-031` | 631 | Batch scan before dispensing. | IMPLEMENTED | the scan endpoint verifies the batch before dispensing |
-| `PHARM-RX-032` | 632 | Product scan verification. | IMPLEMENTED | the scanned product is checked against the prescription line |
-| `PHARM-RX-033` | 633 | Patient verification. | IMPLEMENTED | the patient on the dispensing is checked against the prescription |
+| `PHARM-RX-031` | 631 | Batch scan before dispensing. | PARTIALLY IMPLEMENTED | POST /dispensing/preview names the batch and expiry FEFO will pick, and a supplied batchId is validated against stock; there is no scan-to-confirm step at the point of supply |
+| `PHARM-RX-032` | 632 | Product scan verification. | PARTIALLY IMPLEMENTED | the supplied product is checked against the prescription line and a substitution needs a reason; the check is not driven by a scan |
+| `PHARM-RX-033` | 633 | Patient verification. | IMPLEMENTED | a patientId that contradicts the prescription is refused rather than stored (DispensingService.dispense) |
 | `PHARM-RX-034` | 634 | Quantity verification. | IMPLEMENTED | quantity is checked against what remains on the line |
-| `PHARM-RX-035` | 635 | Dispensing-label generation. | IMPLEMENTED | dispensing labels print per item |
-| `PHARM-RX-036` | 636 | Patient-instruction printing. | IMPLEMENTED | PrescriptionItem.instructions print on the label |
+| `PHARM-RX-035` | 635 | Dispensing-label generation. | IMPLEMENTED | GET /dispensing/:id/label assembles the label in one read; components/dispensing/Label.tsx prints it per item with its own page |
+| `PHARM-RX-036` | 636 | Patient-instruction printing. | IMPLEMENTED | dose, frequency and duration print as the directions; instructions print beneath them |
 | `PHARM-RX-037` | 637 | Dispensing receipt. | IMPLEMENTED | the dispensing-record document |
 | `PHARM-RX-038` | 638 | Dispensing audit trail. | IMPLEMENTED | every dispensing is written to the audit chain |
-| `PHARM-RX-039` | 639 | Dispensing reversal workflow. | PARTIALLY IMPLEMENTED | a dispensing is corrected by a return to stock; there is no reversal document |
-| `PHARM-RX-040` | 640 | Wrong-item prevention. | IMPLEMENTED | the product must match the prescription line |
+| `PHARM-RX-039` | 639 | Dispensing reversal workflow. | IMPLEMENTED | POST /dispensing/:id/reverse: compensating movements against the original picks, the prescription restored, a controlled-register REVERSAL, and reversedAt/reversedById/reason kept on the record |
+| `PHARM-RX-040` | 640 | Wrong-item prevention. | IMPLEMENTED | "do not substitute" is enforced; any other product against a line needs a recorded reason |
 | `PHARM-RX-041` | 641 | Wrong-strength warning. | PARTIALLY IMPLEMENTED | a different strength is a different product and is refused; there is no strength-similarity warning |
 | `PHARM-RX-042` | 642 | Duplicate-dispense detection. | IMPLEMENTED | dispensing beyond the prescribed quantity is refused |
-| `PHARM-RX-043` | 643 | Early-refill warning. | IMPLEMENTED | the dispensing.minRefillIntervalDays setting refuses an early refill |
-| `PHARM-RX-044` | 644 | Maximum-quantity enforcement. | IMPLEMENTED | Product.maxDispenseQty is enforced |
+| `PHARM-RX-043` | 643 | Early-refill warning. | IMPLEMENTED | the dispensing.minRefillIntervalDays setting raises an EARLY_REFILL warning on the preview and the supply |
+| `PHARM-RX-044` | 644 | Maximum-quantity enforcement. | IMPLEMENTED | Product.maxDispenseQty is read and enforced per supply; 0 means no ceiling |
 | `PHARM-RX-045` | 645 | Prescription attachment retention. | IMPLEMENTED | prescription documents are retained and linked |
-| `PHARM-RX-046` | 646 | Pharmacist notes. | IMPLEMENTED | the dispensing carries pharmacist notes |
+| `PHARM-RX-046` | 646 | Pharmacist notes. | IMPLEMENTED | Dispensing.notes and Dispensing.counsellingNotes, both captured on the screen |
 | `PHARM-RX-047` | 647 | Dispensing timeline. | IMPLEMENTED | TimelineService PATIENT shows the dispensing history |
 | `PHARM-RX-048` | 648 | Prescription search. | IMPLEMENTED | prescriptions list plus global search |
-| `PHARM-RX-049` | 649 | Dispensing analytics. | PARTIALLY IMPLEMENTED | dispensings are reportable through the report builder and the prescriptions report |
-| `PHARM-RX-050` | 650 | Pharmacy workload dashboard. | PARTIALLY IMPLEMENTED | the queue shows outstanding work; there is no workload dashboard |
+| `PHARM-RX-049` | 649 | Dispensing analytics. | IMPLEMENTED | GET /dispensing/summary/today and GET /dispensing/workload |
+| `PHARM-RX-050` | 650 | Pharmacy workload dashboard. | IMPLEMENTED | the queue counts plus today's supplies, reversals, substitutions and overrides |
 
 ## Pack 14 — PATIENT & CUSTOMER CRM
 
@@ -800,7 +800,7 @@ Status values:
 | `PHARM-CRM-030` | 680 | Appointment/reminder integration. | NOT IMPLEMENTED | no appointment or reminder scheduling |
 | `PHARM-CRM-031` | 681 | Refill reminders. | NOT IMPLEMENTED | no refill reminder job |
 | `PHARM-CRM-032` | 682 | Pickup notifications. | NOT IMPLEMENTED | no pickup notification |
-| `PHARM-CRM-033` | 683 | Ready-for-collection status. | NOT IMPLEMENTED | no ready-for-collection status |
+| `PHARM-CRM-033` | 683 | Ready-for-collection status. | IMPLEMENTED | PrescriptionStatus.READY_FOR_COLLECTION with readyAt; POST /prescriptions/:id/ready and /collect, which records who collected it |
 | `PHARM-CRM-034` | 684 | Delivery request. | NOT IMPLEMENTED | no delivery request |
 | `PHARM-CRM-035` | 685 | Delivery address management. | PARTIALLY IMPLEMENTED | one address per patient; no address book |
 | `PHARM-CRM-036` | 686 | Customer notes. | IMPLEMENTED | Patient.notes |
@@ -969,7 +969,7 @@ Status values:
 | `PHARM-CTRL-028` | 828 | Controlled register export restrictions. | IMPLEMENTED | export needs dispensing.controlled.EXPORT and the export is audited |
 | `PHARM-CTRL-029` | 829 | Controlled access logs. | IMPLEMENTED | every register read and write is in the audit chain |
 | `PHARM-CTRL-030` | 830 | Suspicious transaction alerts. | IMPLEMENTED | GET /controlled-register/anomalies, five signal types |
-| `PHARM-CTRL-031` | 831 | Excess-quantity alerts. | PARTIALLY IMPLEMENTED | Product.maxDispenseQty caps a single dispense; there is no excess-quantity alert |
+| `PHARM-CTRL-031` | 831 | Excess-quantity alerts. | IMPLEMENTED | Product.maxDispenseQty refuses an excessive single supply; an early repeat raises a warning the pharmacist must answer |
 | `PHARM-CTRL-032` | 832 | Unusual-frequency alerts. | IMPLEMENTED | DISPENSER_VOLUME_OUTLIER and PRESCRIBER_CONCENTRATION signals |
 | `PHARM-CTRL-033` | 833 | Repeated-void alerts. | NOT IMPLEMENTED | no repeated-void alert |
 | `PHARM-CTRL-034` | 834 | After-hours access alerts. | IMPLEMENTED | OUT_OF_HOURS signal |
@@ -1025,7 +1025,7 @@ Status values:
 | `PHARM-ANLY-027` | 877 | Supplier KPI analytics. | IMPLEMENTED | suppliers/performance and the supplier-performance report |
 | `PHARM-ANLY-028` | 878 | Branch KPI analytics. | IMPLEMENTED | the branch-performance report |
 | `PHARM-ANLY-029` | 879 | Warehouse KPI analytics. | IMPLEMENTED | warehouse occupancy, task productivity and exceptions |
-| `PHARM-ANLY-030` | 880 | Pharmacist productivity analytics. | PARTIALLY IMPLEMENTED | dispensings per pharmacist are reportable; there is no productivity view |
+| `PHARM-ANLY-030` | 880 | Pharmacist productivity analytics. | IMPLEMENTED | GET /dispensing/workload: dispensings, lines, reversals and counselling rate per pharmacist, stated as a workload measure rather than a score |
 | `PHARM-ANLY-031` | 881 | Cashier productivity analytics. | PARTIALLY IMPLEMENTED | sales per cashier are reportable; there is no productivity view |
 | `PHARM-ANLY-032` | 882 | Demand forecasting. | IMPLEMENTED | the forecast service over the sales and dispensing history |
 | `PHARM-ANLY-033` | 883 | Moving-average forecast. | IMPLEMENTED | movingAverage |

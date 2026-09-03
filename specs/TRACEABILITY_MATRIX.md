@@ -635,34 +635,34 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-RX-020` | 620 | Refill allowance. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-RX-021` | 621 | Refill tracking. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-RX-022` | 622 | Partial dispensing. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-023` | 623 | Prescription status lifecycle. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
+| `PHARM-RX-023` | 623 | Prescription status lifecycle. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-RX-024` | 624 | Pharmacist verification. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-RX-025` | 625 | Prescription rejection reasons. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-RX-026` | 626 | Prescription cancellation. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-RX-027` | 627 | Prescription amendment history. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-RX-028` | 628 | Dispensing queue. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-029` | 629 | Dispensing priority. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
+| `PHARM-RX-028` | 628 | Dispensing queue. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
+| `PHARM-RX-029` | 629 | Dispensing priority. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-RX-030` | 630 | FEFO dispensing. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-031` | 631 | Batch scan before dispensing. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-032` | 632 | Product scan verification. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-033` | 633 | Patient verification. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
+| `PHARM-RX-031` | 631 | Batch scan before dispensing. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | — | e2e-dispensing | PARTIALLY IMPLEMENTED |
+| `PHARM-RX-032` | 632 | Product scan verification. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | — | e2e-dispensing | PARTIALLY IMPLEMENTED |
+| `PHARM-RX-033` | 633 | Patient verification. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-RX-034` | 634 | Quantity verification. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-035` | 635 | Dispensing-label generation. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-036` | 636 | Patient-instruction printing. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
+| `PHARM-RX-035` | 635 | Dispensing-label generation. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
+| `PHARM-RX-036` | 636 | Patient-instruction printing. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-RX-037` | 637 | Dispensing receipt. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-RX-038` | 638 | Dispensing audit trail. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-039` | 639 | Dispensing reversal workflow. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-RX-040` | 640 | Wrong-item prevention. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
+| `PHARM-RX-039` | 639 | Dispensing reversal workflow. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
+| `PHARM-RX-040` | 640 | Wrong-item prevention. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-RX-041` | 641 | Wrong-strength warning. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-RX-042` | 642 | Duplicate-dispense detection. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-043` | 643 | Early-refill warning. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-044` | 644 | Maximum-quantity enforcement. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
+| `PHARM-RX-043` | 643 | Early-refill warning. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
+| `PHARM-RX-044` | 644 | Maximum-quantity enforcement. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-RX-045` | 645 | Prescription attachment retention. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-046` | 646 | Pharmacist notes. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
+| `PHARM-RX-046` | 646 | Pharmacist notes. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-RX-047` | 647 | Dispensing timeline. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-RX-048` | 648 | Prescription search. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
-| `PHARM-RX-049` | 649 | Dispensing analytics. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
-| `PHARM-RX-050` | 650 | Pharmacy workload dashboard. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
+| `PHARM-RX-049` | 649 | Dispensing analytics. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
+| `PHARM-RX-050` | 650 | Pharmacy workload dashboard. | `21-prescriptions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-CRM-001` | 651 | Patient profiles. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-CRM-002` | 652 | Customer profiles. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
 | `PHARM-CRM-003` | 653 | Unique patient identifiers. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
@@ -695,7 +695,7 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-CRM-030` | 680 | Appointment/reminder integration. | `23-patients` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
 | `PHARM-CRM-031` | 681 | Refill reminders. | `23-patients` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
 | `PHARM-CRM-032` | 682 | Pickup notifications. | `23-patients` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
-| `PHARM-CRM-033` | 683 | Ready-for-collection status. | `23-patients` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
+| `PHARM-CRM-033` | 683 | Ready-for-collection status. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-CRM-034` | 684 | Delivery request. | `23-patients` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
 | `PHARM-CRM-035` | 685 | Delivery address management. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-CRM-036` | 686 | Customer notes. | `23-patients` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow | IMPLEMENTED |
@@ -843,7 +843,7 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-CTRL-028` | 828 | Controlled register export restrictions. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow, e2e-capa | IMPLEMENTED |
 | `PHARM-CTRL-029` | 829 | Controlled access logs. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow, e2e-capa | IMPLEMENTED |
 | `PHARM-CTRL-030` | 830 | Suspicious transaction alerts. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
-| `PHARM-CTRL-031` | 831 | Excess-quantity alerts. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-workflow, e2e-capa (partial) | PARTIALLY IMPLEMENTED |
+| `PHARM-CTRL-031` | 831 | Excess-quantity alerts. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-CTRL-032` | 832 | Unusual-frequency alerts. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
 | `PHARM-CTRL-033` | 833 | Repeated-void alerts. | `27-controlled-drugs` | — | — | — | — | — | — | — | NOT IMPLEMENTED |
 | `PHARM-CTRL-034` | 834 | After-hours access alerts. | `27-controlled-drugs` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-lifecycle | IMPLEMENTED |
@@ -892,7 +892,7 @@ report builder) the check follows the code rather than the folder name.
 | `PHARM-ANLY-027` | 877 | Supplier KPI analytics. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-ANLY-028` | 878 | Branch KPI analytics. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-ANLY-029` | 879 | Warehouse KPI analytics. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
-| `PHARM-ANLY-030` | 880 | Pharmacist productivity analytics. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise (partial) | PARTIALLY IMPLEMENTED |
+| `PHARM-ANLY-030` | 880 | Pharmacist productivity analytics. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | e2e-dispensing | IMPLEMENTED |
 | `PHARM-ANLY-031` | 881 | Cashier productivity analytics. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise (partial) | PARTIALLY IMPLEMENTED |
 | `PHARM-ANLY-032` | 882 | Demand forecasting. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |
 | `PHARM-ANLY-033` | 883 | Moving-average forecast. | `31-analytics` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | intelligence.spec, e2e-enterprise | IMPLEMENTED |

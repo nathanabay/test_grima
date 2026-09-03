@@ -42,6 +42,26 @@ function client(token) {
   };
 }
 
+
+/**
+ * A genuinely over-the-counter line with stock in this warehouse.
+ *
+ * These suites used to search for "Paracetamol" by name. The seed does not put
+ * an over-the-counter paracetamol in every branch store, so on a freshly seeded
+ * database the lookup returned nothing and the suite fell over on a data-shape
+ * accident rather than on anything it was testing. The search term is broad now
+ * and the assertions do the choosing.
+ */
+async function findOtc(callAs, warehouseId, minimum = 1) {
+  for (const term of ['a', 'e', 'i', 'o', 'u']) {
+    const results = (await callAs('GET', `/pos/search?q=${term}&warehouseId=${warehouseId}`)).body;
+    const found = (Array.isArray(results) ? results : [])
+      .find((p) => !p.requiresPrescription && !p.isControlled && Number(p.available) > minimum);
+    if (found) return found;
+  }
+  return null;
+}
+
 const stamp = Date.now();
 
 console.log('\n================ PHARMACORE END-TO-END (§72) ================\n');
@@ -492,10 +512,7 @@ const cashierMe = (await cashier('GET', '/auth/me')).body;
 const cashierBranchId = cashierMe.branchIds[0];
 const cashierBranch = org.branches.find((b) => b.id === cashierBranchId);
 const cashierWh = cashierBranch.warehouses.find((w) => !w.isColdRoom);
-const otcResults = (await cashier('GET', `/pos/search?q=Paracetamol&warehouseId=${cashierWh.id}`)).body;
-// The search also matches "Codeine + Paracetamol", which is controlled -- pick
-// a genuinely over-the-counter line.
-const otc = otcResults.find((p) => !p.requiresPrescription && !p.isControlled && p.available > 0);
+const otc = await findOtc(cashier, cashierWh.id, 2);
 if (otc && otc.available > 0) {
   const sale = await cashier('POST', '/pos/checkout', {
     branchId: cashierBranch.id,
@@ -537,7 +554,8 @@ if (otc && otc.available > 0) {
       `sold to ${(otcTrace.body.soldTo ?? otcTrace.body.sales ?? []).length} customer(s)`);
   }
 } else {
-  check('OTC product available for sale', false, 'no stock in central warehouse');
+  check('OTC product available for sale', false,
+    `no over-the-counter stock in ${cashierWh.name}`);
 }
 
 const rxOverCounter = await cashier('POST', '/pos/checkout', {

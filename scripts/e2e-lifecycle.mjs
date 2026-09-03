@@ -622,32 +622,44 @@ if (wh2) {
 
 // A controlled-register entry reversed twice puts the register permanently
 // above physical stock.
+//
+// Every register write needs a witness while controlled.requireDualAuthorization
+// is on, so one is named here. This check used to be skipped for want of a
+// register entry to reverse; e2e-dispensing now creates one.
+const witness = (await admin('GET', '/admin/users?pageSize=50')).body?.data
+  ?.find((u) => u.username === 'pharmacist2' || u.username === 'manager');
 const register = (await admin('GET', '/controlled-register?pageSize=50')).body;
 const reversible = (register.data ?? []).find(
   (e) => e.entryType !== 'REVERSAL' && !e.reversalOfId,
 );
-if (reversible) {
+if (reversible && witness) {
   const first = await admin('POST', `/controlled-register/${reversible.id}/reverse`, {
     reason: 'End-to-end reversal check',
+    witnessedById: witness.id,
   });
-  check('a register entry can be reversed once', first.ok, `HTTP ${first.status}`);
+  check('a register entry can be reversed once', first.ok,
+    `HTTP ${first.status}: ${first.body?.error ?? ''}`);
 
   const again = await admin('POST', `/controlled-register/${reversible.id}/reverse`, {
     reason: 'Should be refused: already reversed',
+    witnessedById: witness.id,
   });
   check('but not twice', again.status === 409, `HTTP ${again.status}: ${again.body?.error ?? ''}`);
 
   if (first.ok) {
     const reversalOfReversal = await admin('POST', `/controlled-register/${first.body.id}/reverse`, {
       reason: 'Should be refused: reversing a reversal',
+      witnessedById: witness.id,
     });
     check('and a reversal cannot itself be reversed', reversalOfReversal.status === 409,
       `HTTP ${reversalOfReversal.status}`);
   }
 } else {
   skip('controlled-register reversal',
-    'the register is empty — no suite creates a controlled dispensing, so the ' +
-    'reversal guard is covered by unit-level reasoning only');
+    !reversible
+      ? 'the register holds no reversible entry — run e2e-dispensing first, which opens the ' +
+        'register and makes a witnessed controlled supply'
+      : 'no second user is available to witness the reversal');
 }
 
 // ============================================================

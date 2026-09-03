@@ -141,6 +141,50 @@ export class ClinicalChecksService {
       }
     }
 
+    // ---- Early refill ----
+    //
+    // A patient coming back for the same medicine before the last supply could
+    // have run out is worth a question. Sometimes the answer is that the bottle
+    // was dropped; sometimes it is that the medicine is being sold on. Either
+    // way the pharmacist asks, and the reason is recorded — the system does not
+    // decide which it is.
+    const minRefillDays = await this.config.getNumber('dispensing.minRefillIntervalDays');
+    if (minRefillDays > 0 && input.patientId) {
+      const since = new Date(Date.now() - minRefillDays * 86_400_000);
+      const recent = await this.prisma.dispensing.findMany({
+        where: {
+          patientId: input.patientId,
+          dispensedAt: { gte: since },
+          reversedAt: null,
+          items: { some: { productId: { in: productIds } } },
+        },
+        select: {
+          dispensedAt: true,
+          items: { select: { productId: true, quantity: true } },
+        },
+        orderBy: { dispensedAt: 'desc' },
+      });
+
+      for (const productId of productIds) {
+        const last = recent.find((d) => d.items.some((i) => i.productId === productId));
+        if (!last) continue;
+        const days = Math.floor((Date.now() - last.dispensedAt.getTime()) / 86_400_000);
+        const product = byId.get(productId);
+        warnings.push({
+          code: `EARLY_REFILL:${productId}`,
+          severity: 'MEDIUM',
+          productId,
+          product: product ? label(product) : 'This medicine',
+          message:
+            `Supplied to this patient ${days} day(s) ago, sooner than the ${minRefillDays}-day ` +
+            `interval this pharmacy expects.`,
+          action:
+            'Ask the patient what happened to the previous supply and record the answer in the ' +
+            'counselling note.',
+        });
+      }
+    }
+
     // ---- Allergy ----
     if (input.patientId) {
       const patient = await this.prisma.patient.findUnique({

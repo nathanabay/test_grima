@@ -14,7 +14,7 @@ buried in the table.
 
 Generated 2026-09-03 from the schema, the route table and the permission catalogue.
 
-**365 routes across 31 areas.**
+**377 routes across 31 areas.**
 
 Every route is served twice: unversioned under `/api`, and under `/api/v1`.
 A client that has been calling `/api/...` keeps working; a new integration
@@ -349,10 +349,22 @@ can pin `/api/v1/...`. A future `v2` is added per controller with
 | POST | `/dispensing` | `dispensing.dispensing.CREATE` | Dispense medicines using FEFO allocation, with safety and controlled-drug checks |
 | GET | `/dispensing` | `dispensing.dispensing.READ` |  |
 | GET | `/dispensing/:id` | `dispensing.dispensing.READ` |  |
+| GET | `/dispensing/:id/label` | `dispensing.dispensing.PRINT` | Everything the dispensing label needs — product, batch, expiry, directions and  |
+| POST | `/dispensing/:id/label` | `dispensing.dispensing.PRINT` | Count a label print. Reprints are recorded, not prevented. |
+| POST | `/dispensing/:id/reverse` | `dispensing.dispensing.CANCEL` | Reverse a dispensing: put the stock back, restore what is outstanding, and append a  |
+| GET | `/dispensing/patient/:patientId` | `dispensing.dispensing.READ` | What this patient has been supplied, newest first |
+| POST | `/dispensing/preview` | `dispensing.dispensing.READ` | Run the clinical checks and show what FEFO would allocate, without dispensing anything |
+| GET | `/dispensing/summary/today` | `dispensing.dispensing.READ` |  |
+| GET | `/dispensing/workload` | `dispensing.dispensing.READ` | Dispensing volume per pharmacist — a workload measure, not a score |
 | GET | `/prescriptions` | `dispensing.prescription.READ` |  |
 | POST | `/prescriptions` | `dispensing.prescription.CREATE` |  |
 | GET | `/prescriptions/:id` | `dispensing.prescription.READ` |  |
+| POST | `/prescriptions/:id/cancel` | `dispensing.prescription.CANCEL` | Cancel a prescription nothing has been supplied against |
+| POST | `/prescriptions/:id/collect` | `dispensing.dispensing.CREATE` | Handed over, recording who collected it |
+| POST | `/prescriptions/:id/ready` | `dispensing.dispensing.CREATE` | Made up and on the collection shelf |
+| POST | `/prescriptions/:id/refill` | `dispensing.prescription.CREATE` | Issue the next repeat as a new prescription, within the allowance on the original |
 | POST | `/prescriptions/:id/review` | `dispensing.prescription.APPROVE` | Pharmacist validation: approve or reject a prescription |
+| GET | `/prescriptions/queue` | `dispensing.prescription.READ` | The dispensing queue: urgent first, then longest waiting, with waiting times |
 
 ## Pricing
 

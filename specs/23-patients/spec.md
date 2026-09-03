@@ -5,7 +5,7 @@
 
 # Patients
 
-**50 requirements: 36 implemented, 7 partial, 7 not implemented.**
+**50 requirements: 37 implemented, 7 partial, 6 not implemented.**
 
 Requirement range `PHARM-CRM-001` – `PHARM-CRM-050`.
 
@@ -16,6 +16,7 @@ Requirement range `PHARM-CRM-001` – `PHARM-CRM-050`.
 
 ## Routes
 
+- `GET /dispensing/patient/:patientId` — dispensing.dispensing.READ
 - `GET /fhir/Patient/:id` — sales.patient.READ
 - `GET /fhir/Patient` — sales.patient.READ
 - `POST /fhir/Patient` — sales.patient.CREATE
@@ -69,7 +70,7 @@ Requirement range `PHARM-CRM-001` – `PHARM-CRM-050`.
 | `PHARM-CRM-030` | 680 | Appointment/reminder integration. | NOT IMPLEMENTED |
 | `PHARM-CRM-031` | 681 | Refill reminders. | NOT IMPLEMENTED |
 | `PHARM-CRM-032` | 682 | Pickup notifications. | NOT IMPLEMENTED |
-| `PHARM-CRM-033` | 683 | Ready-for-collection status. | NOT IMPLEMENTED |
+| `PHARM-CRM-033` | 683 | Ready-for-collection status. | IMPLEMENTED |
 | `PHARM-CRM-034` | 684 | Delivery request. | NOT IMPLEMENTED |
 | `PHARM-CRM-035` | 685 | Delivery address management. | PARTIALLY IMPLEMENTED |
 | `PHARM-CRM-036` | 686 | Customer notes. | IMPLEMENTED |
@@ -90,13 +91,12 @@ Requirement range `PHARM-CRM-001` – `PHARM-CRM-050`.
 
 ## Not implemented
 
-7 requirement(s) in this domain are not built. The reason for each is in
+6 requirement(s) in this domain are not built. The reason for each is in
 `specs/KNOWN_EXTERNAL_DEPENDENCIES.md`:
 
 - `PHARM-CRM-030` (680) Appointment/reminder integration.
 - `PHARM-CRM-031` (681) Refill reminders.
 - `PHARM-CRM-032` (682) Pickup notifications.
-- `PHARM-CRM-033` (683) Ready-for-collection status.
 - `PHARM-CRM-034` (684) Delivery request.
 - `PHARM-CRM-047` (697) Customer satisfaction survey.
 - `PHARM-CRM-049` (699) Customer lifetime-value analytics.

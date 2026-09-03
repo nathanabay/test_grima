@@ -89,6 +89,120 @@ export class ControlledRegisterService {
     });
   }
 
+  /**
+   * Open the register for a product at a branch (§28).
+   *
+   * Until this existed the register could only be written by dispensing, and
+   * dispensing refuses to take the running balance negative — so a pharmacy
+   * that already held controlled stock could never make its first supply. The
+   * register had no way in.
+   *
+   * The opening balance is not a number somebody types: it is read from the
+   * stock the branch actually holds, so the register starts in step with the
+   * shelf rather than with an estimate. It can be done once per product and
+   * branch; after that the register is a history and corrections are
+   * reversals.
+   */
+  async openingBalance(
+    input: { productId: string; branchId: string; notes?: string; witnessedById?: string },
+    user: AuthenticatedUser,
+  ) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: input.productId },
+      select: { id: true, genericName: true, isControlled: true },
+    });
+    if (!product) throw new BadRequestException('Product not found');
+    if (!product.isControlled) {
+      throw new BadRequestException(
+        `${product.genericName} is not a controlled medicine, so it has no register to open`,
+      );
+    }
+
+    const existing = await this.prisma.controlledRegisterEntry.findFirst({
+      where: { productId: input.productId, branchId: input.branchId },
+      select: { entryNo: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `The register for this product at this branch was opened at entry ${existing.entryNo}. ` +
+          `An opening balance is recorded once; a later correction is a reversal.`,
+      );
+    }
+
+    // The balance the branch physically holds, per batch, so the opening entries
+    // name real batches rather than one lump nobody can trace.
+    const balances = await this.prisma.inventoryBalance.findMany({
+      where: {
+        productId: input.productId,
+        branchId: input.branchId,
+        onHand: { gt: 0 },
+      },
+      select: { batchId: true, onHand: true },
+    });
+    if (!balances.length) {
+      throw new BadRequestException(
+        `This branch holds no ${product.genericName}. A register is opened against stock, not ` +
+          `against an intention to hold it.`,
+      );
+    }
+
+    // Several locations can hold the same batch; the register counts batches.
+    const byBatch = new Map<string, Prisma.Decimal>();
+    for (const b of balances) {
+      if (!b.batchId) continue;
+      byBatch.set(b.batchId, (byBatch.get(b.batchId) ?? new Prisma.Decimal(0)).plus(b.onHand));
+    }
+    if (!byBatch.size) {
+      throw new BadRequestException(
+        `The stock of ${product.genericName} at this branch is not held against a batch, so it ` +
+          `cannot be entered on a controlled register.`,
+      );
+    }
+
+    const entries = await this.prisma.$transaction(async (tx) => {
+      const created: Awaited<ReturnType<typeof this.record>>[] = [];
+      for (const [batchId, quantity] of byBatch) {
+        created.push(
+          await this.record(tx, {
+            productId: input.productId,
+            batchId,
+            branchId: input.branchId,
+            entryType: 'RECEIPT',
+            quantityIn: Number(quantity),
+            performedById: user.id,
+            witnessedById: input.witnessedById,
+          }),
+        );
+      }
+      return created;
+    });
+
+    await this.audit.record({
+      userId: user.id,
+      userLabel: user.fullName,
+      module: 'dispensing',
+      action: 'CONTROLLED_REGISTER_OPENED',
+      entityType: 'Product',
+      entityId: input.productId,
+      newValue: {
+        product: product.genericName,
+        entries: entries.length,
+        openingBalance: entries[entries.length - 1]?.runningBalance?.toString(),
+      },
+      reason: input.notes?.trim() || 'Opening balance from stock on hand',
+      branchId: input.branchId,
+    });
+
+    return {
+      product: product.genericName,
+      entries,
+      openingBalance: entries[entries.length - 1]?.runningBalance ?? new Prisma.Decimal(0),
+      note:
+        'The opening balance was read from stock on hand, not typed. Reconcile the register ' +
+        'against a physical count before relying on it.',
+    };
+  }
+
   /** Corrections never mutate history — they append a compensating entry. */
   async reverse(
     entryId: string,

@@ -244,6 +244,20 @@ export class DispensingController {
     return this.controlled.reconcile(productId, branchId);
   }
 
+  @Post('controlled-register/opening')
+  @RequirePermissions('dispensing.controlled.CREATE')
+  @ApiOperation({
+    summary:
+      'Open the register for a controlled product at a branch, from the stock it actually holds. ' +
+      'Once only; later corrections are reversals.',
+  })
+  openRegister(
+    @Body() body: { productId: string; branchId: string; notes?: string; witnessedById?: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.controlled.openingBalance(body, user);
+  }
+
   @Post('controlled-register/:id/reverse')
   @RequirePermissions('dispensing.controlled.CREATE')
   @ApiOperation({ summary: 'Append a reversal entry; register rows are never edited or deleted' })

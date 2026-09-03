@@ -6,6 +6,7 @@ import { useApi } from '@/lib/useApi';
 import { useScope } from '@/lib/scope';
 import { api, can, qty, shortDate, tokenStore } from '@/lib/api';
 import { Card, Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
+import { StatusBadge } from '@/components/status';
 import { Drawer, Field, Stat, Toolbar } from '@/components/primitives';
 import {
   ClinicalWarnings,
@@ -405,8 +406,8 @@ function DispensingBody() {
                   <td className="td font-medium">
                     {p.prescriptionNo}
                     {p.isUrgent && (
-                      <span className="ml-1 rounded bg-warn px-1 text-caption font-semibold text-white">
-                        URGENT
+                      <span className="ml-1">
+                        <StatusBadge tone="near">Urgent</StatusBadge>
                       </span>
                     )}
                   </td>
