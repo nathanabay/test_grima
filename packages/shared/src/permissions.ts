@@ -66,7 +66,9 @@ export const RESOURCE_CATALOG: ResourceDefinition[] = [
   { module: 'inventory', resource: 'serial', label: 'Serial Numbers', actions: ['READ', 'EDIT', 'IMPORT', 'EXPORT'] },
 
   { module: 'dispensing', resource: 'prescription', label: 'Prescriptions', actions: CRUD_APPROVE },
-  { module: 'dispensing', resource: 'dispensing', label: 'Dispensing', actions: ['CREATE', 'READ', 'PRINT'] },
+  // CANCEL is the reversal of a dispensing: separate from CREATE, because
+  // making a supply and unwinding one are different decisions.
+  { module: 'dispensing', resource: 'dispensing', label: 'Dispensing', actions: ['CREATE', 'READ', 'PRINT', 'CANCEL'] },
   { module: 'dispensing', resource: 'controlled', label: 'Controlled Medicines Register', actions: ['CREATE', 'READ', 'PRINT', 'EXPORT'] },
 
   { module: 'sales', resource: 'sale', label: 'POS Sales', actions: ['CREATE', 'READ', 'CANCEL', 'PRINT'] },

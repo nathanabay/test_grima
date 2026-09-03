@@ -162,6 +162,14 @@ export class PatientsService {
   }
 
   async create(data: any, user: AuthenticatedUser) {
+    // The same guard `update` applies. Without it, a user who may register a
+    // patient but not read their clinical record could still write one on the
+    // way in — an authorization hole that only exists because create and update
+    // were written at different times.
+    if ((data.allergies !== undefined || data.notes !== undefined) && !this.canSeeClinical(user)) {
+      throw new ForbiddenException('You are not authorized to record clinical patient information');
+    }
+
     const count = await this.prisma.patient.count();
     const patient = await this.prisma.patient.create({
       data: {

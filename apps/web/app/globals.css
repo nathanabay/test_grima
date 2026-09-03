@@ -217,7 +217,8 @@
    *
    * The till used to call window.print() on the whole page, so a customer's
    * receipt came out with the sidebar, the navigation and the search box on it.
-   * When a receipt is on screen it becomes the only thing that prints.
+   * When a receipt or a dispensing label is on screen it becomes the only thing
+   * that prints.
    */
   @media print {
     body :not(.receipt):not(.receipt *) {
@@ -234,6 +235,23 @@
       padding: 4mm;
       color: #000;
       background: #fff;
+    }
+    /*
+     * A dispensing label goes on the box, not on a till roll. Narrower, and
+     * each label starts a new page so a prescription with four items produces
+     * four labels rather than one long strip.
+     */
+    .receipt.label-sheet {
+      width: 62mm;
+      padding: 3mm;
+    }
+    .label-page {
+      break-after: page;
+      page-break-after: always;
+    }
+    .label-page:last-child {
+      break-after: auto;
+      page-break-after: auto;
     }
     .no-print {
       display: none !important;

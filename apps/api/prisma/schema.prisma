@@ -83,9 +83,13 @@ enum PrescriptionStatus {
   UNDER_REVIEW
   APPROVED
   PARTIALLY_DISPENSED
+  /// Made up and waiting on the shelf for the patient to come back for it.
+  READY_FOR_COLLECTION
   DISPENSED
   REJECTED
   CANCELLED
+  /// Past its validity date. Reached by the clock, not by a decision.
+  EXPIRED
 }
 
 enum DocumentStatus {
@@ -833,6 +837,17 @@ model Product {
   /// to limit — pseudoephedrine and codeine preparations being the usual ones.
   /// Null means no limit.
   maxQuantityPerSale        Decimal?         @db.Decimal(18, 4)
+  /// The most that may be taken in 24 hours, in base units. Used to warn when
+  /// a prescribed regimen exceeds it.
+  maxDailyDose              Decimal?         @db.Decimal(18, 4)
+  /// Cautions surfaced at the point of dispensing. Advisory: they prompt the
+  /// pharmacist to think, and are never a substitute for their judgement.
+  renalCaution              Boolean          @default(false)
+  hepaticCaution            Boolean          @default(false)
+  pregnancyCaution          Boolean          @default(false)
+  breastfeedingCaution      Boolean          @default(false)
+  /// Auxiliary label text: "Take with food", "May cause drowsiness".
+  auxiliaryLabels           String[]         @default([])
   /// Requires the cashier to confirm the buyer's age before it can be sold.
   isAgeRestricted           Boolean          @default(false)
   minimumAgeYears           Int?
@@ -1919,29 +1934,52 @@ model Prescription {
   documentUrl       String?
   refillsAllowed    Int                @default(0)
   refillsUsed       Int                @default(0)
+  /// After this date the prescription may not be dispensed. Prescriptions do
+  /// expire, and one written two years ago is not a licence to hand out
+  /// medicine today.
+  validUntil        DateTime?
+  /// Moves the prescription up the queue. Set by the pharmacist, not the
+  /// patient, so "urgent" keeps meaning something.
+  isUrgent          Boolean            @default(false)
+  /// When everything on it was made up and is waiting to be collected.
+  readyAt           DateTime?
+  collectedAt       DateTime?
+  collectedBy       String?
+  notes             String?
+  /// The prescription this one was issued as a repeat of. A refill is a new
+  /// prescription rather than a counter on the old one, so each supply keeps
+  /// its own dates, its own items and its own audit trail.
+  refillOfId        String?            @db.Uuid
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
   patient     Patient            @relation(fields: [patientId], references: [id])
   items       PrescriptionItem[]
   dispensings Dispensing[]
+  refillOf    Prescription?      @relation("PrescriptionRefills", fields: [refillOfId], references: [id])
+  refills     Prescription[]     @relation("PrescriptionRefills")
 
   @@index([status])
   @@index([patientId])
+  @@index([branchId, status])
+  @@index([validUntil])
   @@map("prescriptions")
 }
 
 model PrescriptionItem {
-  id             String  @id @default(uuid()) @db.Uuid
-  prescriptionId String  @db.Uuid
-  productId      String  @db.Uuid
-  strength       String?
-  dosage         String?
-  frequency      String?
-  durationDays   Int?
-  prescribedQty  Decimal @db.Decimal(18, 4)
-  dispensedQty   Decimal @default(0) @db.Decimal(18, 4)
-  instructions   String?
+  id                String  @id @default(uuid()) @db.Uuid
+  prescriptionId    String  @db.Uuid
+  productId         String  @db.Uuid
+  strength          String?
+  dosage            String?
+  frequency         String?
+  durationDays      Int?
+  prescribedQty     Decimal @db.Decimal(18, 4)
+  dispensedQty      Decimal @default(0) @db.Decimal(18, 4)
+  instructions      String?
+  /// Whether the pharmacist may supply a generic equivalent. Prescribers write
+  /// "do not substitute" for a reason, so it is recorded per line.
+  allowSubstitution Boolean @default(true)
 
   prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
 
@@ -1949,21 +1987,34 @@ model PrescriptionItem {
 }
 
 model Dispensing {
-  id             String   @id @default(uuid()) @db.Uuid
-  dispensingNo   String   @unique
-  prescriptionId String?  @db.Uuid
-  patientId      String?  @db.Uuid
-  branchId       String   @db.Uuid
-  warehouseId    String   @db.Uuid
-  pharmacistId   String   @db.Uuid
-  dispensedAt    DateTime @default(now())
-  notes          String?
-  createdAt      DateTime @default(now())
+  id                 String    @id @default(uuid()) @db.Uuid
+  dispensingNo       String    @unique
+  prescriptionId     String?   @db.Uuid
+  patientId          String?   @db.Uuid
+  branchId           String    @db.Uuid
+  warehouseId        String    @db.Uuid
+  pharmacistId       String    @db.Uuid
+  dispensedAt        DateTime  @default(now())
+  notes              String?
+  /// What the pharmacist actually told the patient. A counselling record that
+  /// only says "counselled" records nothing.
+  counsellingNotes   String?
+  /// The second person present for a controlled-drug supply.
+  witnessedById      String?   @db.Uuid
+  /// Clinical warnings that were raised and overridden, with the reason for
+  /// each. An override with no reason is indistinguishable from not looking.
+  overriddenWarnings Json?
+  labelPrintCount    Int       @default(0)
+  reversedAt         DateTime?
+  reversedById       String?   @db.Uuid
+  reversalReason     String?
+  createdAt          DateTime  @default(now())
 
   prescription Prescription?    @relation(fields: [prescriptionId], references: [id])
   items        DispensingItem[]
 
   @@index([patientId])
+  @@index([branchId, dispensedAt])
   @@map("dispensings")
 }
 
@@ -1978,6 +2029,11 @@ model DispensingItem {
   fefoRecommendedBatchId String? @db.Uuid
   overrideReason         String?
   overrideById           String? @db.Uuid
+  /// Set when the pharmacist supplied an equivalent instead of the product the
+  /// prescriber wrote. The prescribed product is kept, not overwritten, so the
+  /// record still shows what was asked for as well as what was handed over.
+  substitutedForProductId String? @db.Uuid
+  substitutionReason      String?
 
   dispensing Dispensing @relation(fields: [dispensingId], references: [id], onDelete: Cascade)
 

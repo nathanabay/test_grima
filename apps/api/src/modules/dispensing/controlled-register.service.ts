@@ -17,6 +17,9 @@ export interface RegisterEntryInput {
   patientId?: string;
   performedById: string;
   witnessedById?: string;
+  /** Set on a REVERSAL entry: why, and which entry it cancels. */
+  reversalReason?: string;
+  reversalOfId?: string;
 }
 
 /**
@@ -80,6 +83,8 @@ export class ControlledRegisterService {
         patientId: input.patientId ?? null,
         performedById: input.performedById,
         witnessedById: input.witnessedById ?? null,
+        reversalReason: input.reversalReason ?? null,
+        reversalOfId: input.reversalOfId ?? null,
       },
     });
   }

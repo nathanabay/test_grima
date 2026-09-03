@@ -6,9 +6,17 @@ import { ProcurementModule } from '../procurement/procurement.module';
 import { AccountingModule } from '../accounting/accounting.module';
 import { AutomationModule } from '../automation/automation.module';
 import { IntelligenceModule } from '../intelligence/intelligence.module';
+import { DispensingModule } from '../dispensing/dispensing.module';
 
 @Module({
-  imports: [InventoryModule, ProcurementModule, AccountingModule, AutomationModule, IntelligenceModule],
+  imports: [
+    InventoryModule,
+    ProcurementModule,
+    AccountingModule,
+    AutomationModule,
+    IntelligenceModule,
+    DispensingModule,
+  ],
   providers: [JobRunnerService, RulesService],
   exports: [JobRunnerService, RulesService],
 })

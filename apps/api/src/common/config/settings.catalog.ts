@@ -96,6 +96,39 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     max: 180,
   },
 
+  // ---- Dispensing (§7) ----
+  {
+    key: 'dispensing.prescriptionValidityDays',
+    group: 'Dispensing',
+    label: 'Prescription validity (days)',
+    description:
+      'How long a prescription may be dispensed against, counted from the date it was written, when the prescriber has not written an explicit expiry on it. Dispensing against a prescription past this date raises a warning that the pharmacist must acknowledge; it is not refused, because the rule varies by jurisdiction and by drug schedule.',
+    type: 'number',
+    default: 90,
+    min: 1,
+    max: 730,
+  },
+  {
+    key: 'dispensing.duplicateTherapyWindowDays',
+    group: 'Dispensing',
+    label: 'Duplicate therapy look-back (days)',
+    description:
+      'How far back the clinical check looks for an earlier supply of the same medicine, or of another medicine in the same therapeutic class, to the same patient.',
+    type: 'number',
+    default: 30,
+    min: 1,
+    max: 365,
+  },
+  {
+    key: 'dispensing.requireControlledWitness',
+    group: 'Dispensing',
+    label: 'Require a witness for controlled supply',
+    description:
+      'When on, dispensing a controlled drug records a second member of staff as witness, and that person may not be the dispenser. Turn it off only where a single-pharmacist branch makes a witness impossible.',
+    type: 'boolean',
+    default: true,
+  },
+
   // ---- Replenishment / forecasting (§12) ----
   {
     key: 'replenishment.serviceLevel',

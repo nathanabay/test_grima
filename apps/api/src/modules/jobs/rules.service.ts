@@ -12,6 +12,7 @@ import { PostingService } from '../accounting/posting.service';
 import { AutomationService } from '../automation/automation.service';
 import { ConfigService } from '../../common/config/config.service';
 import { ReportBuilderService } from '../intelligence/report-builder.service';
+import { PrescriptionsService } from '../dispensing/prescriptions.service';
 
 /**
  * Rule engine and scheduled jobs (§58).
@@ -36,6 +37,7 @@ export class RulesService implements OnModuleInit {
     private readonly automation: AutomationService,
     private readonly config: ConfigService,
     private readonly reportBuilder: ReportBuilderService,
+    private readonly prescriptions: PrescriptionsService,
   ) {}
 
   /**
@@ -71,6 +73,15 @@ export class RulesService implements OnModuleInit {
       description: 'Marks expired batches and removes them from available stock.',
       schedule: 'Daily at 02:00',
       run: () => this.runExpirySweep(),
+    });
+    this.runner.register({
+      key: 'prescriptions.expire',
+      label: 'Expire prescriptions past their validity date',
+      description:
+        'Moves undispensed prescriptions past their validity date to EXPIRED. Prescriptions ' +
+        'part-way through a supply are left alone and shown on the queue as overdue instead.',
+      schedule: 'Daily at 02:30',
+      run: () => this.prescriptions.expireStale(),
     });
     this.runner.register({
       key: 'supplier.scores',
@@ -296,6 +307,11 @@ export class RulesService implements OnModuleInit {
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async expirySweepCron() {
     return this.runner.execute('expiry.sweep');
+  }
+
+  @Cron('30 2 * * *')
+  async prescriptionExpiryCron() {
+    return this.runner.execute('prescriptions.expire');
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
