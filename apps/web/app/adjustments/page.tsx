@@ -51,7 +51,9 @@ export default function AdjustmentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const org = useApi<any>("/admin/organization");
+    // The reader's own branches and warehouses. Not `/admin/organization`, which
+  // requires admin.branch.READ and therefore fails for every operational role.
+  const org = useApi<any>("/auth/me/scope");
   const ledger = useApi<any>(
     warehouseId
       ? `/inventory/ledger?warehouseId=${warehouseId}&pageSize=25`

@@ -150,22 +150,32 @@ for (const { who, href, task } of TASKS) {
     }
   }
 
-  const fields = [];
-  let empty = 0;
-  for (const select of await page.locator('select').all()) {
-    const label =
-      (await select.getAttribute('aria-label')) ??
-      (await select.evaluate((el) => el.closest('label')?.innerText?.split('\n')[0] ?? '')) ??
-      '';
-    const options = await select.locator('option').count();
-    // One option is a placeholder ("Select a warehouse"), which is no choice.
-    if (options <= 1) empty += 1;
-    fields.push(`${(label || '?').trim().slice(0, 20)}=${options}`);
-  }
+  /*
+   * A select is empty when it offers no real value to choose.
+   *
+   * Counting options is not enough: an option with an empty value is a
+   * placeholder ("Select a warehouse"), and a branch-scoped storekeeper with
+   * exactly one branch has one real option, which is correct rather than
+   * broken.
+   */
+  const fields = await page.evaluate(() =>
+    [...document.querySelectorAll('select')].map((el) => {
+      const label =
+        el.getAttribute('aria-label') ??
+        el.closest('label')?.innerText?.split('\n')[0] ??
+        '?';
+      const real = [...el.options].filter((o) => o.value !== '').length;
+      return { label: label.trim().slice(0, 20), real, total: el.options.length };
+    }),
+  );
+  const empty = fields.filter((f) => f.real === 0).length;
 
   const verdict = empty > 0 ? 'FAIL' : fields.length ? 'PASS' : '....';
   if (empty > 0) failures += 1;
-  console.log(`  ${verdict}  ${who.padEnd(12)} ${href.padEnd(13)} ${task.padEnd(26)} ${fields.join('  ') || '(no selects)'}`);
+  console.log(
+    `  ${verdict}  ${who.padEnd(12)} ${href.padEnd(13)} ${task.padEnd(26)} ` +
+      `${fields.map((f) => `${f.label}=${f.real}`).join('  ') || '(no selects)'}`,
+  );
 }
 
 await browser.close();

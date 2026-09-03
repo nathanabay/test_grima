@@ -81,7 +81,7 @@ function DispensingBody() {
   const canReverse = can(user, 'dispensing.dispensing.CANCEL');
   const canPrint = can(user, 'dispensing.dispensing.PRINT');
 
-  const { branchId, branch, branches } = useScope();
+  const { branchId, branch, branches, warehouses, defaultWarehouseId } = useScope();
 
   const [view, setView] = useState<'queue' | 'all'>('queue');
   const [status, setStatus] = useState('');
@@ -157,13 +157,24 @@ function DispensingBody() {
   // come off the general shelf, and picking the wrong store shows an empty
   // batch list rather than an error anybody can act on.
   const branchWarehouses = useMemo(() => {
+    // The prescription's own branch wins: a pharmacist covering two sites
+    // dispenses from the branch the prescription was taken in, not from
+    // whichever branch the header happens to be showing.
     const b = branches.find((x) => x.id === (prescription?.branchId ?? branchId)) ?? branch;
-    return b?.warehouses ?? [];
-  }, [branches, branch, branchId, prescription?.branchId]);
+    return b?.warehouses ?? warehouses;
+  }, [branches, branch, branchId, warehouses, prescription?.branchId]);
 
   useEffect(() => {
-    if (!warehouseId && branchWarehouses.length) setWarehouseId(branchWarehouses[0].id);
-  }, [branchWarehouses, warehouseId]);
+    if (warehouseId && branchWarehouses.some((w) => w.id === warehouseId)) return;
+    // Never a cold room by default: most supplies come off the general shelf,
+    // and defaulting to the freezer shows an empty batch list.
+    setWarehouseId(
+      branchWarehouses.find((w) => !w.isColdRoom)?.id ??
+        branchWarehouses[0]?.id ??
+        defaultWarehouseId ??
+        "",
+    );
+  }, [branchWarehouses, warehouseId, defaultWarehouseId]);
 
   function openDispensing() {
     if (!prescription) return;

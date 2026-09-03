@@ -28,7 +28,9 @@ export default function ControlledPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const org = useApi<any>("/admin/organization");
+    // The reader's own branches and warehouses. Not `/admin/organization`, which
+  // requires admin.branch.READ and therefore fails for every operational role.
+  const org = useApi<any>("/auth/me/scope");
   const products = useApi<any>("/products?isControlled=true&pageSize=50");
   const register = useApi<any>(
     `/controlled-register?pageSize=200${productId ? `&productId=${productId}` : ""}${branchId ? `&branchId=${branchId}` : ""}`,

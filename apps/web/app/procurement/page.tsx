@@ -2,13 +2,19 @@
 
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
-import { money, qty, shortDate } from "@/lib/api";
+import { can, money, qty, shortDate, tokenStore } from "@/lib/api";
 import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
 
 export default function ProcurementPage() {
+  const user = typeof window !== "undefined" ? tokenStore.user : null;
   const replenishment = useApi<any[]>("/replenishment/recommendations");
   const orders = useApi<any>("/purchase-orders?pageSize=15");
-  const suppliers = useApi<any[]>("/suppliers/performance");
+  // Gated rather than fetched-and-swallowed: a finance officer reads purchase
+  // orders but not supplier scorecards, and firing a request their permissions
+  // refuse leaves a silently missing panel and a 403 in the log.
+  const suppliers = useApi<any[]>(
+    can(user, "procurement.supplier.READ") ? "/suppliers/performance" : null,
+  );
 
   return (
     <Shell>

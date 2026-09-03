@@ -14,6 +14,7 @@ import {
 import { StatusBadge } from "@/components/status";
 import { api, can, money, qty, tokenStore } from "@/lib/api";
 import { posQueue, QueuedSale } from "@/lib/posQueue";
+import { useScope } from "@/lib/scope";
 import { PaymentDialog, Tender } from "@/components/pos/PaymentDialog";
 import { ShiftDrawer } from "@/components/pos/ShiftDrawer";
 import { CustomerPicker, PosCustomer } from "@/components/pos/CustomerPicker";
@@ -71,8 +72,19 @@ function Till() {
   const canOverridePrice = can(user, "catalog.price.EDIT");
   const canVoid = can(user, "sales.sale.CANCEL");
   const canOverrideBatch = can(user, "inventory.fefo_override.CREATE");
+  const canRunShift = can(user, "sales.cash_session.READ");
 
-  const [branches, setBranches] = useState<any[]>([]);
+  /*
+   * The till's branch and warehouse come from the reader's own scope.
+   *
+   * This used to call `/admin/branches`, which requires `admin.branch.READ` —
+   * so a cashier opening the till was told "Missing required permission(s):
+   * admin.branch.READ", the warehouse stayed empty, and the product search
+   * never fired. The one screen a cashier signs in to use did not work for a
+   * cashier.
+   */
+  const scope = useScope();
+  const branches = scope.branches;
   const [branchId, setBranchId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
 
@@ -123,33 +135,29 @@ function Till() {
 
   // ---- Sites the cashier can actually reach ----
   useEffect(() => {
-    api("/admin/branches")
-      .then((all: any[]) => {
-        const me = tokenStore.user;
-        const allowed = me?.branchIds.length
-          ? all.filter((b) => me.branchIds.includes(b.id))
-          : all;
-        setBranches(allowed);
-        const first = allowed[0];
-        if (first) {
-          setBranchId(first.id);
-          setWarehouseId(
-            first.warehouses.find((w: any) => !w.isColdRoom)?.id ??
-              first.warehouses[0]?.id ??
-              "",
-          );
-        }
-      })
-      .catch((e) => setError(e.message));
+    if (branchId || !branches.length) return;
+    const first = branches.find((b: any) => b.id === scope.branchId) ?? branches[0];
+    setBranchId(first.id);
+    setWarehouseId(
+      first.warehouses.find((w: any) => !w.isColdRoom)?.id ?? first.warehouses[0]?.id ?? "",
+    );
+  }, [branches, branchId, scope.branchId]);
+
+  useEffect(() => {
     setQueue(posQueue.list());
   }, []);
 
   // ---- Shift, held carts and today's takings ----
   useEffect(() => {
     if (!branchId) return;
-    api(`/pos/cash-sessions/current?branchId=${branchId}`)
-      .then(setSession)
-      .catch(() => setSession(null));
+    // A pharmacist may sell without running a till, so the shift panel is asked
+    // for only by somebody who may see one. Firing it regardless leaves a 403
+    // in the log and a panel that vanishes without saying why.
+    if (canRunShift) {
+      api(`/pos/cash-sessions/current?branchId=${branchId}`)
+        .then(setSession)
+        .catch(() => setSession(null));
+    }
     api(`/pos/held?branchId=${branchId}`)
       .then(setHeld)
       .catch(() => setHeld([]));
@@ -460,12 +468,13 @@ function Till() {
         subtitle="FEFO picks the batch. Prescription-only and controlled medicines go through dispensing, where the prescription and the register are recorded."
         action={
           <div className="flex flex-wrap items-center gap-2">
+            {branches.length > 1 && (
             <select
               className="input w-auto py-1 text-small"
               aria-label="Branch"
               value={branchId}
               onChange={(e) => {
-                const b = branches.find((x) => x.id === e.target.value);
+                const b = branches.find((x: any) => x.id === e.target.value);
                 setBranchId(e.target.value);
                 setWarehouseId(
                   b?.warehouses.find((w: any) => !w.isColdRoom)?.id ?? b?.warehouses[0]?.id ?? "",
@@ -473,10 +482,11 @@ function Till() {
                 clearCart();
               }}
             >
-              {branches.map((b) => (
+              {branches.map((b: any) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>
+            )}
             <button className="btn-ghost btn-sm" onClick={() => setLookupOpen(true)}>
               Find a sale <kbd className="ml-1 text-caption text-ink-subtle">F8</kbd>
             </button>

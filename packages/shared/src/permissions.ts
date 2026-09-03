@@ -263,6 +263,11 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
       ...resourceCodes('procurement', 'purchase_order', ['READ']),
       ...resourceCodes('sales', 'cash_session', ['READ', 'APPROVE']),
       ...resourceCodes('catalog', 'price'),
+      // Pricing is set against products and customer groups, so reading both is
+      // part of the job. Without it the pricing screen loaded with two empty
+      // panels and a permission error.
+      ...resourceCodes('catalog', 'product', ['READ']),
+      ...resourceCodes('sales', 'patient', ['READ']),
       ...moduleCodes('analytics'),
     ],
   },

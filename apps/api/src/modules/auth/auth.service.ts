@@ -326,6 +326,68 @@ export class AuthService {
     return { success: true };
   }
 
+  /**
+   * The branches and warehouses one user works in (§4, §19).
+   *
+   * A user with no UserScope rows is organization-wide and gets everything;
+   * anyone else gets exactly their assigned branches. Cold rooms are marked so
+   * a screen can default to the general store rather than making a cashier
+   * discover that the first warehouse in the list is a freezer.
+   *
+   * Deliberately thin: names, codes and the branch each warehouse belongs to.
+   * Nothing about valuation, costs or organisation settings, because the
+   * screens that need a warehouse have no business reading those.
+   */
+  async scopeFor(user: AuthenticatedUser) {
+    const branches = await this.prisma.branch.findMany({
+      where: {
+        isActive: true,
+        ...(user.branchIds.length ? { id: { in: user.branchIds } } : {}),
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        isHeadOffice: true,
+        warehouses: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            isColdRoom: true,
+            // A bin count and a put-away both need somewhere to put a number
+            // against, and a location is no more sensitive than the warehouse
+            // it sits in.
+            locations: {
+              where: { isActive: true },
+              select: { id: true, code: true, name: true, level: true, locationType: true },
+              orderBy: { code: 'asc' },
+            },
+          },
+          orderBy: { name: 'asc' },
+        },
+      },
+      orderBy: [{ isHeadOffice: 'desc' }, { name: 'asc' }],
+    });
+
+    // A warehouse-scoped user may hold fewer warehouses than their branch has.
+    const visible = user.warehouseIds.length
+      ? branches
+          .map((branch) => ({
+            ...branch,
+            warehouses: branch.warehouses.filter((w) => user.warehouseIds.includes(w.id)),
+          }))
+          .filter((branch) => branch.warehouses.length > 0)
+      : branches;
+
+    return {
+      branches: visible,
+      /** True when the reader may work anywhere, which is how head office reads. */
+      organizationWide: user.branchIds.length === 0 && user.warehouseIds.length === 0,
+    };
+  }
+
   async listSessions(userId: string) {
     return this.prisma.session.findMany({
       where: { userId },

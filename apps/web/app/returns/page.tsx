@@ -215,7 +215,9 @@ function NewReturn({
   onDone: (r: any) => void;
   onError: (m: string) => void;
 }) {
-  const org = useApi<any>("/admin/organization");
+    // The reader's own branches and warehouses. Not `/admin/organization`, which
+  // requires admin.branch.READ and therefore fails for every operational role.
+  const org = useApi<any>("/auth/me/scope");
   const [branchId, setBranchId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [type, setType] = useState("CUSTOMER");

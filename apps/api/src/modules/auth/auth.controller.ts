@@ -65,6 +65,28 @@ export class AuthController {
     return user;
   }
 
+  /**
+   * The branches and warehouses the caller works in.
+   *
+   * Every operational screen needs this: the till needs a warehouse to sell
+   * from, dispensing needs one to pick from, a count and an adjustment need one
+   * to count and adjust. It used to be read from `GET /admin/organization`,
+   * which requires `admin.branch.READ` — a permission only head office holds.
+   * So the till showed a cashier "Missing required permission(s):
+   * admin.branch.READ" and no product search, and five other screens lost their
+   * warehouse selector, because knowing where you work had been classified as
+   * an administrative privilege.
+   *
+   * It is not. This is behind no permission beyond being signed in, and returns
+   * only what the caller's own UserScope rows reach. `/admin/organization`
+   * stays where it is, for administering the hierarchy.
+   */
+  @Get('me/scope')
+  @ApiOperation({ summary: 'The branches and warehouses the caller works in' })
+  scope(@CurrentUser() user: AuthenticatedUser) {
+    return this.auth.scopeFor(user);
+  }
+
   @Get('sessions')
   @ApiOperation({ summary: 'Device and session history' })
   sessions(@CurrentUser() user: AuthenticatedUser) {

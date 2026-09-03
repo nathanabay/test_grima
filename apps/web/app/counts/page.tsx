@@ -178,7 +178,9 @@ function NewCount({
   const [freeze, setFreeze] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const org = useApi<any>("/admin/organization");
+    // The reader's own branches and warehouses. Not `/admin/organization`, which
+  // requires admin.branch.READ and therefore fails for every operational role.
+  const org = useApi<any>("/auth/me/scope");
 
   useEffect(() => {
     if (!org.data) return;
@@ -195,7 +197,7 @@ function NewCount({
   }, [org.data]);
 
   const branch = branches.find((b) => b.id === branchId);
-  const warehouse = branch?.warehouses.find((w: any) => w.id === warehouseId);
+  const warehouse = (branch?.warehouses ?? []).find((w: any) => w.id === warehouseId);
   const chosen = COUNT_TYPES.find((t) => t.value === countType);
 
   async function submit() {
@@ -273,7 +275,7 @@ function NewCount({
             value={warehouseId}
             onChange={(e) => setWarehouseId(e.target.value)}
           >
-            {branch?.warehouses.map((w: any) => (
+            {(branch?.warehouses ?? []).map((w: any) => (
               <option key={w.id} value={w.id}>
                 {w.name}
               </option>

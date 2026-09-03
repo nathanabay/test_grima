@@ -33,9 +33,19 @@ export default function ReceivingPage() {
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<any | null>(null);
 
-  const org = useApi<any>("/admin/organization");
-  const orders = useApi<any>("/purchase-orders?status=ORDERED&pageSize=25");
-  const po = useApi<any>(poId ? `/purchase-orders/${poId}` : null, [poId]);
+    // The reader's own branches and warehouses. Not `/admin/organization`, which
+  // requires admin.branch.READ and therefore fails for every operational role.
+  const org = useApi<any>("/auth/me/scope");
+  /*
+   * The orders this delivery can be booked against.
+   *
+   * `/purchase-orders` needs procurement.purchase_order.READ, which a
+   * storekeeper does not hold — so the "Against purchase order" list was empty
+   * for the only role that receives deliveries. This endpoint carries the
+   * ordered lines and what is still outstanding on each, and no money.
+   */
+  const orders = useApi<any>("/purchase-orders/receivable");
+  const selectedOrder = (orders.data ?? []).find((o: any) => o.id === poId) ?? null;
   const recent = useApi<any>(
     warehouseId
       ? `/goods-receipts?warehouseId=${warehouseId}&pageSize=10`
@@ -61,28 +71,32 @@ export default function ReceivingPage() {
 
   // Selecting a purchase order pre-fills the lines still outstanding on it.
   useEffect(() => {
-    if (!po.data) return;
-    setBranchId(po.data.branchId);
-    setWarehouseId(po.data.warehouseId);
+    if (!selectedOrder) return;
+    setBranchId(selectedOrder.branchId);
+    setWarehouseId(selectedOrder.warehouseId);
     setLines(
-      po.data.items
-        .filter((i: any) => Number(i.orderedQty) > Number(i.receivedQty))
+      selectedOrder.items
+        .filter((i: any) => Number(i.outstandingQty) > 0)
         .map((i: any, idx: number) => ({
           key: `po-${idx}`,
           productId: i.productId,
-          productLabel: i.productId.slice(0, 8),
+          // The order names the medicine, so the storekeeper checking the
+          // pallet against the paperwork reads a name rather than an id.
+          productLabel: i.product
+            ? `${i.product.genericName} ${i.product.strength ?? ""}`.trim()
+            : i.productId.slice(0, 8),
           batchNumber: "",
           expiryDate: "",
           manufacturingDate: "",
-          quantity: String(Number(i.orderedQty) - Number(i.receivedQty)),
-          unitCost: String(i.unitPrice),
+          quantity: String(Number(i.outstandingQty)),
+          unitCost: "",
           rejectedQty: "",
           rejectionReason: "",
           packagingDamaged: false,
-          outstanding: Number(i.orderedQty) - Number(i.receivedQty),
+          outstanding: Number(i.outstandingQty),
         })),
     );
-  }, [po.data]);
+  }, [selectedOrder]);
 
   /** A GS1 scan fills product, batch and expiry in one action (§15, §17). */
   function applyScan(result: ScanResolution) {
@@ -152,7 +166,7 @@ export default function ReceivingPage() {
         method: "POST",
         body: {
           purchaseOrderId: poId || undefined,
-          supplierId: po.data?.supplierId,
+          supplierId: selectedOrder?.supplier?.id,
           warehouseId,
           branchId,
           supplierInvoiceNo: supplierInvoiceNo || undefined,
@@ -179,7 +193,7 @@ export default function ReceivingPage() {
         Number(l.quantity) > 0 &&
         l.unitCost !== "",
     ) &&
-    !!po.data?.supplierId;
+    !!selectedOrder?.supplier?.id;
 
   return (
     <Shell>
@@ -242,9 +256,11 @@ export default function ReceivingPage() {
                 onChange={(e) => setPoId(e.target.value)}
               >
                 <option value="">Select an ordered PO</option>
-                {orders.data?.data?.map((o: any) => (
+                {(orders.data ?? []).map((o: any) => (
                   <option key={o.id} value={o.id}>
-                    {o.poNo} — {o.supplier.companyName} ({money(o.grandTotal)})
+                    {o.poNo} — {o.supplier.companyName}
+                    {o.expectedDate ? ` — due ${shortDate(o.expectedDate)}` : ""}
+                    {o.overdue ? " (overdue)" : ""}
                   </option>
                 ))}
               </select>

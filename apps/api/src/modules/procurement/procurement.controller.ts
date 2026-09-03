@@ -207,6 +207,17 @@ export class ProcurementController {
 
   // ---- Purchase orders ----
 
+  @Get('purchase-orders/receivable')
+  @RequirePermissions('inventory.goods_receipt.CREATE')
+  @ApiOperation({
+    summary:
+      'Orders a delivery can be booked against, with the quantity outstanding on each line and ' +
+      'no commercial terms — for the storekeeper unloading the van',
+  })
+  receivablePos(@CurrentUser() user: AuthenticatedUser, @Query('warehouseId') warehouseId?: string) {
+    return this.procurement.receivablePurchaseOrders(user, warehouseId);
+  }
+
   @Get('purchase-orders')
   @RequirePermissions('procurement.purchase_order.READ')
   listPos(@Query() query: any) {

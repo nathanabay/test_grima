@@ -14,11 +14,20 @@ import { AuthUser, api } from '@/lib/api';
  * and nothing else, because that is all the server sends.
  */
 
+export interface Warehouse {
+  id: string;
+  code: string;
+  name: string;
+  /** A cold room is not where most stock is picked from, so screens skip it. */
+  isColdRoom: boolean;
+}
+
 export interface Branch {
   id: string;
   code: string;
   name: string;
-  warehouses: { id: string; code: string; name: string }[];
+  isHeadOffice: boolean;
+  warehouses: Warehouse[];
 }
 
 interface ScopeValue {
@@ -28,6 +37,22 @@ interface ScopeValue {
   setBranch: (id: string | null) => void;
   setWarehouse: (id: string | null) => void;
   branch: Branch | null;
+  /**
+   * Every warehouse the reader can reach, across their branches.
+   *
+   * A screen that needs somewhere to pick from wants this, not `branch`: a
+   * reader with two branches and no branch selected still has warehouses.
+   */
+  warehouses: Warehouse[];
+  /**
+   * Where a screen should default to picking from.
+   *
+   * The selected warehouse if there is one, otherwise the first general store
+   * in the selected branch, otherwise the first anywhere. A cold room is never
+   * the default — most stock is not picked from a freezer, and defaulting there
+   * shows an empty batch list rather than an error anybody can act on.
+   */
+  defaultWarehouseId: string | null;
   loading: boolean;
   /** True when the reader may see the whole organization. */
   organizationWide: boolean;
@@ -58,24 +83,36 @@ export function ScopeProvider({
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    api<any>('/admin/organization')
-      .then((org) => {
+    /*
+     * Read from `/auth/me/scope`, not from `/admin/organization`.
+     *
+     * The organisation endpoint requires `admin.branch.READ`, which only head
+     * office holds — so this used to fail for seven roles out of ten and the
+     * selector silently disappeared. That was tolerable while it was only a
+     * convenience. It stopped being tolerable once the till, dispensing, counts,
+     * adjustments and transfers all read their warehouse from here: knowing
+     * where you work is not an administrative privilege.
+     */
+    api<any>('/auth/me/scope')
+      .then((scope) => {
         if (cancelled) return;
-        const all: Branch[] = (org.branches ?? []).map((b: any) => ({
+        const visible: Branch[] = (scope.branches ?? []).map((b: any) => ({
           id: b.id,
           code: b.code,
           name: b.name,
-          warehouses: (b.warehouses ?? []).map((w: any) => ({ id: w.id, code: w.code, name: w.name })),
+          isHeadOffice: !!b.isHeadOffice,
+          warehouses: (b.warehouses ?? []).map((w: any) => ({
+            id: w.id,
+            code: w.code,
+            name: w.name,
+            isColdRoom: !!w.isColdRoom,
+          })),
         }));
-        // The server already scopes this, but filtering again costs nothing and
-        // makes the selector honest if the endpoint is ever widened.
-        const visible = user.branchIds.length
-          ? all.filter((b) => user.branchIds.includes(b.id))
-          : all;
         setBranches(visible);
 
         const stored = safeRead(BRANCH_KEY);
-        const initial = visible.find((b) => b.id === stored) ?? (visible.length === 1 ? visible[0] : null);
+        const initial =
+          visible.find((b) => b.id === stored) ?? (visible.length === 1 ? visible[0] : null);
         setBranchId(initial?.id ?? null);
         const storedWh = safeRead(WAREHOUSE_KEY);
         if (initial && storedWh && initial.warehouses.some((w) => w.id === storedWh)) {
@@ -83,8 +120,8 @@ export function ScopeProvider({
         }
       })
       .catch(() => {
-        // A reader without admin.branch.READ cannot list branches. That is not
-        // an error to shout about: the selector simply does not appear.
+        // Nothing but a signed-in session is needed now, so a failure here is a
+        // real one — a network fault or an expired token — not a permission.
         if (!cancelled) setBranches([]);
       })
       .finally(() => !cancelled && setLoading(false));
@@ -112,6 +149,16 @@ export function ScopeProvider({
     [branches, branchId],
   );
 
+  const warehouses = useMemo(
+    () => (branch ? branch.warehouses : branches.flatMap((b) => b.warehouses)),
+    [branch, branches],
+  );
+
+  const defaultWarehouseId = useMemo(() => {
+    if (warehouseId && warehouses.some((w) => w.id === warehouseId)) return warehouseId;
+    return warehouses.find((w) => !w.isColdRoom)?.id ?? warehouses[0]?.id ?? null;
+  }, [warehouseId, warehouses]);
+
   return (
     <ScopeContext.Provider
       value={{
@@ -121,6 +168,8 @@ export function ScopeProvider({
         setBranch,
         setWarehouse,
         branch,
+        warehouses,
+        defaultWarehouseId,
         loading,
         organizationWide: !!user && user.branchIds.length === 0,
       }}

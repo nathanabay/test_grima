@@ -123,7 +123,7 @@ function InventoryBody() {
   const canAdjust = can(user, "inventory.adjustment.CREATE");
   const canTransfer = can(user, "inventory.transfer.CREATE");
 
-  const { branch } = useScope();
+  const { branch, warehouses: scopeWarehouses } = useScope();
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [draftSearch, setDraftSearch] = useState("");
@@ -149,7 +149,9 @@ function InventoryBody() {
     window.history.replaceState(null, "", next);
   }, [query]);
 
-  const warehouses = branch?.warehouses ?? [];
+  // Every warehouse the reader reaches, not only those of a selected branch:
+  // a storekeeper with no branch chosen still has warehouses to filter by.
+  const warehouses = scopeWarehouses;
 
   const { data, error: loadError, loading, refresh } = useApi<any>(
     `/inventory/balances?pageSize=50&page=${page}${query ? `&${query}` : ""}`,

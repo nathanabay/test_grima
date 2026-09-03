@@ -59,7 +59,9 @@ export default function WarehousePage() {
   const [openOnly, setOpenOnly] = useState(true);
   const [selectedWave, setSelectedWave] = useState<string | null>(null);
 
-  const org = useApi<any>("/admin/organization");
+    // The reader's own branches and warehouses. Not `/admin/organization`, which
+  // requires admin.branch.READ and therefore fails for every operational role.
+  const org = useApi<any>("/auth/me/scope");
   const warehouses = (org.data?.branches ?? []).flatMap((b: any) =>
     (b.warehouses ?? []).map((w: any) => ({ ...w, branchName: b.name })),
   );

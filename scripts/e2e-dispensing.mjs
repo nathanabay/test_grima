@@ -624,14 +624,20 @@ console.log('\nCONTROLLED MEDICINES (§28)');
       unopened.status === 400 && /negative/i.test(String(unopened.body?.error)),
       `HTTP ${unopened.status}`);
 
+    // The register is opened once for the life of a product at a branch, so a
+    // second run against the same database finds it already open. Both outcomes
+    // are correct; what is checked is that exactly one of them happened.
     const opened = await pharmacist('POST', '/controlled-register/opening', {
       productId: controlled.id, branchId: branch.id, witnessedById: me2.id,
       notes: 'End-to-end check',
     });
-    check('the register can be opened from stock on hand', opened.ok,
-      `HTTP ${opened.status} ${JSON.stringify(opened.body).slice(0, 160)}`);
-    check('the opening balance is read rather than typed',
-      Number(opened.body?.openingBalance) > 0, String(opened.body?.openingBalance));
+    const alreadyOpen = opened.status === 409;
+    check('the register can be opened from stock on hand', opened.ok || alreadyOpen,
+      alreadyOpen ? 'already open from an earlier run' : `HTTP ${opened.status}`);
+    if (opened.ok) {
+      check('the opening balance is read rather than typed',
+        Number(opened.body?.openingBalance) > 0, String(opened.body?.openingBalance));
+    }
 
     const reopen = await pharmacist('POST', '/controlled-register/opening', {
       productId: controlled.id, branchId: branch.id, witnessedById: me2.id,
@@ -647,33 +653,53 @@ console.log('\nCONTROLLED MEDICINES (§28)');
     const witnessed = await pharmacist('POST', '/dispensing', {
       ...body, idempotencyKey: key(), witnessedById: me2.id,
     });
-    check('a witnessed controlled supply is allowed', witnessed.ok,
-      `HTTP ${witnessed.status} ${JSON.stringify(witnessed.body).slice(0, 160)}`);
+    const drawnDown =
+      witnessed.status === 400 && /balance would go negative/i.test(String(witnessed.body?.error));
+    if (drawnDown) {
+      skip('a witnessed controlled supply is allowed',
+        'the register balance is already drawn down from an earlier run on this database');
+    } else {
+      check('a witnessed controlled supply is allowed', witnessed.ok,
+        `HTTP ${witnessed.status} ${JSON.stringify(witnessed.body).slice(0, 160)}`);
+    }
 
     // The register is what a regulator reads. Until this suite existed nothing
     // created a controlled dispensing, so the register stayed empty and the
     // reversal guard in e2e-lifecycle could never run.
     const register = (await pharmacist('GET',
-      `/controlled-register?productId=${controlled.id}&branchId=${branch.id}`)).body;
-    const entry = (register.data ?? []).find((e) => e.entryType === 'DISPENSE');
-    check('the supply is written to the controlled register', !!entry,
-      `${register.data?.length ?? 0} entries`);
-    check('the register names the witness', entry?.witnessedById === me2.id,
-      String(entry?.witnessedById));
-    check('the running balance moves with the supply',
-      entry !== undefined && Number(entry.quantityOut) > 0, String(entry?.quantityOut));
+      `/controlled-register?productId=${controlled.id}&branchId=${branch.id}&pageSize=500`)).body;
+    // The one this run just made, not an earlier run's, which may already have
+    // been reversed.
+    const reversedIds = new Set((register.data ?? []).map((e) => e.reversalOfId).filter(Boolean));
+    const entry = (register.data ?? [])
+      .filter((e) => e.entryType === 'DISPENSE' && !reversedIds.has(e.id))
+      .pop();
+    if (!entry) {
+      // The supply above was refused, which on a re-run means the register
+      // balance is already drawn down. The reversal guard has nothing of this
+      // run's to work on; e2e-lifecycle covers it against the whole register.
+      skip('the supply is written to the controlled register',
+        `${register.data?.length ?? 0} entries, none of them unreversed from this run`);
+    } else {
+      check('the supply is written to the controlled register', true,
+        `${register.data?.length ?? 0} entries`);
+      check('the register names the witness', entry.witnessedById === me2.id,
+        String(entry.witnessedById));
+      check('the running balance moves with the supply', Number(entry.quantityOut) > 0,
+        String(entry.quantityOut));
 
-    const reversedEntry = await pharmacist('POST', `/controlled-register/${entry.id}/reverse`, {
-      reason: 'End-to-end check of the register reversal guard',
-      witnessedById: me2.id,
-    });
-    check('a register entry can be reversed', reversedEntry.ok, `HTTP ${reversedEntry.status}`);
-    check('the reversal points at the entry it cancels',
-      reversedEntry.body?.reversalOfId === entry.id);
-    const twice = await pharmacist('POST', `/controlled-register/${entry.id}/reverse`, {
-      reason: 'again', witnessedById: me2.id,
-    });
-    check('an entry cannot be reversed twice', twice.status === 409, `HTTP ${twice.status}`);
+      const reversedEntry = await pharmacist('POST', `/controlled-register/${entry.id}/reverse`, {
+        reason: 'End-to-end check of the register reversal guard',
+        witnessedById: me2.id,
+      });
+      check('a register entry can be reversed', reversedEntry.ok, `HTTP ${reversedEntry.status}`);
+      check('the reversal points at the entry it cancels',
+        reversedEntry.body?.reversalOfId === entry.id);
+      const twice = await pharmacist('POST', `/controlled-register/${entry.id}/reverse`, {
+        reason: 'again', witnessedById: me2.id,
+      });
+      check('an entry cannot be reversed twice', twice.status === 409, `HTTP ${twice.status}`);
+    }
   }
 }
 

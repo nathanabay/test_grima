@@ -628,9 +628,14 @@ if (wh2) {
 // register entry to reverse; e2e-dispensing now creates one.
 const witness = (await admin('GET', '/admin/users?pageSize=50')).body?.data
   ?.find((u) => u.username === 'pharmacist2' || u.username === 'manager');
-const register = (await admin('GET', '/controlled-register?pageSize=50')).body;
+const register = (await admin('GET', '/controlled-register?pageSize=500')).body;
+// An entry that has already been reversed cannot be reversed again — correctly
+// — so a second run against the same database has to pick a different one.
+const alreadyReversed = new Set(
+  (register.data ?? []).map((e) => e.reversalOfId).filter(Boolean),
+);
 const reversible = (register.data ?? []).find(
-  (e) => e.entryType !== 'REVERSAL' && !e.reversalOfId,
+  (e) => e.entryType !== 'REVERSAL' && !e.reversalOfId && !alreadyReversed.has(e.id),
 );
 if (reversible && witness) {
   const first = await admin('POST', `/controlled-register/${reversible.id}/reverse`, {
@@ -657,8 +662,8 @@ if (reversible && witness) {
 } else {
   skip('controlled-register reversal',
     !reversible
-      ? 'the register holds no reversible entry — run e2e-dispensing first, which opens the ' +
-        'register and makes a witnessed controlled supply'
+      ? 'every register entry has already been reversed — reseed, or run e2e-dispensing, ' +
+        'which opens the register and makes a witnessed controlled supply'
       : 'no second user is available to witness the reversal');
 }
 

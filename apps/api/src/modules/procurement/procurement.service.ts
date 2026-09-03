@@ -9,6 +9,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { DocumentNumberService } from '../common-services/document-number.service';
+import { ScopeService } from '../../common/guards/scope.service';
 
 /** Weighting used to score quotations (§14). Configurable per organization. */
 export interface QuotationWeights {
@@ -33,6 +34,7 @@ export class ProcurementService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly docNumbers: DocumentNumberService,
+    private readonly scope: ScopeService,
   ) {}
 
   // ---- Automatic replenishment (§12) ----
@@ -714,6 +716,75 @@ export class ProcurementService {
       this.prisma.purchaseOrder.count({ where }),
     ]);
     return { data, total, page, pageSize };
+  }
+
+  /**
+   * The orders a delivery can be received against (§15).
+   *
+   * A storekeeper unloading a van needs to know what was ordered. They do not
+   * need to know what it cost — and `procurement.purchase_order.READ`, the only
+   * way to reach an order before this existed, carries unit prices, totals and
+   * supplier terms with it. So the receiving screen's "Against purchase order"
+   * list was empty for the one role that uses it, because the alternative was
+   * handing the warehouse the commercial file.
+   *
+   * This returns the ordered lines and the quantity still outstanding on each,
+   * and no money at all.
+   */
+  async receivablePurchaseOrders(user: AuthenticatedUser, warehouseId?: string) {
+    const orders = await this.prisma.purchaseOrder.findMany({
+      where: {
+        status: {
+          in: [PurchaseOrderStatus.ORDERED, PurchaseOrderStatus.PARTIALLY_RECEIVED],
+        },
+        ...this.scope.branchFilter(user),
+        ...(warehouseId ? { warehouseId } : {}),
+      },
+      select: {
+        id: true,
+        poNo: true,
+        status: true,
+        expectedDate: true,
+        orderDate: true,
+        branchId: true,
+        warehouseId: true,
+        supplier: { select: { id: true, companyName: true, code: true } },
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            orderedQty: true,
+            receivedQty: true,
+          },
+        },
+      },
+      orderBy: [{ expectedDate: 'asc' }, { orderDate: 'asc' }],
+      take: 200,
+    });
+
+    // PurchaseOrderItem carries no product relation, so the names are resolved
+    // once here rather than by the screen, one request per line.
+    const products = await this.prisma.product.findMany({
+      where: {
+        id: { in: [...new Set(orders.flatMap((po) => po.items.map((i) => i.productId)))] },
+      },
+      select: { id: true, sku: true, genericName: true, strength: true, baseUnit: true },
+    });
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    const now = Date.now();
+    return orders
+      .map((po) => ({
+        ...po,
+        overdue: !!po.expectedDate && po.expectedDate.getTime() < now,
+        items: po.items.map((i) => ({
+          ...i,
+          product: productById.get(i.productId) ?? null,
+          outstandingQty: i.orderedQty.minus(i.receivedQty),
+        })),
+      }))
+      // An order whose every line is already in is not a delivery to receive.
+      .filter((po) => po.items.some((i) => i.outstandingQty.greaterThan(0)));
   }
 
   async findPurchaseOrder(id: string) {
