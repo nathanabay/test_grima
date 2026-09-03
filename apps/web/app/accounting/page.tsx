@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, money, shortDate } from "@/lib/api";
 import { Card, Empty, ErrorBox, Loading, Pill, Stat } from "@/components/ui";
 import { DataTable } from "@/components/DataTable";
@@ -48,10 +49,12 @@ export default function AccountingPage() {
   const mapping = useApi<any[]>("/accounting/accounts/mapping-health", [
     version,
   ]);
-  const journal = useApi<any>(
-    tab === "journal" ? "/accounting/journal?pageSize=100" : null,
-    [version],
-  );
+  // The journal is the ledger of record and grows with every posting. Handing
+  // the table the newest hundred made its pager stop at an arbitrary line.
+  const journal = usePaged<any>(tab === "journal" ? "/accounting/journal" : null, {
+    filters: version ? `v=${version}` : "",
+    pageSize: 50,
+  });
   const entry = useApi<any>(
     selectedEntry ? `/accounting/journal/${selectedEntry}` : null,
     [selectedEntry, version],
@@ -243,10 +246,13 @@ export default function AccountingPage() {
       {unposted.data?.total > 0 && (
         <div className="mb-4 rounded-md border border-info/40 bg-info-light p-3 text-sm text-info">
           <strong>
-            {unposted.data.total} document(s) have no journal entry.
+            {unposted.data.total.toLocaleString()} document(s) have no journal
+            entry.
           </strong>{" "}
-          {unposted.data.movements.length} stock movement(s) and{" "}
-          {unposted.data.sales.length} sale(s).
+          {unposted.data.movementTotal.toLocaleString()} stock movement(s) and{" "}
+          {unposted.data.saleTotal.toLocaleString()} sale(s). Posting runs in
+          batches, so it may take more than one pass to clear the whole
+          backlog.
           <button
             className="btn-ghost ml-3"
             disabled={busy}
@@ -385,9 +391,10 @@ export default function AccountingPage() {
           <Card title="Journal entries">
             {journal.error && <ErrorBox message={journal.error} />}
             {journal.loading && <Loading />}
-            {journal.data && (
+            {!journal.error && (
               <DataTable
-                rows={journal.data.data}
+                rows={journal.rows}
+                server={journal.server}
                 getKey={(e: any) => e.id}
                 exportName="journal"
                 searchPlaceholder="Search entries"

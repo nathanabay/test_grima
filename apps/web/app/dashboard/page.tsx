@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 import { Shell } from "@/components/Shell";
 import {
@@ -194,20 +195,35 @@ function PharmacistPanels({
           {queue.loading && <Loading />}
           {queue.data &&
             (queue.data.data?.length ? (
-              <Table head={["Prescription", "Patient", "Items", "Status"]}>
-                {queue.data.data.slice(0, 8).map((p: any) => (
-                  <tr key={p.id}>
-                    <td className="td num">{p.prescriptionNo}</td>
-                    <td className="td">{p.patient?.fullName ?? "—"}</td>
-                    <td className="td num text-right">
-                      {p.items?.length ?? 0}
-                    </td>
-                    <td className="td">
-                      <StatusBadge status={p.status} />
-                    </td>
-                  </tr>
-                ))}
-              </Table>
+              <>
+                <Table head={["Prescription", "Patient", "Items", "Status"]}>
+                  {queue.data.data.slice(0, 8).map((p: any) => (
+                    <tr key={p.id}>
+                      <td className="td num">{p.prescriptionNo}</td>
+                      <td className="td">{p.patient?.fullName ?? "—"}</td>
+                      <td className="td num text-right">
+                        {p.items?.length ?? 0}
+                      </td>
+                      <td className="td">
+                        <StatusBadge status={p.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </Table>
+                {(queue.data.total ?? 0) > 8 && (
+                  <p className="mt-2 text-xs text-ink-muted">
+                    The oldest <span className="num">8</span> of{" "}
+                    <span className="num">
+                      {queue.data.total.toLocaleString()}
+                    </span>{" "}
+                    waiting.{" "}
+                    <Link className="link" href="/dispensing">
+                      Open the queue
+                    </Link>
+                    .
+                  </p>
+                )}
+              </>
             ) : (
               <EmptyState
                 title="The queue is clear"
@@ -249,10 +265,16 @@ function WarehousePanels({
 }) {
   const warehouseId =
     scope.warehouseId ?? scope.branch?.warehouses[0]?.id ?? null;
+  // Only the total is wanted here; the breakdown below is counted by the
+  // database rather than tallied from a page of rows.
   const tasks = useApi<any>(
     warehouseId
-      ? `/warehouse/tasks?warehouseId=${warehouseId}&open=true&pageSize=100`
+      ? `/warehouse/tasks?warehouseId=${warehouseId}&open=true&pageSize=1`
       : null,
+    [warehouseId],
+  );
+  const taskTypes = useApi<Array<{ taskType: string; count: number }>>(
+    warehouseId ? `/warehouse/tasks/by-type?warehouseId=${warehouseId}` : null,
     [warehouseId],
   );
   const exceptions = useApi<any>(
@@ -266,15 +288,7 @@ function WarehousePanels({
     [warehouseId],
   );
 
-  const byType = useMemo(() => {
-    const rows: Record<string, number> = {};
-    for (const t of tasks.data?.data ?? [])
-      rows[t.taskType] = (rows[t.taskType] ?? 0) + 1;
-    return Object.entries(rows).map(([taskType, count]) => ({
-      taskType,
-      count,
-    }));
-  }, [tasks.data]);
+  const byType = taskTypes.data ?? [];
 
   const ex = exceptions.data;
 

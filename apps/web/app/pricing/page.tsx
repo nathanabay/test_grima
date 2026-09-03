@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { ProductSelect } from "@/components/ProductSelect";
 import { api, money, shortDate } from "@/lib/api";
 import { Card, Empty, ErrorBox, Loading, Pill } from "@/components/ui";
 import { DataTable } from "@/components/DataTable";
@@ -48,9 +49,9 @@ export default function PricingPage() {
     selectedId,
     version,
   ]);
-  const products = useApi<any>("/products?pageSize=200", []);
-
-  const productRows: any[] = products.data?.data ?? products.data?.items ?? [];
+  // Product choice is a server-side search, not a 200-row `<select>`: a
+  // pharmacy with more products than that could not price the rest.
+  const [addProductId, setAddProductId] = useState("");
 
   async function submit(
     path: string,
@@ -113,6 +114,7 @@ export default function PricingPage() {
     );
     if (ok) {
       setAddingPrice(false);
+      setAddProductId("");
       form.reset();
     }
   }
@@ -416,14 +418,12 @@ export default function PricingPage() {
               >
                 <label className="text-xs text-ink-muted md:col-span-2">
                   Product
-                  <select name="productId" required className="input mt-1">
-                    <option value="">Choose a product</option>
-                    {productRows.map((p: any) => (
-                      <option key={p.id} value={p.id}>
-                        {p.sku} — {productLabel(p)}
-                      </option>
-                    ))}
-                  </select>
+                  <ProductSelect
+                    name="productId"
+                    value={addProductId}
+                    onChange={setAddProductId}
+                    required
+                  />
                 </label>
                 <label className="text-xs text-ink-muted">
                   Unit price
@@ -547,18 +547,10 @@ export default function PricingPage() {
           <div className="grid gap-3 md:grid-cols-4">
             <label className="text-xs text-ink-muted md:col-span-2">
               Product
-              <select
-                className="input mt-1"
+              <ProductSelect
                 value={quoteProduct}
-                onChange={(e) => setQuoteProduct(e.target.value)}
-              >
-                <option value="">Choose a product</option>
-                {productRows.map((p: any) => (
-                  <option key={p.id} value={p.id}>
-                    {p.sku} — {productLabel(p)}
-                  </option>
-                ))}
-              </select>
+                onChange={setQuoteProduct}
+              />
             </label>
             <label className="text-xs text-ink-muted">
               Quantity

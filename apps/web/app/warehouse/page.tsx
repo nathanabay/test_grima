@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, qty, shortDate } from "@/lib/api";
 import {
   BarChart,
@@ -81,11 +82,16 @@ export default function WarehousePage() {
     warehouseId ? `/warehouse/tasks/exceptions?${scope}` : null,
     [warehouseId, version],
   );
-  const tasks = useApi<any>(
-    warehouseId && tab === "tasks"
-      ? `/warehouse/tasks?${scope}&pageSize=200${openOnly ? "&open=true" : ""}`
-      : null,
-    [warehouseId, version, openOnly],
+  // A busy warehouse raises more than two hundred tasks in a day. The table's
+  // pager used to walk the first two hundred and stop.
+  const tasks = usePaged<any>(
+    warehouseId && tab === "tasks" ? "/warehouse/tasks" : null,
+    {
+      filters: [scope, openOnly ? "open=true" : "", version ? `v=${version}` : ""]
+        .filter(Boolean)
+        .join("&"),
+      pageSize: 50,
+    },
   );
   const waves = useApi<any[]>(
     warehouseId && tab === "waves" ? `/warehouse/waves?${scope}` : null,
@@ -466,9 +472,10 @@ export default function WarehousePage() {
         >
           {tasks.error && <ErrorBox message={tasks.error} />}
           {tasks.loading && <Loading />}
-          {tasks.data && (
+          {!tasks.error && (
             <DataTable
-              rows={tasks.data.data}
+              rows={tasks.rows}
+              server={tasks.server}
               getKey={(t: any) => t.id}
               exportName="warehouse-tasks"
               searchPlaceholder="Search tasks"

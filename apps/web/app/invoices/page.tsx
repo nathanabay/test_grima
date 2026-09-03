@@ -3,8 +3,17 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 
 const MATCH_TONE: Record<string, any> = {
   MATCHED: "ok",
@@ -31,7 +40,10 @@ export default function InvoicesPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const list = useApi<any>("/supplier-invoices?pageSize=25", [message]);
+  const list = usePaged<any>("/supplier-invoices", {
+    filters: message ? `v=${encodeURIComponent(message)}` : "",
+    pageSize: 25,
+  });
   const ageing = useApi<any>("/supplier-invoices/ageing", [message]);
   const detail = useApi<any>(
     selectedId ? `/supplier-invoices/${selectedId}` : null,
@@ -94,12 +106,12 @@ export default function InvoicesPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         <Card
           className="lg:col-span-2"
-          title={`${list.data?.total ?? 0} invoices`}
+          title={`${list.total.toLocaleString()} ${list.total === 1 ? "invoice" : "invoices"}`}
         >
           {list.loading && <Loading />}
-          {list.data?.data?.length ? (
+          {list.rows.length ? (
             <div className="max-h-[60vh] space-y-1 overflow-y-auto">
-              {list.data.data.map((inv: any) => (
+              {list.rows.map((inv: any) => (
                 <button
                   key={inv.id}
                   onClick={() => setSelectedId(inv.id)}
@@ -130,6 +142,14 @@ export default function InvoicesPage() {
           ) : (
             !list.loading && <Empty>No supplier invoices entered.</Empty>
           )}
+          <Pager
+            page={list.page}
+            pageSize={list.pageSize}
+            total={list.total}
+            onPage={list.setPage}
+            loading={list.loading}
+            noun="invoice"
+          />
         </Card>
 
         <div className="lg:col-span-3">

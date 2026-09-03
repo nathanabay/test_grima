@@ -3,8 +3,17 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 import { Scanner, ScanResolution } from "@/components/Scanner";
 
 interface ReceiptLine {
@@ -46,12 +55,15 @@ export default function ReceivingPage() {
    */
   const orders = useApi<any>("/purchase-orders/receivable");
   const selectedOrder = (orders.data ?? []).find((o: any) => o.id === poId) ?? null;
-  const recent = useApi<any>(
-    warehouseId
-      ? `/goods-receipts?warehouseId=${warehouseId}&pageSize=10`
-      : null,
-    [warehouseId, receipt],
-  );
+  const recent = usePaged<any>(warehouseId ? "/goods-receipts" : null, {
+    filters: [
+      `warehouseId=${warehouseId}`,
+      receipt ? `v=${encodeURIComponent(receipt.grnNo ?? "")}` : "",
+    ]
+      .filter(Boolean)
+      .join("&"),
+    pageSize: 10,
+  });
 
   useEffect(() => {
     if (!org.data) return;
@@ -386,9 +398,9 @@ export default function ReceivingPage() {
 
         <Card title="Recent receipts">
           {recent.loading && <Loading />}
-          {recent.data?.data?.length ? (
+          {recent.rows.length ? (
             <Table head={["GRN", "When", "Lines", "Flags"]}>
-              {recent.data.data.map((g: any) => (
+              {recent.rows.map((g: any) => (
                 <tr key={g.id}>
                   <td className="td font-medium">{g.grnNo}</td>
                   <td className="td text-xs text-ink-muted">
@@ -408,6 +420,14 @@ export default function ReceivingPage() {
           ) : (
             !recent.loading && <Empty>No receipts in this warehouse yet.</Empty>
           )}
+          <Pager
+            page={recent.page}
+            pageSize={recent.pageSize}
+            total={recent.total}
+            onPage={recent.setPage}
+            loading={recent.loading}
+            noun="receipt"
+          />
         </Card>
       </div>
     </Shell>

@@ -115,8 +115,12 @@ export class PlatformController {
 
   @Get('admin/jobs/history')
   @RequirePermissions('admin.setting.READ')
-  jobHistory(@Query('jobKey') jobKey?: string, @Query('limit') limit?: string) {
-    return this.jobs.history(jobKey, limit ? Number(limit) : 50);
+  jobHistory(@Query() query: any) {
+    return this.jobs.history({
+      jobKey: query.jobKey,
+      page: query.page ? Number(query.page) : 1,
+      pageSize: query.pageSize ? Number(query.pageSize) : 50,
+    });
   }
 
   @Post('admin/jobs/:key/run')

@@ -122,12 +122,20 @@ export class JobRunnerService {
     });
   }
 
-  async history(jobKey?: string, limit = 50) {
-    return this.prisma.jobRun.findMany({
-      where: jobKey ? { jobKey } : {},
-      orderBy: { startedAt: 'desc' },
-      take: Math.min(limit, 200),
-    });
+  async history(query: { jobKey?: string; page?: number; pageSize?: number } = {}) {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(200, query.pageSize ?? 50);
+    const where = query.jobKey ? { jobKey: query.jobKey } : {};
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.jobRun.findMany({
+        where,
+        orderBy: { startedAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.jobRun.count({ where }),
+    ]);
+    return { data, total, page, pageSize };
   }
 
   /** Failures in the recent past — the "failed jobs" card on the health page. */

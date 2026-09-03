@@ -41,7 +41,19 @@ export default function ForecastPage() {
   const [method, setMethod] = useState("AUTO");
   const [months, setMonths] = useState(12);
 
-  const top = useApi<any[]>("/analytics/forecast?limit=25&months=12");
+  const [topCount, setTopCount] = useState(25);
+  /**
+   * This is a top-N, not a truncated list.
+   *
+   * Every row runs a full forecast, so asking for all 119 products would be a
+   * page that never loads. The card says how many it is showing and lets the
+   * reader raise it, rather than capping silently at 25 and letting the
+   * heading imply completeness.
+   */
+  const top = useApi<any[]>(
+    `/analytics/forecast?limit=${topCount}&months=12`,
+    [topCount],
+  );
   const detail = useApi<any>(
     productId
       ? `/analytics/forecast/${productId}?method=${method}&months=${months}&horizon=3`
@@ -57,7 +69,27 @@ export default function ForecastPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-2" title="Highest-moving products">
+        <Card
+          className="lg:col-span-2"
+          title={`Top ${topCount} by movement`}
+          action={
+            <label className="flex items-center gap-1 text-xs text-ink-muted">
+              Show
+              <select
+                className="input w-auto py-0.5 text-small"
+                value={topCount}
+                onChange={(e) => setTopCount(Number(e.target.value))}
+                aria-label="How many products to forecast"
+              >
+                {[10, 25, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          }
+        >
           {top.loading && <Loading label="Forecasting" />}
           {top.error && <ErrorBox message={top.error} />}
           {top.data?.length ? (

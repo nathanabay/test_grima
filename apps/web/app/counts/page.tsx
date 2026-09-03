@@ -3,8 +3,17 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, can, money, qty, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 
 const COUNT_TYPES = [
   {
@@ -40,7 +49,7 @@ export default function CountsPage() {
   const user = typeof window !== "undefined" ? tokenStore.user : null;
   const canCount = can(user, "inventory.count.CREATE");
 
-  const list = useApi<any>("/stock-counts?pageSize=25");
+  const list = usePaged<any>("/stock-counts", { pageSize: 25 });
   const detail = useApi<any>(
     selectedId ? `/stock-counts/${selectedId}` : null,
     [selectedId],
@@ -91,12 +100,12 @@ export default function CountsPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         <Card
           className="lg:col-span-2"
-          title={`${list.data?.total ?? 0} counts`}
+          title={`${list.total.toLocaleString()} ${list.total === 1 ? "count" : "counts"}`}
         >
           {list.loading && <Loading />}
-          {list.data?.data?.length ? (
+          {list.rows.length ? (
             <div className="space-y-1">
-              {list.data.data.map((c: any) => {
+              {list.rows.map((c: any) => {
                 const counted = c.items.filter(
                   (i: any) => i.countedQty !== null,
                 ).length;
@@ -134,6 +143,14 @@ export default function CountsPage() {
           ) : (
             !list.loading && <Empty>No counts yet.</Empty>
           )}
+          <Pager
+            page={list.page}
+            pageSize={list.pageSize}
+            total={list.total}
+            onPage={list.setPage}
+            loading={list.loading}
+            noun="count"
+          />
         </Card>
 
         <div className="lg:col-span-3">
@@ -391,12 +408,10 @@ function CategoryPicker({
   value: string;
   onChange: (v: string) => void;
 }) {
-  // Categories are derived from the product search, which every role can read.
-  const { data } = useApi<any>("/products?pageSize=200");
-  const categories = new Map<string, string>();
-  for (const p of data?.data ?? []) {
-    if (p.category) categories.set(p.categoryId, p.category.name);
-  }
+  // The categories table, not the categories that happen to appear in the
+  // first page of products — which silently omitted any category whose
+  // products all sorted later.
+  const { data } = useApi<any[]>("/products/categories");
   return (
     <div>
       <label className="label">Category</label>
@@ -407,9 +422,9 @@ function CategoryPicker({
         onChange={(e) => onChange(e.target.value)}
       >
         <option value="">Select a category</option>
-        {Array.from(categories.entries()).map(([id, name]) => (
-          <option key={id} value={id}>
-            {name}
+        {(data ?? []).map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
           </option>
         ))}
       </select>

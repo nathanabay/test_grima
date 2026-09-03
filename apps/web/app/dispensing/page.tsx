@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Shell, PageHeader } from '@/components/Shell';
 import { useApi } from '@/lib/useApi';
+import { usePaged } from '@/lib/paged';
 import { useScope } from '@/lib/scope';
 import { api, can, qty, shortDate, tokenStore } from '@/lib/api';
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from '@/components/ui';
+import { Card, Empty, ErrorBox, Loading, Pager, Pill, Table } from '@/components/ui';
 import { StatusBadge } from '@/components/status';
 import { Drawer, Field, Stat, Toolbar } from '@/components/primitives';
 import {
@@ -122,14 +123,19 @@ function DispensingBody() {
     view === 'queue' ? `/prescriptions/queue${branchId ? `?branchId=${branchId}` : ''}` : null,
     [view, branchId],
   );
-  const list = useApi<any>(
-    view === 'all'
-      ? `/prescriptions?pageSize=25${status ? `&status=${status}` : ''}${
-          search.trim() ? `&search=${encodeURIComponent(search.trim())}` : ''
-        }${branchId ? `&branchId=${branchId}` : ''}`
-      : null,
-    [view, status, search, branchId],
-  );
+  // The All tab reads one page at a time. It used to fetch the first 25 and
+  // stop, so a pharmacist looking for a prescription filed last week was told,
+  // silently, that it did not exist.
+  const list = usePaged<any>(view === 'all' ? '/prescriptions' : null, {
+    filters: [
+      status ? `status=${status}` : '',
+      search.trim() ? `search=${encodeURIComponent(search.trim())}` : '',
+      branchId ? `branchId=${branchId}` : '',
+    ]
+      .filter(Boolean)
+      .join('&'),
+    pageSize: 25,
+  });
   const today = useApi<any>(
     `/dispensing/summary/today${branchId ? `?branchId=${branchId}` : ''}`,
     [branchId],
@@ -139,7 +145,7 @@ function DispensingBody() {
     historyFor,
   ]);
 
-  const rows = view === 'queue' ? (queue.data?.data ?? []) : (list.data?.data ?? []);
+  const rows = view === 'queue' ? (queue.data?.data ?? []) : list.rows;
   const loading = view === 'queue' ? queue.loading : list.loading;
   const listError = view === 'queue' ? queue.error : list.error;
 
@@ -456,6 +462,16 @@ function DispensingBody() {
                   : 'No prescriptions match this filter.'}
               </Empty>
             )
+          )}
+          {view === 'all' && (
+            <Pager
+              page={list.page}
+              pageSize={list.pageSize}
+              total={list.total}
+              onPage={list.setPage}
+              loading={list.loading}
+              noun="prescription"
+            />
           )}
         </Card>
 

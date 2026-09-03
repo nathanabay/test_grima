@@ -28,6 +28,13 @@ export class CatalogController {
     });
   }
 
+  @Get('categories')
+  @RequirePermissions('catalog.product.READ')
+  @ApiOperation({ summary: 'Every product category, for the filters that use one' })
+  categories() {
+    return this.products.categories();
+  }
+
   @Get('by-ingredient')
   @RequirePermissions('catalog.product.READ')
   @ApiOperation({ summary: 'Find products containing an active ingredient' })

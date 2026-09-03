@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, can, money, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import { Card, Empty, ErrorBox, Loading, Pager, Pill, Table } from "@/components/ui";
 import { DocumentsTab } from "@/components/DocumentsTab";
 
 const TABS = [
@@ -23,10 +24,12 @@ export default function ProductsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("Overview");
 
-  const list = useApi<any>(
-    `/products?pageSize=25${query ? `&q=${encodeURIComponent(query)}` : ""}`,
-    [query],
-  );
+  // The drug master holds more products than one page. Reading a fixed first
+  // page and stopping hid 94 of 119 on the seed alone.
+  const list = usePaged<any>("/products", {
+    filters: query ? `q=${encodeURIComponent(query)}` : "",
+    pageSize: 25,
+  });
   const detail = useApi<any>(selectedId ? `/products/${selectedId}` : null, [
     selectedId,
   ]);
@@ -62,11 +65,11 @@ export default function ProductsPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         <Card
           className="lg:col-span-2"
-          title={`${list.data?.total ?? 0} products`}
+          title={`${list.total.toLocaleString()} product${list.total === 1 ? "" : "s"}`}
         >
-          {list.data?.data?.length ? (
+          {list.rows.length ? (
             <div className="max-h-[70vh] space-y-1 overflow-y-auto">
-              {list.data.data.map((p: any) => (
+              {list.rows.map((p: any) => (
                 <button
                   key={p.id}
                   onClick={() => setSelectedId(p.id)}
@@ -95,6 +98,14 @@ export default function ProductsPage() {
           ) : (
             !list.loading && <Empty>No products match that search.</Empty>
           )}
+          <Pager
+            page={list.page}
+            pageSize={list.pageSize}
+            total={list.total}
+            onPage={list.setPage}
+            loading={list.loading}
+            noun="product"
+          />
         </Card>
 
         <div className="lg:col-span-3">

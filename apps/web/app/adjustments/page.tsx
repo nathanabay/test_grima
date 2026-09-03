@@ -3,8 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  MoreMatches,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 import {
   Card as Panel,
   EmptyState,
@@ -47,6 +57,8 @@ export default function AdjustmentsPage() {
   const [lines, setLines] = useState<Line[]>([]);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<any[]>([]);
+  // How many positions actually matched, so a capped dropdown says so.
+  const [matchTotal, setMatchTotal] = useState<number | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -54,12 +66,17 @@ export default function AdjustmentsPage() {
     // The reader's own branches and warehouses. Not `/admin/organization`, which
   // requires admin.branch.READ and therefore fails for every operational role.
   const org = useApi<any>("/auth/me/scope");
-  const ledger = useApi<any>(
-    warehouseId
-      ? `/inventory/ledger?warehouseId=${warehouseId}&pageSize=25`
-      : null,
-    [warehouseId, message],
-  );
+  // The ledger is append-only and never shrinks. Twenty-five rows with no way
+  // back is not "recent movements", it is a keyhole.
+  const ledger = usePaged<any>(warehouseId ? "/inventory/ledger" : null, {
+    filters: [
+      `warehouseId=${warehouseId}`,
+      message ? `v=${encodeURIComponent(message)}` : "",
+    ]
+      .filter(Boolean)
+      .join("&"),
+    pageSize: 25,
+  });
 
   useEffect(() => {
     if (!org.data) return;
@@ -78,6 +95,7 @@ export default function AdjustmentsPage() {
   useEffect(() => {
     if (!search || !warehouseId) {
       setResults([]);
+      setMatchTotal(undefined);
       return;
     }
     const t = setTimeout(async () => {
@@ -86,6 +104,7 @@ export default function AdjustmentsPage() {
           `/inventory/balances?warehouseId=${warehouseId}&search=${encodeURIComponent(search)}&pageSize=20`,
         );
         setResults(res.data);
+        setMatchTotal(res.total);
       } catch (e: any) {
         setError(e.message);
       }
@@ -260,6 +279,7 @@ export default function AdjustmentsPage() {
                     </span>
                   </button>
                 ))}
+                <MoreMatches shown={results.length} total={matchTotal} />
               </div>
             )}
           </div>
@@ -385,9 +405,10 @@ export default function AdjustmentsPage() {
           )}
         </Card>
 
-        <Card title="Recent ledger movements">
+        <Card title="Ledger movements">
           {ledger.loading && <Loading />}
-          {ledger.data?.data?.length ? (
+          {ledger.error && <ErrorBox message={ledger.error} />}
+          {ledger.rows.length ? (
             <Table
               head={[
                 "When",
@@ -399,7 +420,7 @@ export default function AdjustmentsPage() {
                 "Reference",
               ]}
             >
-              {ledger.data.data.map((t: any) => (
+              {ledger.rows.map((t: any) => (
                 <tr key={t.id}>
                   <td className="td text-xs text-ink-muted">
                     {shortDate(t.occurredAt)}
@@ -432,6 +453,14 @@ export default function AdjustmentsPage() {
               <Empty>No movements recorded in this warehouse.</Empty>
             )
           )}
+          <Pager
+            page={ledger.page}
+            pageSize={ledger.pageSize}
+            total={ledger.total}
+            onPage={ledger.setPage}
+            loading={ledger.loading}
+            noun="movement"
+          />
         </Card>
       </div>
 

@@ -255,7 +255,9 @@ check('every rule states its trigger, conditions and actions',
   rules.every((r) => r.triggerType && Array.isArray(r.actions)));
 
 const expiryRule = rules.find((r) => r.code === 'EXPIRY_30');
-const runsBefore = (await admin('GET', '/automation/runs?limit=1')).body.length;
+// The envelope's `total` is the whole run log, so this compares the real
+// count before and after rather than the length of one page.
+const runsBefore = (await admin('GET', '/automation/runs?pageSize=1')).body.total;
 const preview = (await admin('GET', `/automation/rules/${expiryRule.id}/preview`)).body;
 check('a rule can be previewed', preview.matched >= 0 && Array.isArray(preview.samples),
   `${preview.matched} of ${preview.scanned} would match`);
@@ -268,8 +270,8 @@ check('a preview explains each condition rather than only the verdict',
   preview.samples.length ? `${preview.samples[0].conditionDetail.length} condition(s) shown` : 'nothing matches today');
 check('a preview says why non-matching subjects were skipped',
   Array.isArray(preview.nearMisses), `${preview.nearMisses?.length ?? 0} near miss(es)`);
-check('previewing does not act', (await admin('GET', '/automation/runs?limit=1')).body.length === runsBefore ||
-  preview.matched === 0);
+check('previewing does not act',
+  (await admin('GET', '/automation/runs?pageSize=1')).body.total === runsBefore);
 
 // Run every rule once. Previewing deliberately does not act, so on a freshly
 // seeded database there is nothing in the run history until something runs —
@@ -279,12 +281,14 @@ const ranAll = await admin('POST', '/automation/run-all', {});
 check('every active rule can be run on demand', ranAll.ok,
   `HTTP ${ranAll.status}`);
 
-const runs = (await admin('GET', '/automation/runs?limit=20')).body;
+// `/automation/runs` answers with the standard paginated envelope, so the run
+// log can be walked rather than truncated at whatever the caller asked for.
+const runs = (await admin('GET', '/automation/runs?pageSize=20')).body.data;
 check('runs are recorded with what they scanned and did', runs.length > 0 &&
   runs.every((r) => typeof r.subjectsScanned === 'number' && typeof r.actionsRun === 'number'),
   `${runs.length} runs`);
 const firstActing = runs.find((r) => r.actionsRun > 0) ??
-  (await admin('GET', '/automation/runs?limit=200')).body.find((r) => r.actionsRun > 0);
+  (await admin('GET', '/automation/runs?pageSize=200')).body.data.find((r) => r.actionsRun > 0);
 check('at least one rule has actually acted, not just matched', !!firstActing,
   firstActing ? `${firstActing.actionsRun} action(s)` : 'none acted');
 

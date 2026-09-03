@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, shortDate } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill } from "@/components/ui";
+import { Card, Empty, ErrorBox, Loading, Pager, Pill } from "@/components/ui";
 import { DataTable } from "@/components/DataTable";
 import { useFeedback, Skeleton } from "@/components/Feedback";
 
@@ -38,7 +39,12 @@ export default function AutomationPage() {
   const [version, setVersion] = useState(0);
 
   const rules = useApi<Rule[]>("/automation/rules", [version]);
-  const runs = useApi<any[]>("/automation/runs?limit=15", [version]);
+  // Every rule that fires writes a run. Showing the newest fifteen with no way
+  // back is how "did that rule act last Tuesday?" becomes unanswerable.
+  const runs = usePaged<any>("/automation/runs", {
+    filters: version ? `v=${version}` : "",
+    pageSize: 15,
+  });
   const escalations = useApi<any[]>("/automation/escalations", [version]);
 
   async function loadPreview(rule: Rule) {
@@ -281,6 +287,18 @@ export default function AutomationPage() {
                 <Empty>Nothing currently matches this rule.</Empty>
               ) : (
                 <div className="space-y-3">
+                  {preview.matched > preview.samples.length && (
+                    <p className="text-xs text-ink-muted">
+                      Showing{" "}
+                      <span className="num">{preview.samples.length}</span> of
+                      the{" "}
+                      <span className="num">
+                        {preview.matched.toLocaleString()}
+                      </span>{" "}
+                      records this rule matched. A preview is a sample; running
+                      the rule acts on all of them.
+                    </p>
+                  )}
                   {preview.samples.map((sample: any) => (
                     <div
                       key={sample.subjectId}
@@ -353,7 +371,7 @@ export default function AutomationPage() {
         <Card title="Recent runs">
           {runs.loading ? (
             <Skeleton rows={4} />
-          ) : !runs.data?.length ? (
+          ) : !runs.rows.length ? (
             <Empty>No rule has run yet.</Empty>
           ) : (
             <div className="overflow-x-auto">
@@ -368,7 +386,7 @@ export default function AutomationPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {runs.data.map((run: any) => (
+                  {runs.rows.map((run: any) => (
                     <tr key={run.id}>
                       <td className="td">{run.rule.name}</td>
                       <td className="td">{shortDate(run.startedAt)}</td>
@@ -383,6 +401,14 @@ export default function AutomationPage() {
               </table>
             </div>
           )}
+          <Pager
+            page={runs.page}
+            pageSize={runs.pageSize}
+            total={runs.total}
+            onPage={runs.setPage}
+            loading={runs.loading}
+            noun="run"
+          />
         </Card>
 
         <Card

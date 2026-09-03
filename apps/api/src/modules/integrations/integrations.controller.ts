@@ -70,7 +70,8 @@ export class IntegrationsController {
     return this.integrations.deliveries({
       endpointId: query.endpointId,
       status: query.status,
-      limit: query.limit ? Number(query.limit) : 50,
+      page: query.page ? Number(query.page) : 1,
+      pageSize: query.pageSize ? Number(query.pageSize) : 25,
     });
   }
 

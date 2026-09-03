@@ -72,8 +72,12 @@ export class AutomationController {
 
   @Get('runs')
   @RequirePermissions('admin.automation.READ')
-  runs(@Query('ruleId') ruleId?: string, @Query('limit') limit?: string) {
-    return this.automation.runs(ruleId, limit ? Number(limit) : 50);
+  runs(@Query() query: any) {
+    return this.automation.runs({
+      ruleId: query.ruleId,
+      page: query.page ? Number(query.page) : 1,
+      pageSize: query.pageSize ? Number(query.pageSize) : 25,
+    });
   }
 
   @Get('escalations')

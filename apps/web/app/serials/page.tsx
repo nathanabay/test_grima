@@ -15,6 +15,8 @@ import {
 import { DataTable } from "@/components/DataTable";
 import { StatusBadge, statusLabel } from "@/components/status";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
+import { BatchSelect } from "@/components/ProductSelect";
 import { api, can, shortDate, tokenStore } from "@/lib/api";
 
 /**
@@ -99,20 +101,23 @@ function SerialsBody() {
     return () => clearTimeout(t);
   }, [serial]);
 
-  const query = new URLSearchParams({ pageSize: "100" });
-  if (debounced) query.set("serial", debounced);
-  if (status) query.set("status", status);
+  const filters = new URLSearchParams();
+  if (debounced) filters.set("serial", debounced);
+  if (status) filters.set("status", status);
+  if (reload) filters.set("v", String(reload));
 
-  const list = useApi<{ data: SerialRow[]; meta: { total: number } }>(
-    `/serials?${query.toString()}`,
-    [debounced, status, reload],
-  );
+  // This screen already said "25 of 4,102"; now the pager can reach the rest
+  // of them rather than walking the first hundred rows it was handed.
+  const list = usePaged<SerialRow>("/serials", {
+    filters: filters.toString(),
+    pageSize: 25,
+  });
   const summary = useApi<{
     total: number;
     byStatus: Array<{ status: string; count: number }>;
   }>("/serials/summary", [reload]);
 
-  const rows = list.data?.data ?? [];
+  const rows = list.rows;
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
     for (const s of summary.data?.byStatus ?? []) map[s.status] = s.count;
@@ -137,9 +142,9 @@ function SerialsBody() {
       />
 
       {list.error && <ErrorState message={list.error} onRetry={refresh} />}
-      {list.loading && !list.data && <Loading label="Reading the register" />}
+      {list.loading && !rows.length && <Loading label="Reading the register" />}
 
-      {list.data && (
+      {!list.error && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Stat
@@ -220,12 +225,11 @@ function SerialsBody() {
               ) : (
                 <DataTable
                   rows={rows}
+                  server={list.server}
                   getKey={(r) => r.id}
-                  pageSize={25}
                   exportName="serial-register"
                   searchPlaceholder="Search serial, batch or product"
                   viewKey="serials"
-                  total={list.data.meta.total}
                   onRowClick={(r) => setOpenId(r.id)}
                   selectedKey={openId}
                   rowTone={(r) => (r.status === "RECALLED" ? "danger" : null)}
@@ -528,10 +532,6 @@ function ImportButton({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
 
-  const batches = useApi<any>(open ? "/inventory/batches?pageSize=100" : null, [
-    open,
-  ]);
-
   async function submit() {
     setBusy(true);
     setError(null);
@@ -575,19 +575,7 @@ function ImportButton({ onDone }: { onDone: () => void }) {
         )}
         <div className="space-y-3">
           <Field label="Batch" required>
-            <select
-              className="input"
-              value={batchId}
-              onChange={(e) => setBatchId(e.target.value)}
-            >
-              <option value="">Choose a batch…</option>
-              {(batches.data?.data ?? []).map((b: any) => (
-                <option key={b.id} value={b.id}>
-                  {b.product?.genericName} {b.product?.strength} ·{" "}
-                  {b.batchNumber}
-                </option>
-              ))}
-            </select>
+            <BatchSelect value={batchId} onChange={setBatchId} required />
           </Field>
           <Field
             label="Serials"

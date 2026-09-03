@@ -3,9 +3,18 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, shortDate } from "@/lib/api";
 import { translationCoverage } from "@/lib/i18n";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 
 const TABS = [
   "Users",
@@ -73,13 +82,13 @@ function Users({
   onError: (m: string) => void;
   onMessage: (m: string) => void;
 }) {
-  const users = useApi<any>("/admin/users?pageSize=50");
+  const users = usePaged<any>("/admin/users", { pageSize: 50 });
   const roles = useApi<any[]>("/admin/roles");
   const [creating, setCreating] = useState(false);
 
   return (
     <Card
-      title={`${users.data?.total ?? 0} users`}
+      title={`${users.total.toLocaleString()} user${users.total === 1 ? "" : "s"}`}
       action={
         <button className="btn-primary" onClick={() => setCreating((v) => !v)}>
           {creating ? "Cancel" : "Add user"}
@@ -151,7 +160,7 @@ function Users({
       )}
 
       {users.loading && <Loading />}
-      {users.data?.data?.length ? (
+      {users.rows.length ? (
         <Table
           head={[
             "Name",
@@ -163,7 +172,7 @@ function Users({
             "Last sign-in",
           ]}
         >
-          {users.data.data.map((u: any) => (
+          {users.rows.map((u: any) => (
             <tr key={u.id}>
               <td className="td font-medium">
                 {u.fullName}
@@ -203,6 +212,14 @@ function Users({
       ) : (
         !users.loading && <Empty>No users.</Empty>
       )}
+      <Pager
+        page={users.page}
+        pageSize={users.pageSize}
+        total={users.total}
+        onPage={users.setPage}
+        loading={users.loading}
+        noun="user"
+      />
     </Card>
   );
 }
@@ -503,11 +520,11 @@ function Backups({
 }
 
 function Audit() {
-  const logs = useApi<any>("/admin/audit-logs?pageSize=50");
+  const logs = usePaged<any>("/admin/audit-logs", { pageSize: 50 });
   const verify = useApi<any>("/admin/audit-logs/verify");
   return (
     <Card
-      title={`Audit trail — ${logs.data?.total ?? 0} entries`}
+      title={`Audit trail — ${logs.total.toLocaleString()} ${logs.total === 1 ? "entry" : "entries"}`}
       action={
         verify.data && (
           <Pill tone={verify.data.valid ? "ok" : "danger"}>
@@ -519,11 +536,11 @@ function Audit() {
       }
     >
       {logs.loading && <Loading />}
-      {logs.data?.data?.length ? (
+      {logs.rows.length ? (
         <Table
           head={["Seq", "When", "User", "Module", "Action", "Entity", "Reason"]}
         >
-          {logs.data.data.map((l: any) => (
+          {logs.rows.map((l: any) => (
             <tr key={l.id}>
               <td className="td num text-xs">{l.sequence}</td>
               <td className="td text-xs text-ink-muted">
@@ -540,6 +557,15 @@ function Audit() {
           ))}
         </Table>
       ) : null}
+      <Pager
+        page={logs.page}
+        pageSize={logs.pageSize}
+        total={logs.total}
+        onPage={logs.setPage}
+        loading={logs.loading}
+        noun="entry"
+        plural="entries"
+      />
     </Card>
   );
 }

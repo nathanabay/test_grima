@@ -3,12 +3,21 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, qty, shortDate } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 
 export default function RecallsPage() {
   const [selected, setSelected] = useState<string | null>(null);
-  const list = useApi<any>("/recalls?pageSize=25");
+  const list = usePaged<any>("/recalls", { pageSize: 25 });
   const detail = useApi<any>(selected ? `/recalls/${selected}` : null, [
     selected,
   ]);
@@ -39,9 +48,9 @@ export default function RecallsPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Recalls" className="lg:col-span-1">
-          {list.data?.data?.length ? (
+          {list.rows.length ? (
             <div className="space-y-2">
-              {list.data.data.map((r: any) => (
+              {list.rows.map((r: any) => (
                 <button
                   key={r.id}
                   onClick={() => setSelected(r.id)}
@@ -71,6 +80,14 @@ export default function RecallsPage() {
           ) : (
             !list.loading && <Empty>No recalls have been raised.</Empty>
           )}
+          <Pager
+            page={list.page}
+            pageSize={list.pageSize}
+            total={list.total}
+            onPage={list.setPage}
+            loading={list.loading}
+            noun="recall"
+          />
         </Card>
 
         <div className="lg:col-span-2 space-y-4">
@@ -171,10 +188,11 @@ function TaskList({
   recallId: string;
   onUpdate: (taskId: string, recovered: number) => void;
 }) {
-  const { data, loading } = useApi<any>(`/recalls?pageSize=1`);
+  // This used to fire `/recalls?pageSize=1` as well and use nothing but its
+  // loading flag — a request per render that answered no question.
   const detail = useApi<any>(`/recalls/${recallId}`, [recallId]);
 
-  if (loading || detail.loading) return <Loading />;
+  if (detail.loading) return <Loading />;
   const byType = detail.data?.tasks?.byType ?? {};
 
   return (

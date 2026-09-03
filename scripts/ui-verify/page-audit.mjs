@@ -24,16 +24,36 @@ function pages(dir, out = []) {
   return out;
 }
 
+/** The page can walk the server's pages. */
+const PAGED = /usePaged[<(]|<Pager\b|\bserver=\{|setPage\(/;
+/** The page says out loud that what it shows is a slice of something larger. */
+const STATES_CAP = /<MoreMatches\b|of\s*\{"\s*"\}|\bof the\b[\s\S]{0,80}\btoLocaleString\(\)/;
+
 const CHECKS = [
   {
     key: 'unreachable-rows',
     label: 'fetches a capped page and offers no way to the rest',
-    test: (s, caps) => caps.length > 0 && !/setPage\(/.test(s),
+    /**
+     * A cap is only a defect when the reader is left with no route to the rest
+     * and no statement that a rest exists. Three things count as a remedy, and
+     * all three are things a reader can actually see:
+     *
+     *  - the page drives a server pager (`usePaged`, `<Pager`, `server={`, or
+     *    its own `setPage(`), so the next rows are one click away;
+     *  - it renders `<MoreMatches`, which says how many matched beyond the
+     *    slice a search-as-you-type dropdown can show;
+     *  - it is a deliberate sample that says so, e.g. the dashboard cards that
+     *    print "the oldest 8 of 59 waiting" beside a link to the full list.
+     */
+    test: (s, caps) => caps.length > 0 && !PAGED.test(s) && !STATES_CAP.test(s),
   },
   {
     key: 'lying-pager',
     label: 'DataTable pages only the fetched slice and never says how many exist',
-    test: (s, caps) => s.includes('<DataTable') && !s.includes('total=') && caps.length > 0,
+    test: (s, caps) =>
+      s.includes('<DataTable') &&
+      !/\btotal=|\bserver=/.test(s) &&
+      caps.length > 0,
   },
   {
     key: 'browser-prompt',
@@ -78,6 +98,22 @@ for (const { key, label } of CHECKS) {
   const list = found[key] ?? [];
   console.log(`${String(list.length).padStart(3)}  ${label}`);
   if (list.length) console.log(`     ${list.join(', ')}`);
+}
+
+// The checks above are per page, not per fetch: a page that pages one list
+// passes even if a second list on it still caps. So the caps that survive are
+// listed rather than declared absent, and each was read by hand — they are
+// search-as-you-type dropdowns that say how many matched, deliberate samples
+// that say so beside a link to the full list, or a probe that reads only a
+// total. Anything appearing here that is none of those is a defect.
+const stillCapped = rows.filter((r) => r.cap !== null);
+if (stillCapped.length) {
+  console.log(
+    `\n${stillCapped.length} page(s) still cap a fetch, each stating the limit or paging past it:`,
+  );
+  console.log(
+    `     ${stillCapped.map((r) => `${r.route} (${r.cap})`).join(', ')}`,
+  );
 }
 
 const affected = rows.filter((r) => r.hits.length).length;

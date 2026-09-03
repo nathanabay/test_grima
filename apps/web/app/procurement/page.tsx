@@ -2,13 +2,22 @@
 
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { can, money, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 
 export default function ProcurementPage() {
   const user = typeof window !== "undefined" ? tokenStore.user : null;
   const replenishment = useApi<any[]>("/replenishment/recommendations");
-  const orders = useApi<any>("/purchase-orders?pageSize=15");
+  const orders = usePaged<any>("/purchase-orders", { pageSize: 15 });
   // Gated rather than fetched-and-swallowed: a finance officer reads purchase
   // orders but not supplier scorecards, and firing a request their permissions
   // refuse leaves a silently missing panel and a 403 in the log.
@@ -85,9 +94,9 @@ export default function ProcurementPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Purchase orders">
             {orders.loading && <Loading />}
-            {orders.data?.data?.length ? (
+            {orders.rows.length ? (
               <Table head={["PO", "Supplier", "Status", "Expected", "Total"]}>
-                {orders.data.data.map((po: any) => (
+                {orders.rows.map((po: any) => (
                   <tr key={po.id}>
                     <td className="td font-medium">{po.poNo}</td>
                     <td className="td">{po.supplier.companyName}</td>
@@ -116,7 +125,15 @@ export default function ProcurementPage() {
             ) : (
               !orders.loading && <Empty>No purchase orders yet.</Empty>
             )}
-          </Card>
+          <Pager
+            page={orders.page}
+            pageSize={orders.pageSize}
+            total={orders.total}
+            onPage={orders.setPage}
+            loading={orders.loading}
+            noun="purchase order"
+          />
+        </Card>
 
           <Card title="Supplier scorecard">
             {suppliers.loading && <Loading />}

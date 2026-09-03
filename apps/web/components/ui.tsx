@@ -92,6 +92,93 @@ export function ErrorBox({ message }: { message: string }) {
   return <ErrorState message={message} />;
 }
 
+/**
+ * Previous / Next for a list that reads one page at a time from the server.
+ *
+ * The hand-rolled lists — the ones that do not use `DataTable` — used to fetch
+ * a fixed first page and stop, with nothing on screen to say the rest existed.
+ * This is the smallest honest thing: which rows are showing, how many there
+ * are, and a way to the next ones.
+ */
+export function Pager({
+  page,
+  pageSize,
+  total,
+  onPage,
+  loading,
+  noun = "row",
+  plural,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPage: (page: number) => void;
+  loading?: boolean;
+  /** Singular noun for the count, e.g. "product". */
+  noun?: string;
+  /** Given when adding an "s" would be wrong, e.g. "entry" / "entries". */
+  plural?: string;
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = Math.min(page * pageSize, total);
+  if (total === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-surface-border pt-2 text-small text-ink-muted">
+      <span className="num">
+        {first.toLocaleString()}&ndash;{last.toLocaleString()} of{" "}
+        {total.toLocaleString()} {total === 1 ? noun : (plural ?? `${noun}s`)}
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="btn-ghost btn-sm"
+          disabled={page <= 1 || loading}
+          onClick={() => onPage(page - 1)}
+        >
+          Previous
+        </button>
+        <span className="num">
+          {page} / {pageCount}
+        </span>
+        <button
+          type="button"
+          className="btn-ghost btn-sm"
+          disabled={page >= pageCount || loading}
+          onClick={() => onPage(page + 1)}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The line a search-as-you-type picker owes its reader when it caps.
+ *
+ * These pickers ask the server for the first fifteen or twenty matches. That
+ * is the right shape for a dropdown, but only if the reader is told when their
+ * search matched more than they can see — otherwise a batch that exists reads
+ * as a batch that does not.
+ */
+export function MoreMatches({
+  shown,
+  total,
+}: {
+  shown: number;
+  total: number | undefined;
+}) {
+  if (!total || total <= shown) return null;
+  return (
+    <div className="border-t border-surface-border px-2 py-1.5 text-xs text-ink-muted">
+      Showing <span className="num">{shown}</span> of{" "}
+      <span className="num">{total.toLocaleString()}</span> matches. Narrow the
+      search to see the rest.
+    </div>
+  );
+}
+
 export function Table({
   head,
   children,

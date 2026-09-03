@@ -17,6 +17,28 @@ export class ProductsService {
    * registered barcode, and tolerates minor typos via trigram similarity when
    * an exact match returns nothing.
    */
+  /**
+   * Every product category, for the pickers that filter by one.
+   *
+   * `/counts` used to derive its category list from the first 200 products,
+   * so a category whose products all sorted later simply did not appear as an
+   * option. This asks the categories table, which is the only place that
+   * answer is complete.
+   */
+  async categories() {
+    const rows = await this.prisma.productCategory.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        parentId: true,
+        _count: { select: { products: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+    return rows.map(({ _count, ...c }) => ({ ...c, productCount: _count.products }));
+  }
+
   async search(query: {
     q?: string;
     categoryId?: string;

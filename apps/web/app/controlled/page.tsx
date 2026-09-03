@@ -4,7 +4,17 @@ import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { api, qty, shortDate } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  MoreMatches,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
+import { usePaged } from "@/lib/paged";
 import {
   Card as Panel,
   EmptyState,
@@ -31,11 +41,22 @@ export default function ControlledPage() {
     // The reader's own branches and warehouses. Not `/admin/organization`, which
   // requires admin.branch.READ and therefore fails for every operational role.
   const org = useApi<any>("/auth/me/scope");
-  const products = useApi<any>("/products?isControlled=true&pageSize=50");
-  const register = useApi<any>(
-    `/controlled-register?pageSize=200${productId ? `&productId=${productId}` : ""}${branchId ? `&branchId=${branchId}` : ""}`,
-    [productId, branchId, message],
-  );
+  // Controlled medicines are a small, closed set of the drug master; 200 is
+  // the ceiling the endpoint allows and comfortably above any real register.
+  const products = useApi<any>("/products?isControlled=true&pageSize=200");
+  // The register a regulator reads. It used to stop at 200 entries with no
+  // total and no route to the rest, which for a statutory record is the
+  // difference between a complete register and a partial one.
+  const register = usePaged<any>("/controlled-register", {
+    filters: [
+      productId ? `productId=${productId}` : "",
+      branchId ? `branchId=${branchId}` : "",
+      message ? `v=${encodeURIComponent(message)}` : "",
+    ]
+      .filter(Boolean)
+      .join("&"),
+    pageSize: 50,
+  });
   const reconciliation = useApi<any>(
     productId && branchId
       ? `/controlled-register/reconcile?productId=${productId}&branchId=${branchId}`
@@ -108,6 +129,10 @@ export default function ControlledPage() {
                 </option>
               ))}
             </select>
+            <MoreMatches
+              shown={(products.data?.data ?? []).length}
+              total={products.data?.total}
+            />
           </div>
           <div>
             <label className="label">Branch</label>
@@ -179,9 +204,12 @@ export default function ControlledPage() {
         </Card>
       )}
 
-      <Card title={`${register.data?.total ?? 0} register entries`}>
+      <Card
+        title={`${register.total.toLocaleString()} register ${register.total === 1 ? "entry" : "entries"}`}
+      >
         {register.loading && <Loading />}
-        {register.data?.data?.length ? (
+        {register.error && <ErrorBox message={register.error} />}
+        {register.rows.length ? (
           <Table
             head={[
               "Entry",
@@ -195,7 +223,7 @@ export default function ControlledPage() {
               "",
             ]}
           >
-            {register.data.data.map((e: any) => (
+            {register.rows.map((e: any) => (
               <tr
                 key={e.id}
                 className={e.entryType === "REVERSAL" ? "bg-warn-light" : ""}
@@ -248,6 +276,15 @@ export default function ControlledPage() {
             </Empty>
           )
         )}
+        <Pager
+          page={register.page}
+          pageSize={register.pageSize}
+          total={register.total}
+          onPage={register.setPage}
+          loading={register.loading}
+          noun="entry"
+          plural="entries"
+        />
       </Card>
 
       <Anomalies />

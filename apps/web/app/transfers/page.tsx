@@ -3,8 +3,18 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  MoreMatches,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 import {
   Card as Panel,
   Drawer,
@@ -35,7 +45,10 @@ export default function TransfersPage() {
   const [busy, setBusy] = useState(false);
   const [dispatching, setDispatching] = useState<any>(null);
 
-  const list = useApi<any>("/transfers?pageSize=25", [message]);
+  const list = usePaged<any>("/transfers", {
+    filters: message ? `v=${encodeURIComponent(message)}` : "",
+    pageSize: 25,
+  });
   const overdue = useApi<any[]>("/transfers/overdue", [message]);
   const detail = useApi<any>(selectedId ? `/transfers/${selectedId}` : null, [
     selectedId,
@@ -178,12 +191,13 @@ export default function TransfersPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         <Card
           className="lg:col-span-2"
-          title={`${list.data?.total ?? 0} transfers`}
+          title={`${list.total.toLocaleString()} transfer${list.total === 1 ? "" : "s"}`}
         >
           {list.loading && <Loading />}
-          {list.data?.data?.length ? (
+          {list.error && <ErrorBox message={list.error} />}
+          {list.rows.length ? (
             <div className="max-h-[60vh] space-y-1 overflow-y-auto">
-              {list.data.data.map((t: any) => (
+              {list.rows.map((t: any) => (
                 <button
                   key={t.id}
                   onClick={() => setSelectedId(t.id)}
@@ -205,6 +219,14 @@ export default function TransfersPage() {
           ) : (
             !list.loading && <Empty>No transfers yet.</Empty>
           )}
+          <Pager
+            page={list.page}
+            pageSize={list.pageSize}
+            total={list.total}
+            onPage={list.setPage}
+            loading={list.loading}
+            noun="transfer"
+          />
         </Card>
 
         <div className="lg:col-span-3">
@@ -405,6 +427,10 @@ function NewTransfer({
   const [reason, setReason] = useState("");
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<any[]>([]);
+  // What the server actually returned, so a capped dropdown can say so.
+  const [matches, setMatches] = useState<{ shown: number; total?: number }>({
+    shown: 0,
+  });
   const [lines, setLines] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -415,6 +441,7 @@ function NewTransfer({
   useEffect(() => {
     if (!search || !from) {
       setResults([]);
+      setMatches({ shown: 0 });
       return;
     }
     const t = setTimeout(async () => {
@@ -423,6 +450,7 @@ function NewTransfer({
           `/inventory/balances?warehouseId=${from}&search=${encodeURIComponent(search)}&pageSize=15`,
         );
         setResults(r.data.filter((b: any) => b.batch && Number(b.onHand) > 0));
+        setMatches({ shown: r.data.length, total: r.total });
       } catch (e: any) {
         onError(e.message);
       }
@@ -519,6 +547,7 @@ function NewTransfer({
                 {shortDate(b.batch.expiryDate)}
               </button>
             ))}
+            <MoreMatches shown={matches.shown} total={matches.total} />
           </div>
         )}
       </div>

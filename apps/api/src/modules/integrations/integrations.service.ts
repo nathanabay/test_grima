@@ -301,16 +301,29 @@ export class IntegrationsService {
     return { sent, failed };
   }
 
-  async deliveries(query: { endpointId?: string; status?: string; limit?: number }) {
-    return this.prisma.integrationDelivery.findMany({
-      where: {
-        ...(query.endpointId ? { endpointId: query.endpointId } : {}),
-        ...(query.status ? { status: query.status } : {}),
-      },
-      include: { endpoint: { select: { name: true, url: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(query.limit ?? 50, 200),
-    });
+  async deliveries(query: {
+    endpointId?: string;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(200, query.pageSize ?? 25);
+    const where = {
+      ...(query.endpointId ? { endpointId: query.endpointId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+    };
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.integrationDelivery.findMany({
+        where,
+        include: { endpoint: { select: { name: true, url: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.integrationDelivery.count({ where }),
+    ]);
+    return { data, total, page, pageSize };
   }
 
   async retry(deliveryId: string) {

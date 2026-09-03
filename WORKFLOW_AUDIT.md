@@ -391,13 +391,19 @@ Worth stating, because an audit that only lists faults misrepresents the system.
 
 Ordered by how many people each unblocks, not by how interesting it is.
 
-1. **`GET /me/scope`, and repoint `ScopeProvider` and `/pos` at it.** Unblocks
-   six of six broken tasks and 69 of 72 partial pages. A few hours. It changes
-   the product from unusable to usable for every operational role, and nothing
-   else on this list matters until it is done.
-2. **Server pagination on the twenty-four capped lists**, and pass `total` to
-   every `DataTable`. Two pages are already hiding data; the rest will start on
-   the first ordinary week. §5.1, §5.2.
+1. ~~**`GET /me/scope`, and repoint `ScopeProvider` and `/pos` at it.**~~
+   **Done.** Measured afterwards as the roles themselves: 0 of 179 page/role
+   combinations broken or partial, was 72 of 177; 8 of 8 core tasks pass, was
+   2 of 8.
+2. ~~**Server pagination on the twenty-seven capped lists**, and pass `total`
+   to every `DataTable`.~~ **Done.** `usePaged` owns the page number and hands
+   `DataTable` a `server` descriptor, so its Previous/Next asks the server
+   rather than walking the slice it was given; the hand-rolled lists get the
+   same through `<Pager>`. The caps that survive are search-as-you-type
+   dropdowns that now say how many matched, deliberate samples that say so
+   beside a link to the full list, and probes that read only a total.
+   `pager-check.mjs` clicks Next on every converted screen and proves the rows
+   changed. §5.1, §5.2.
 3. **`?id=` handling on the fifteen list pages.** Makes every notification link
    land on its record, and turns the existing drawers into deep links. §3.
 4. **Replace the twenty-one browser prompts** with the `Drawer` + `Field`
@@ -410,4 +416,4 @@ Ordered by how many people each unblocks, not by how interesting it is.
    polling on the three live screens, and translation in page bodies. §5.4–§5.7.
 
 Items 1–3 are the difference between a system that demonstrates and a system
-that runs a pharmacy.
+that runs a pharmacy. Items 1 and 2 are done; item 3 is next.

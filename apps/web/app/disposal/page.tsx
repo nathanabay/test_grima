@@ -3,8 +3,18 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  MoreMatches,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 
 const METHODS = [
   "INCINERATION",
@@ -21,10 +31,13 @@ export default function DisposalPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const list = useApi<any>("/disposals?pageSize=25", [message]);
+  const list = usePaged<any>("/disposals", {
+    filters: message ? `v=${encodeURIComponent(message)}` : "",
+    pageSize: 25,
+  });
   const expired = useApi<any>("/inventory/expiry?maxDays=0", [message]);
 
-  const selected = list.data?.data?.find((d: any) => d.id === selectedId);
+  const selected = list.rows.find((d: any) => d.id === selectedId);
 
   async function act(path: string, body: any, label: string) {
     setBusy(true);
@@ -108,12 +121,12 @@ export default function DisposalPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         <Card
           className="lg:col-span-2"
-          title={`${list.data?.total ?? 0} disposals`}
+          title={`${list.total.toLocaleString()} ${list.total === 1 ? "disposal" : "disposals"}`}
         >
           {list.loading && <Loading />}
-          {list.data?.data?.length ? (
+          {list.rows.length ? (
             <div className="max-h-[50vh] space-y-1 overflow-y-auto">
-              {list.data.data.map((d: any) => (
+              {list.rows.map((d: any) => (
                 <button
                   key={d.id}
                   onClick={() => setSelectedId(d.id)}
@@ -142,6 +155,14 @@ export default function DisposalPage() {
           ) : (
             !list.loading && <Empty>No disposals recorded.</Empty>
           )}
+          <Pager
+            page={list.page}
+            pageSize={list.pageSize}
+            total={list.total}
+            onPage={list.setPage}
+            loading={list.loading}
+            noun="disposal"
+          />
         </Card>
 
         <div className="lg:col-span-3">
@@ -245,6 +266,10 @@ function NewDisposal({
   const [reason, setReason] = useState("");
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<any[]>([]);
+  // What the server actually returned, so a capped dropdown can say so.
+  const [matches, setMatches] = useState<{ shown: number; total?: number }>({
+    shown: 0,
+  });
   const [lines, setLines] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -264,6 +289,7 @@ function NewDisposal({
   useEffect(() => {
     if (!search || !warehouseId) {
       setResults([]);
+      setMatches({ shown: 0 });
       return;
     }
     const t = setTimeout(async () => {
@@ -272,6 +298,7 @@ function NewDisposal({
           `/inventory/balances?warehouseId=${warehouseId}&search=${encodeURIComponent(search)}&pageSize=15`,
         );
         setResults(r.data.filter((b: any) => b.batch));
+        setMatches({ shown: r.data.length, total: r.total });
       } catch (e: any) {
         onError(e.message);
       }
@@ -360,6 +387,7 @@ function NewDisposal({
                 {qty(b.onHand)} on hand · {b.batch.status}
               </button>
             ))}
+            <MoreMatches shown={matches.shown} total={matches.total} />
           </div>
         )}
       </div>

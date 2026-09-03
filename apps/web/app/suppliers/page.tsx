@@ -3,8 +3,17 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, can, money, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 import { DocumentsTab } from "@/components/DocumentsTab";
 import {
   Card as Panel,
@@ -29,10 +38,10 @@ export default function SuppliersPage() {
   const user = typeof window !== "undefined" ? tokenStore.user : null;
   const canEdit = can(user, "procurement.supplier.CREATE");
 
-  const list = useApi<any>(
-    `/suppliers?pageSize=50${query ? `&q=${encodeURIComponent(query)}` : ""}`,
-    [query],
-  );
+  const list = usePaged<any>("/suppliers", {
+    filters: query ? `q=${encodeURIComponent(query)}` : "",
+    pageSize: 50,
+  });
   const detail = useApi<any>(selectedId ? `/suppliers/${selectedId}` : null, [
     selectedId,
   ]);
@@ -183,11 +192,11 @@ export default function SuppliersPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         <Card
           className="lg:col-span-2"
-          title={`${list.data?.total ?? 0} suppliers`}
+          title={`${list.total.toLocaleString()} supplier${list.total === 1 ? "" : "s"}`}
         >
-          {list.data?.data?.length ? (
+          {list.rows.length ? (
             <div className="max-h-[70vh] space-y-1 overflow-y-auto">
-              {list.data.data.map((s: any) => (
+              {list.rows.map((s: any) => (
                 <button
                   key={s.id}
                   onClick={() => setSelectedId(s.id)}
@@ -221,6 +230,14 @@ export default function SuppliersPage() {
           ) : (
             !list.loading && <Empty>No suppliers match.</Empty>
           )}
+          <Pager
+            page={list.page}
+            pageSize={list.pageSize}
+            total={list.total}
+            onPage={list.setPage}
+            loading={list.loading}
+            noun="supplier"
+          />
         </Card>
 
         <div className="lg:col-span-3">

@@ -3,8 +3,17 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, can, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 import {
   Card as Panel,
   Drawer,
@@ -35,10 +44,15 @@ export default function PatientsPage() {
   const canMerge = can(user, "sales.patient.DELETE");
   const [governance, setGovernance] = useState(false);
 
-  const list = useApi<any>(
-    `/patients?pageSize=50${query ? `&q=${encodeURIComponent(query)}` : ""}`,
-    [query, message],
-  );
+  const list = usePaged<any>("/patients", {
+    filters: [
+      query ? `q=${encodeURIComponent(query)}` : "",
+      message ? `v=${encodeURIComponent(message)}` : "",
+    ]
+      .filter(Boolean)
+      .join("&"),
+    pageSize: 50,
+  });
   const detail = useApi<any>(selectedId ? `/patients/${selectedId}` : null, [
     selectedId,
   ]);
@@ -182,12 +196,12 @@ export default function PatientsPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         <Card
           className="lg:col-span-2"
-          title={`${list.data?.total ?? 0} patients`}
+          title={`${list.total.toLocaleString()} ${list.total === 1 ? "patient" : "patients"}`}
         >
           {list.loading && <Loading />}
-          {list.data?.data?.length ? (
+          {list.rows.length ? (
             <div className="max-h-[60vh] space-y-1 overflow-y-auto">
-              {list.data.data.map((p: any) => (
+              {list.rows.map((p: any) => (
                 <button
                   key={p.id}
                   onClick={() => setSelectedId(p.id)}
@@ -206,6 +220,14 @@ export default function PatientsPage() {
           ) : (
             !list.loading && <Empty>No patients match.</Empty>
           )}
+          <Pager
+            page={list.page}
+            pageSize={list.pageSize}
+            total={list.total}
+            onPage={list.setPage}
+            loading={list.loading}
+            noun="patient"
+          />
         </Card>
 
         <div className="lg:col-span-3">

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, shortDate } from "@/lib/api";
 import { Card, Empty, ErrorBox, Loading, Pill, Stat } from "@/components/ui";
 import { DataTable } from "@/components/DataTable";
@@ -68,17 +69,19 @@ export default function IntegrationsPage() {
     tab === "webhooks" ? "/integrations/health" : null,
     [version],
   );
-  const deliveries = useApi<any[]>(
-    tab === "deliveries" ? "/integrations/deliveries?limit=100" : null,
-    [version],
+  // Delivery attempts accumulate with every webhook fired. The table's own
+  // pager used to walk the newest hundred and stop there.
+  const deliveries = usePaged<any>(
+    tab === "deliveries" ? "/integrations/deliveries" : null,
+    { filters: version ? `v=${version}` : "", pageSize: 25 },
   );
   const fhirHealth = useApi<any>(tab === "fhir" ? "/fhir/_log/health" : null, [
     version,
   ]);
-  const fhirLog = useApi<any>(
-    tab === "fhir" ? "/fhir/_log/exchanges?pageSize=100" : null,
-    [version],
-  );
+  const fhirLog = usePaged<any>(tab === "fhir" ? "/fhir/_log/exchanges" : null, {
+    filters: version ? `v=${version}` : "",
+    pageSize: 25,
+  });
 
   // /admin/permissions answers with Permission rows; the key stores their codes.
   const permissionCodes: string[] = (permissions.data ?? []).map(
@@ -674,9 +677,10 @@ export default function IntegrationsPage() {
         >
           {deliveries.error && <ErrorBox message={deliveries.error} />}
           {deliveries.loading && <Loading />}
-          {deliveries.data && (
+          {!deliveries.error && (
             <DataTable
-              rows={deliveries.data}
+              rows={deliveries.rows}
+              server={deliveries.server}
               getKey={(d: any) => d.id}
               exportName="webhook-deliveries"
               searchPlaceholder="Search deliveries"
@@ -831,10 +835,11 @@ export default function IntegrationsPage() {
           )}
 
           {fhirLog.error && <ErrorBox message={fhirLog.error} />}
-          {fhirLog.data && (
+          {!fhirLog.error && (
             <Card title="Exchange log">
               <DataTable
-                rows={fhirLog.data.data}
+                rows={fhirLog.rows}
+                server={fhirLog.server}
                 getKey={(x: any) => x.id}
                 exportName="fhir-exchanges"
                 searchPlaceholder="Search exchanges"

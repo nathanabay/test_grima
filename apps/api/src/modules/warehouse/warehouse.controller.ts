@@ -103,6 +103,13 @@ export class WarehouseController {
     });
   }
 
+  @Get('tasks/by-type')
+  @RequirePermissions('inventory.task.READ')
+  @ApiOperation({ summary: 'Open task counts per task type, counted in the database' })
+  tasksByType(@Query('warehouseId') warehouseId: string, @Query('open') open?: string) {
+    return this.tasks.countsByType(warehouseId, open !== 'false');
+  }
+
   @Get('tasks/exceptions')
   @RequirePermissions('inventory.task.READ')
   @ApiOperation({ summary: 'Stalled tasks, short picks and over-capacity locations' })

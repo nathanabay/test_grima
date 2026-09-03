@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api } from "@/lib/api";
 import { Card, ErrorBox, Loading, Pill, Stat } from "@/components/ui";
 import { DataTable } from "@/components/DataTable";
@@ -70,10 +71,18 @@ export default function JobsPage() {
     failedJobs: any[];
   }>("/admin/health", [version]);
   const jobs = useApi<JobRow[]>("/admin/jobs", [version]);
-  const history = useApi<any[]>(
-    `/admin/jobs/history?limit=50${selected ? `&jobKey=${encodeURIComponent(selected)}` : ""}`,
-    [version, selected],
-  );
+  // Run history grows every hour of every day. It used to hand the table the
+  // most recent 50 and let its pager walk them, which reads like the whole of
+  // the record.
+  const history = usePaged<any>("/admin/jobs/history", {
+    filters: [
+      selected ? `jobKey=${encodeURIComponent(selected)}` : "",
+      version ? `v=${version}` : "",
+    ]
+      .filter(Boolean)
+      .join("&"),
+    pageSize: 25,
+  });
 
   async function run(job: JobRow) {
     const { confirmed } = await confirm({
@@ -323,11 +332,11 @@ export default function JobsPage() {
           }
         >
           {history.error && <ErrorBox message={history.error} />}
-          {history.data && (
+          {!history.error && (
             <DataTable
-              rows={history.data}
+              rows={history.rows}
+              server={history.server}
               getKey={(r: any) => r.id}
-              pageSize={15}
               empty="This job has not run yet."
               exportName="job-history"
               columns={[

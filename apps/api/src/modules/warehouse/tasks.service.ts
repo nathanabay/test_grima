@@ -91,6 +91,28 @@ export class WarehouseTasksService {
     };
   }
 
+  /**
+   * How many open tasks of each kind, counted by the database.
+   *
+   * The dashboard used to tally the types itself from a page of a hundred
+   * tasks while its headline figure came from the true total — so a warehouse
+   * with three hundred open tasks showed a breakdown that added up to a third
+   * of the number printed beside it.
+   */
+  async countsByType(warehouseId: string, openOnly = true) {
+    const grouped = await this.prisma.warehouseTask.groupBy({
+      by: ['taskType'],
+      where: {
+        warehouseId,
+        ...(openOnly ? { status: { in: OPEN_STATUSES } } : {}),
+      },
+      _count: { _all: true },
+    });
+    return grouped
+      .map((g) => ({ taskType: g.taskType, count: g._count._all }))
+      .sort((a, b) => b.count - a.count);
+  }
+
   async get(id: string) {
     const task = await this.prisma.warehouseTask.findUnique({
       where: { id },

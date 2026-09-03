@@ -3,8 +3,18 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  MoreMatches,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 
 const DISPOSITIONS = ["RESTOCK", "QUARANTINE", "RETURN_SUPPLIER", "DESTROY"];
 
@@ -16,7 +26,10 @@ export default function ReturnsPage() {
   const [busy, setBusy] = useState(false);
   const [decisions, setDecisions] = useState<Record<string, string>>({});
 
-  const list = useApi<any>("/returns?pageSize=25", [message]);
+  const list = usePaged<any>("/returns", {
+    filters: message ? `v=${encodeURIComponent(message)}` : "",
+    pageSize: 25,
+  });
   const detail = useApi<any>(selectedId ? `/returns/${selectedId}` : null, [
     selectedId,
     message,
@@ -87,12 +100,12 @@ export default function ReturnsPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         <Card
           className="lg:col-span-2"
-          title={`${list.data?.total ?? 0} returns`}
+          title={`${list.total.toLocaleString()} ${list.total === 1 ? "return" : "returns"}`}
         >
           {list.loading && <Loading />}
-          {list.data?.data?.length ? (
+          {list.rows.length ? (
             <div className="max-h-[60vh] space-y-1 overflow-y-auto">
-              {list.data.data.map((r: any) => (
+              {list.rows.map((r: any) => (
                 <button
                   key={r.id}
                   onClick={() => setSelectedId(r.id)}
@@ -114,6 +127,14 @@ export default function ReturnsPage() {
           ) : (
             !list.loading && <Empty>No returns recorded.</Empty>
           )}
+          <Pager
+            page={list.page}
+            pageSize={list.pageSize}
+            total={list.total}
+            onPage={list.setPage}
+            loading={list.loading}
+            noun="return"
+          />
         </Card>
 
         <div className="lg:col-span-3">
@@ -224,6 +245,10 @@ function NewReturn({
   const [reason, setReason] = useState("");
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<any[]>([]);
+  // What the server actually returned, so a capped dropdown can say so.
+  const [matches, setMatches] = useState<{ shown: number; total?: number }>({
+    shown: 0,
+  });
   const [lines, setLines] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -245,6 +270,7 @@ function NewReturn({
   useEffect(() => {
     if (!search || !warehouseId) {
       setResults([]);
+      setMatches({ shown: 0 });
       return;
     }
     const t = setTimeout(async () => {
@@ -253,6 +279,7 @@ function NewReturn({
           `/inventory/balances?warehouseId=${warehouseId}&search=${encodeURIComponent(search)}&pageSize=15`,
         );
         setResults(r.data.filter((b: any) => b.batch));
+        setMatches({ shown: r.data.length, total: r.total });
       } catch (e: any) {
         onError(e.message);
       }
@@ -360,6 +387,7 @@ function NewReturn({
                 {b.batch.batchNumber}
               </button>
             ))}
+            <MoreMatches shown={matches.shown} total={matches.total} />
           </div>
         )}
       </div>

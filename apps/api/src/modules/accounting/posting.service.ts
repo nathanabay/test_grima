@@ -483,6 +483,38 @@ export class PostingService {
         LIMIT ${limit}`,
     ]);
 
-    return { movements, sales, total: movements.length + sales.length };
+    // The counts are asked for separately, not inferred from the sampled rows.
+    // `total` used to be `movements.length + sales.length`, which is bounded by
+    // the limit — so a backlog of four thousand documents reported itself to
+    // finance as one hundred, and the screen said the queue was nearly clear.
+    const [[movementCount], [saleCount]] = await Promise.all([
+      this.prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*)::bigint AS count
+        FROM inventory_transactions t
+        LEFT JOIN journal_entries j
+          ON j."sourceType" = 'INVENTORY_MOVEMENT' AND j."sourceId" = t.id
+        WHERE j.id IS NULL
+          AND t.type NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'RECALL',
+                             'RESERVATION', 'RESERVATION_RELEASE')`,
+      this.prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*)::bigint AS count
+        FROM sales s
+        LEFT JOIN journal_entries j
+          ON j."sourceType" = 'SALE_REVENUE' AND j."sourceId" = s.id
+        WHERE j.id IS NULL AND s.status = 'COMPLETED'`,
+    ]);
+
+    const movementTotal = Number(movementCount?.count ?? 0);
+    const saleTotal = Number(saleCount?.count ?? 0);
+
+    return {
+      movements,
+      sales,
+      movementTotal,
+      saleTotal,
+      total: movementTotal + saleTotal,
+      /** How many rows the samples above hold, so a caller can say "N of M". */
+      sampled: movements.length + sales.length,
+    };
   }
 }

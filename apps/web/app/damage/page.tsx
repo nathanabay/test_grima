@@ -3,8 +3,18 @@
 import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, money, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  MoreMatches,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 
 const DAMAGE_TYPES = [
   "BREAKAGE",
@@ -29,7 +39,10 @@ export default function DamagePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const list = useApi<any>("/damage-reports?pageSize=25", [message]);
+  const list = usePaged<any>("/damage-reports", {
+    filters: message ? `v=${encodeURIComponent(message)}` : "",
+    pageSize: 25,
+  });
   const summary = useApi<any>("/damage-reports/summary?days=90", [message]);
 
   async function verify(id: string, decision: "VERIFY" | "REJECT") {
@@ -127,9 +140,9 @@ export default function DamagePage() {
         />
       )}
 
-      <Card title={`${list.data?.total ?? 0} damage reports`}>
+      <Card title={`${list.total.toLocaleString()} ${list.total === 1 ? "damage report" : "damage reports"}`}>
         {list.loading && <Loading />}
-        {list.data?.data?.length ? (
+        {list.rows.length ? (
           <Table
             head={[
               "Report",
@@ -142,7 +155,7 @@ export default function DamagePage() {
               "",
             ]}
           >
-            {list.data.data.map((r: any) => (
+            {list.rows.map((r: any) => (
               <tr key={r.id}>
                 <td className="td font-medium">
                   {r.reportNo}
@@ -195,7 +208,15 @@ export default function DamagePage() {
         ) : (
           !list.loading && <Empty>No damage reported.</Empty>
         )}
-      </Card>
+          <Pager
+            page={list.page}
+            pageSize={list.pageSize}
+            total={list.total}
+            onPage={list.setPage}
+            loading={list.loading}
+            noun="damage report"
+          />
+        </Card>
     </Shell>
   );
 }
@@ -214,6 +235,10 @@ function ReportDamage({
   const [branchId, setBranchId] = useState("");
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<any[]>([]);
+  // What the server actually returned, so a capped dropdown can say so.
+  const [matches, setMatches] = useState<{ shown: number; total?: number }>({
+    shown: 0,
+  });
   const [picked, setPicked] = useState<any>(null);
   const [quantity, setQuantity] = useState("");
   const [damageType, setDamageType] = useState(DAMAGE_TYPES[0]);
@@ -237,6 +262,7 @@ function ReportDamage({
   useEffect(() => {
     if (!search || !warehouseId) {
       setResults([]);
+      setMatches({ shown: 0 });
       return;
     }
     const t = setTimeout(async () => {
@@ -245,6 +271,7 @@ function ReportDamage({
           `/inventory/balances?warehouseId=${warehouseId}&search=${encodeURIComponent(search)}&pageSize=15`,
         );
         setResults(r.data.filter((b: any) => b.batch && Number(b.onHand) > 0));
+        setMatches({ shown: r.data.length, total: r.total });
       } catch (e: any) {
         onError(e.message);
       }
@@ -348,6 +375,7 @@ function ReportDamage({
                     {b.batch.batchNumber} · {qty(b.onHand)} on hand
                   </button>
                 ))}
+                <MoreMatches shown={matches.shown} total={matches.total} />
               </div>
             )}
           </>

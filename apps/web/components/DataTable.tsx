@@ -29,6 +29,30 @@ export interface BulkAction<T> {
   disabled?: (rows: T[]) => string | null;
 }
 
+/**
+ * What a screen passes when the server holds more rows than one page.
+ *
+ * Without this the table's Previous/Next walks the slice it was handed and
+ * stops, which reads exactly like reaching the end of the data. With it the
+ * same buttons ask the server for the next page, and the count says which
+ * rows of how many are on screen.
+ */
+export interface ServerPage {
+  page: number;
+  pageSize: number;
+  /** How many rows the server holds for the current filter. */
+  total: number;
+  onPage: (page: number) => void;
+  onPageSize?: (pageSize: number) => void;
+  /**
+   * Passes the search box to the server. Without it the box filters only the
+   * rows on screen, and the table says so rather than implying otherwise.
+   */
+  onQuery?: (query: string) => void;
+  /** Dims the rows while the next page is in flight. */
+  loading?: boolean;
+}
+
 interface SavedView {
   name: string;
   query: string;
@@ -64,6 +88,7 @@ export function DataTable<T>({
   bulkActions,
   viewKey,
   total,
+  server,
   rowTone,
 }: {
   rows: T[];
@@ -84,6 +109,8 @@ export function DataTable<T>({
   viewKey?: string;
   /** Server-side total, when the screen paginates on the server. */
   total?: number;
+  /** Set when the pager should fetch from the server instead of slicing. */
+  server?: ServerPage;
   /** Tints a row that needs attention, e.g. expired stock. */
   rowTone?: (row: T) => "danger" | "warn" | null;
 }) {
@@ -161,9 +188,18 @@ export function DataTable<T>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sortKey, sortDir]);
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const current = Math.min(page, pageCount);
-  const pageRows = sorted.slice((current - 1) * pageSize, current * pageSize);
+  // In server mode the screen has already fetched exactly one page, so the
+  // table renders what it was handed and the pager asks for the next one.
+  // In local mode it slices the rows it holds.
+  const size = server ? server.pageSize : pageSize;
+  const pageCount = server
+    ? Math.max(1, Math.ceil(server.total / size))
+    : Math.max(1, Math.ceil(sorted.length / size));
+  const current = server ? server.page : Math.min(page, pageCount);
+  const pageRows = server
+    ? sorted
+    : sorted.slice((current - 1) * size, current * size);
+  const firstOnPage = server ? (current - 1) * size + 1 : 0;
 
   const checkedRows = useMemo(
     () => sorted.filter((r) => checked.has(getKey(r))),
@@ -286,18 +322,28 @@ export function DataTable<T>({
           onChange={(e) => {
             setQuery(e.target.value);
             setPage(1);
+            server?.onQuery?.(e.target.value);
           }}
           aria-label={searchPlaceholder}
+          title={
+            server && !server.onQuery
+              ? "Filters the rows on this page. Use the filters above to narrow the whole set."
+              : undefined
+          }
         />
         {toolbar}
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <span className="text-small text-ink-muted num">
-            {total !== undefined && total > rows.length
-              ? `${sorted.length} of ${total.toLocaleString()}`
-              : sorted.length === rows.length
-                ? `${rows.length.toLocaleString()} row${rows.length === 1 ? "" : "s"}`
-                : `${sorted.length.toLocaleString()} of ${rows.length.toLocaleString()}`}
+            {server
+              ? server.total === 0
+                ? "No rows"
+                : `${firstOnPage.toLocaleString()}\u2013${(firstOnPage + pageRows.length - 1).toLocaleString()} of ${server.total.toLocaleString()}`
+              : total !== undefined && total > rows.length
+                ? `${sorted.length} of ${total.toLocaleString()}`
+                : sorted.length === rows.length
+                  ? `${rows.length.toLocaleString()} row${rows.length === 1 ? "" : "s"}`
+                  : `${sorted.length.toLocaleString()} of ${rows.length.toLocaleString()}`}
           </span>
 
           {storeKey && (
@@ -541,12 +587,15 @@ export function DataTable<T>({
                   Rows
                   <select
                     className="input w-auto py-0.5 text-small"
-                    value={pageSize}
+                    value={size}
                     onChange={(e) => {
-                      setPageSize(Number(e.target.value));
+                      const next = Number(e.target.value);
+                      if (server) server.onPageSize?.(next);
+                      else setPageSize(next);
                       setPage(1);
                     }}
                     aria-label="Rows per page"
+                    disabled={!!server && !server.onPageSize}
                   >
                     {[25, 50, 100, 250].map((n) => (
                       <option key={n} value={n}>
@@ -555,12 +604,23 @@ export function DataTable<T>({
                     ))}
                   </select>
                 </label>
+                {server && !server.onQuery && query.trim() !== "" && (
+                  <span>
+                    Searching this page only, not all{" "}
+                    <span className="num">{server.total.toLocaleString()}</span>{" "}
+                    rows.
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   className="btn-ghost btn-sm"
-                  disabled={current === 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={current === 1 || server?.loading}
+                  onClick={() =>
+                    server
+                      ? server.onPage(Math.max(1, current - 1))
+                      : setPage((p) => Math.max(1, p - 1))
+                  }
                 >
                   Previous
                 </button>
@@ -569,8 +629,12 @@ export function DataTable<T>({
                 </span>
                 <button
                   className="btn-ghost btn-sm"
-                  disabled={current === pageCount}
-                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                  disabled={current === pageCount || server?.loading}
+                  onClick={() =>
+                    server
+                      ? server.onPage(Math.min(pageCount, current + 1))
+                      : setPage((p) => Math.min(pageCount, p + 1))
+                  }
                 >
                   Next
                 </button>

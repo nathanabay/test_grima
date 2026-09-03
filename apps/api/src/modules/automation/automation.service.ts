@@ -687,13 +687,21 @@ export class AutomationService {
     }
   }
 
-  async runs(ruleId?: string, limit = 50) {
-    return this.prisma.automationRun.findMany({
-      where: ruleId ? { ruleId } : {},
-      include: { rule: { select: { code: true, name: true } } },
-      orderBy: { startedAt: 'desc' },
-      take: Math.min(limit, 200),
-    });
+  async runs(query: { ruleId?: string; page?: number; pageSize?: number } = {}) {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(200, query.pageSize ?? 25);
+    const where = query.ruleId ? { ruleId: query.ruleId } : {};
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.automationRun.findMany({
+        where,
+        include: { rule: { select: { code: true, name: true } } },
+        orderBy: { startedAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.automationRun.count({ where }),
+    ]);
+    return { data, total, page, pageSize };
   }
 
   async openEscalations() {

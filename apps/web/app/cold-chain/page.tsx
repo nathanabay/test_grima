@@ -3,8 +3,17 @@
 import { useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
+import { usePaged } from "@/lib/paged";
 import { api, can, qty, shortDate, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  ErrorBox,
+  Loading,
+  Pager,
+  Pill,
+  Table,
+} from "@/components/ui";
 import {
   Card as Panel,
   Drawer,
@@ -19,7 +28,9 @@ import { SeverityBadge, StatusBadge } from "@/components/status";
 export default function ColdChainPage() {
   const [equipmentVersion, setEquipmentVersion] = useState(0);
   const live = useApi<any[]>("/cold-chain/live", [equipmentVersion]);
-  const excursions = useApi<any>("/cold-chain/excursions?pageSize=25");
+  // An excursion is a regulated event and the log is kept indefinitely. The
+  // screen used to show the newest 25 with no way to the ones before them.
+  const excursions = usePaged<any>("/cold-chain/excursions", { pageSize: 25 });
 
   return (
     <Shell>
@@ -98,7 +109,8 @@ export default function ColdChainPage() {
 
         <Card title="Temperature excursions">
           {excursions.loading && <Loading />}
-          {excursions.data?.data?.length ? (
+          {excursions.error && <ErrorBox message={excursions.error} />}
+          {excursions.rows.length ? (
             <Table
               head={[
                 "Excursion",
@@ -110,7 +122,7 @@ export default function ColdChainPage() {
                 "Disposition",
               ]}
             >
-              {excursions.data.data.map((e: any) => (
+              {excursions.rows.map((e: any) => (
                 <tr key={e.id}>
                   <td className="td font-medium">{e.excursionNo}</td>
                   <td className="td text-ink-muted">{e.sensor.name}</td>
@@ -149,6 +161,14 @@ export default function ColdChainPage() {
               <Empty>No temperature excursions recorded.</Empty>
             )
           )}
+          <Pager
+            page={excursions.page}
+            pageSize={excursions.pageSize}
+            total={excursions.total}
+            onPage={excursions.setPage}
+            loading={excursions.loading}
+            noun="excursion"
+          />
         </Card>
         <Equipment onChanged={() => setEquipmentVersion((v) => v + 1)} />
       </div>
