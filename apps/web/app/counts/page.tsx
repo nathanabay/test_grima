@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Shell, PageHeader } from "@/components/Shell";
 import { useApi } from "@/lib/useApi";
 import { usePaged } from "@/lib/paged";
+import { useDeepLink } from "@/lib/deepLink";
 import { api, can, money, qty, tokenStore } from "@/lib/api";
 import {
   Card,
@@ -188,6 +189,13 @@ function NewCount({
   const [branches, setBranches] = useState<any[]>([]);
   const [branchId, setBranchId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
+
+  // Opened from the stock drawer's "Count it" shortcut, which names the
+  // warehouse the position is in.
+  const shortcut = useDeepLink("warehouseId");
+  useEffect(() => {
+    if (shortcut.warehouseId) setWarehouseId(shortcut.warehouseId);
+  }, [shortcut.warehouseId]);
   const [categoryId, setCategoryId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [sampleSize, setSampleSize] = useState(25);

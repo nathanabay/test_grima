@@ -109,6 +109,13 @@ export function StockPositionDrawer({
             </dd>
           </dl>
 
+          {/*
+            Each shortcut carries the warehouse to work in and the batch number
+            to search for. It used to pass `productId`, which those pages
+            ignored, so "Count it" landed on an empty form and the storekeeper
+            found the product again by hand — the shortcut cost more than it
+            saved.
+          */}
           {position.batch && (
             <div className="mt-3 flex flex-wrap gap-2">
               <Link className="btn-ghost btn-sm" href={`/batches/${position.batch.id}`}>
@@ -117,7 +124,7 @@ export function StockPositionDrawer({
               {canCount && (
                 <Link
                   className="btn-ghost btn-sm"
-                  href={`/counts?productId=${position.product.id}&warehouseId=${position.warehouseId}`}
+                  href={`/counts?warehouseId=${position.warehouseId}&q=${encodeURIComponent(position.product.sku)}`}
                 >
                   Count it
                 </Link>
@@ -125,7 +132,7 @@ export function StockPositionDrawer({
               {canAdjust && (
                 <Link
                   className="btn-ghost btn-sm"
-                  href={`/adjustments?productId=${position.product.id}&batchId=${position.batch.id}&warehouseId=${position.warehouseId}`}
+                  href={`/adjustments?warehouseId=${position.warehouseId}&q=${encodeURIComponent(position.batch.batchNumber)}`}
                 >
                   Adjust
                 </Link>
@@ -133,7 +140,7 @@ export function StockPositionDrawer({
               {canTransfer && (
                 <Link
                   className="btn-ghost btn-sm"
-                  href={`/transfers?productId=${position.product.id}&fromWarehouseId=${position.warehouseId}`}
+                  href={`/transfers?fromWarehouseId=${position.warehouseId}&q=${encodeURIComponent(position.batch.batchNumber)}`}
                 >
                   Transfer out
                 </Link>

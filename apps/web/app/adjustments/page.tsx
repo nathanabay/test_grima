@@ -57,6 +57,18 @@ export default function AdjustmentsPage() {
   const [reason, setReason] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [search, setSearch] = useState("");
+
+  /**
+   * Opened from the stock drawer's "Adjust" shortcut, which names the
+   * warehouse to work in and the batch to look for. The shortcut used to pass
+   * a `productId` this page ignored, so it landed on an empty form and the
+   * storekeeper found the batch again by hand.
+   */
+  const shortcut = useDeepLink("warehouseId", "q");
+  useEffect(() => {
+    if (shortcut.warehouseId) setWarehouseId(shortcut.warehouseId);
+    if (shortcut.q) setSearch(shortcut.q);
+  }, [shortcut.warehouseId, shortcut.q]);
   const [results, setResults] = useState<any[]>([]);
   // How many positions actually matched, so a capped dropdown says so.
   const [matchTotal, setMatchTotal] = useState<number | undefined>(undefined);

@@ -414,6 +414,22 @@ export class ReceivingService {
         roleCodes: ['QA_OFFICER', 'WAREHOUSE_MANAGER'],
         linkUrl: `/receiving?id=${result.receipt.id}`,
       });
+    } else if (result.createdBatches.length) {
+      // A clean delivery used to notify nobody. Every batch lands QUARANTINED,
+      // so a normal delivery was unsellable and silent until the fourteen-day
+      // quarantine-ageing rule fired — two weeks of stock on a shelf that
+      // nothing could dispense and nobody had been asked to release.
+      await this.notifications.emit({
+        eventType: 'BATCH_AWAITING_RELEASE',
+        severity: 'INFO',
+        title: `${result.createdBatches.length} batch(es) awaiting release from ${result.grnNo}`,
+        body:
+          `Received without exception and quarantined pending a quality decision: ` +
+          result.createdBatches.map((b) => b.batchNumber).join(', '),
+        branchId: input.branchId,
+        roleCodes: ['QA_OFFICER'],
+        linkUrl: `/batches/${result.createdBatches[0].id}`,
+      });
     }
 
     return this.findOne(result.receipt.id);

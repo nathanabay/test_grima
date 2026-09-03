@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/api";
+import { landingFor } from "@/lib/landing";
 import { ErrorBox } from "@/components/ui";
 
 const DEMO_ACCOUNTS = [
@@ -30,8 +31,11 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await login(identifier, password, mfaCode || undefined);
-      router.replace("/dashboard");
+      // The landing page is the first the signed-in user may actually open.
+      // It used to be `/dashboard` unconditionally, which needs a permission a
+      // cashier does not hold.
+      const signedIn = await login(identifier, password, mfaCode || undefined);
+      router.replace(landingFor(signedIn));
     } catch (err: any) {
       if (err.body?.error?.mfaRequired || err.body?.mfaRequired) {
         setMfaRequired(true);

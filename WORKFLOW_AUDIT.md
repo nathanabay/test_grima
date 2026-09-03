@@ -170,20 +170,26 @@ only where a record deserves a page of its own.
 
 ## 4. Smaller findings
 
-- **`TransferStatus.RECEIVED` is declared and never written.** A transfer goes
-  `PARTIALLY_RECEIVED → COMPLETED`. It is offered as a filter, so a user can
-  select a state nothing is ever in.
-- **A clean goods receipt notifies nobody.** Receiving emits only when a line is
-  flagged. Every batch lands `QUARANTINED`, so a normal delivery is unsellable
-  and silent until the `QUARANTINE_AGEING` rule fires — **after 14 days**, at
-  which point it links to the wrong screen (§3).
-- **The count, adjust and transfer shortcuts I added to the stock drawer** pass
-  `?productId=` to pages that ignore it. They land on a blank list and the user
-  re-finds the product by hand. Same defect as §3, and mine.
-- **No route-level permission guard.** `nav.ts` filters the menu; typing a URL
-  is unguarded. A cashier who types `/accounting` gets the page with four dead
-  panels rather than a clean "not for you". Harmless today because the API
-  refuses the data — but the screen should say so.
+All four are fixed.
+
+- ~~**`TransferStatus.RECEIVED` is declared and never written.**~~ Removed from
+  the enum by migration; no row held it. A transfer goes
+  `PARTIALLY_RECEIVED → COMPLETED`, and a caller can no longer filter for a
+  state nothing is ever in and read the empty list as an answer.
+- ~~**A clean goods receipt notifies nobody.**~~ It now raises
+  `BATCH_AWAITING_RELEASE` to QA, linking to the batch. Every batch lands
+  `QUARANTINED`, so a normal delivery used to be unsellable and silent for the
+  fourteen days until the ageing rule fired.
+- ~~**The stock drawer's count, adjust and transfer shortcuts** pass
+  `?productId=` to pages that ignore it.~~ They now carry the warehouse to work
+  in and the batch number to search for, and all three pages honour both.
+- ~~**No route-level permission guard.**~~ `RouteGuard` in the shell answers a
+  typed URL the way the menu does. Finding this exposed another: signing in
+  always went to `/dashboard`, which needs a permission a cashier does not
+  hold — so every cashier would have been greeted by "this is not part of your
+  role". The landing page is now the first entry the reader may actually open.
+  `route-guard-check.mjs` proves both halves: the refused page says so, and a
+  page the role does hold still opens.
 
 ---
 

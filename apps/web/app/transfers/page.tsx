@@ -35,7 +35,6 @@ const STATUS_TONE: Record<string, any> = {
   DISPATCHED: "warn",
   IN_TRANSIT: "warn",
   PARTIALLY_RECEIVED: "warn",
-  RECEIVED: "ok",
   COMPLETED: "ok",
   CANCELLED: "neutral",
 };
@@ -476,6 +475,14 @@ function NewTransfer({
   const [to, setTo] = useState("");
   const [reason, setReason] = useState("");
   const [search, setSearch] = useState("");
+
+  // Opened from the stock drawer's "Transfer out" shortcut, which names the
+  // origin warehouse and the batch to look for.
+  const shortcut = useDeepLink("fromWarehouseId", "q");
+  useEffect(() => {
+    if (shortcut.fromWarehouseId) setFrom(shortcut.fromWarehouseId);
+    if (shortcut.q) setSearch(shortcut.q);
+  }, [shortcut.fromWarehouseId, shortcut.q]);
   const [results, setResults] = useState<any[]>([]);
   // What the server actually returned, so a capped dropdown can say so.
   const [matches, setMatches] = useState<{ shown: number; total?: number }>({

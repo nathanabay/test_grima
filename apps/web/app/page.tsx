@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { tokenStore } from "@/lib/api";
+import { landingFor } from "@/lib/landing";
 
 /**
  * The root, which is a signpost rather than a page.
@@ -15,7 +16,9 @@ import { tokenStore } from "@/lib/api";
 export default function Home() {
   const router = useRouter();
   useEffect(() => {
-    router.replace(tokenStore.access ? "/dashboard" : "/login");
+    // The first page this user may open, not `/dashboard` — which needs a
+    // permission a cashier does not hold.
+    router.replace(tokenStore.access ? landingFor(tokenStore.user) : "/login");
   }, [router]);
 
   return (

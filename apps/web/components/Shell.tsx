@@ -10,6 +10,7 @@ import { ScopeProvider, useScope } from "@/lib/scope";
 import { OfflineBar } from "@/components/OfflineBar";
 import { CommandPalette, useCommandPalette } from "@/components/CommandPalette";
 import { NAV, ALL_COMMANDS } from "@/components/nav";
+import { EmptyState } from "@/components/primitives";
 
 export { PageHeader } from "@/components/primitives";
 
@@ -44,8 +45,61 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <ScopeProvider user={user}>
-      <ShellChrome user={user}>{children}</ShellChrome>
+      <ShellChrome user={user}>
+        <RouteGuard user={user}>{children}</RouteGuard>
+      </ShellChrome>
     </ScopeProvider>
+  );
+}
+
+/**
+ * Refuse a page the reader's own menu does not offer.
+ *
+ * `nav.ts` filters the sidebar, but typing a URL was unguarded: a cashier who
+ * typed `/accounting` got the page with four dead panels and a scattering of
+ * permission errors rather than a clean answer. The data was never at risk —
+ * the API refuses it — but a screen that half-loads reads as a broken product
+ * rather than a page that is not theirs.
+ *
+ * This is presentation, not security. Authorization is decided on the server
+ * for every request, and this changes nothing about that.
+ */
+function RouteGuard({
+  user,
+  children,
+}: {
+  user: AuthUser;
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+
+  // The longest nav href that prefixes this path, so `/admin/settings` is
+  // judged by its own entry rather than by `/admin`.
+  const item = NAV.flatMap((group) => group.items)
+    .filter(
+      (i) => pathname === i.href || pathname.startsWith(`${i.href}/`),
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0];
+
+  // A route the menu does not describe is not this guard's to judge.
+  if (!item?.permission || can(user, item.permission)) return <>{children}</>;
+
+  return (
+    <EmptyState
+      title={`${item.label} is not part of your role`}
+      body={
+        <>
+          This screen needs the <code>{item.permission}</code> permission, which
+          your account does not hold. Nothing is wrong — it simply is not yours
+          to open. Ask an administrator if you believe it should be.
+        </>
+      }
+      action={
+        <Link className="btn-primary" href="/dashboard">
+          Back to the dashboard
+        </Link>
+      }
+    />
   );
 }
 

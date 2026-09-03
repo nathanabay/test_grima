@@ -123,7 +123,9 @@ enum TransferStatus {
   DISPATCHED
   IN_TRANSIT
   PARTIALLY_RECEIVED
-  RECEIVED
+  // There is no RECEIVED. A transfer goes PARTIALLY_RECEIVED -> COMPLETED, and
+  // nothing ever wrote RECEIVED — so a caller who filtered for it got an empty
+  // list that looked like an answer rather than a state that does not exist.
   COMPLETED
   CANCELLED
 }
