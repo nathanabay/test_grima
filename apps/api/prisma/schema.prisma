@@ -829,6 +829,13 @@ model Product {
   isLookAlikeSoundAlike     Boolean          @default(false)
   isVeterinary              Boolean          @default(false)
   isPediatric               Boolean          @default(false)
+  /// The most that may go out on one sale, for products a pharmacy is required
+  /// to limit — pseudoephedrine and codeine preparations being the usual ones.
+  /// Null means no limit.
+  maxQuantityPerSale        Decimal?         @db.Decimal(18, 4)
+  /// Requires the cashier to confirm the buyer's age before it can be sold.
+  isAgeRestricted           Boolean          @default(false)
+  minimumAgeYears           Int?
   /// POM | OTC | PHARMACY_ONLY | HOSPITAL_ONLY
   saleClassification        String           @default("OTC")
   /// Free text from the approved product information. Never generated.
@@ -1997,11 +2004,48 @@ model CashSession {
   variance       Decimal   @default(0) @db.Decimal(18, 4)
   varianceReason String?
   isOpen         Boolean   @default(true)
+  /// Who closed it, which need not be who opened it on a shift handover.
+  closedById     String?   @db.Uuid
+  /// The drawer counted note by note: {"100": 4, "50": 12, ...}. Kept because
+  /// "the drawer was 200 short" is a different investigation from "there were
+  /// no fifties in it".
+  denominations  Json?
+  /// A blind close hides the expected figure until the count is submitted, so
+  /// the cashier counts what is there rather than what the screen predicts.
+  isBlindClose   Boolean   @default(false)
 
-  sales Sale[]
+  sales     Sale[]
+  movements CashMovement[]
 
   @@index([branchId, isOpen])
   @@map("cash_sessions")
+}
+
+/// Cash into or out of the drawer that is not a sale (§46).
+///
+/// A drop to the safe, a payout for a delivery, a float top-up. Without these
+/// the expected drawer figure is wrong the moment anybody takes money out for
+/// any reason, and the variance that follows is blamed on the cashier.
+model CashMovement {
+  id            String   @id @default(uuid()) @db.Uuid
+  cashSessionId String   @db.Uuid
+  /// DROP | PAYOUT | FLOAT_IN | PICKUP
+  movementType  String
+  /// Always positive. The type decides the direction.
+  amount        Decimal  @db.Decimal(18, 4)
+  reason        String
+  /// Who witnessed it. A drop to the safe with no second person is how money
+  /// goes missing with nobody accountable.
+  witnessedById String?  @db.Uuid
+  reference     String?
+  performedById String   @db.Uuid
+  occurredAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
+
+  @@index([cashSessionId, occurredAt])
+  @@map("cash_movements")
 }
 
 model Sale {

@@ -42,7 +42,7 @@ of them is wrong and the disagreement is the finding.
 
 ## Unit and integration suites
 
-17 suites, 325 cases. 3 of them require a database.
+17 suites, 328 cases. 3 of them require a database.
 
 | Suite | Cases | Needs a database | Covers |
 | --- | --- | --- | --- |
@@ -61,12 +61,12 @@ of them is wrong and the disagreement is the finding.
 | `replenishment.spec.ts` | 10 | no | Replenishment (§12); Forecasting (§39); ABC / XYZ classification (§37) |
 | `scheduled-reports.spec.ts` | 10 | no | Scheduled report delivery window (§40); Cron day-of-week (§40) |
 | `serial-lifecycle.spec.ts` | 10 | no | Serial lifecycle state machine (§3: features 141-150) |
-| `settings-enforced.spec.ts` | 67 | no | Settings catalogue (§65) |
+| `settings-enforced.spec.ts` | 70 | no | Settings catalogue (§65) |
 | `units.spec.ts` | 6 | no | Unit conversion (§6) |
 
 ## End-to-end suites
 
-7 suites, 345 checks, run against a seeded API on port 4000.
+8 suites, 379 checks, run against a seeded API on port 4000.
 
 | Suite | Checks |
 | --- | --- |
@@ -74,6 +74,7 @@ of them is wrong and the disagreement is the finding.
 | `scripts/e2e-damage-pos.mjs` | 24 |
 | `scripts/e2e-enterprise.mjs` | 94 |
 | `scripts/e2e-lifecycle.mjs` | 89 |
+| `scripts/e2e-pos.mjs` | 34 |
 | `scripts/e2e-procurement.mjs` | 20 |
 | `scripts/e2e-warehouse.mjs` | 34 |
 | `scripts/e2e-workflow.mjs` | 65 |

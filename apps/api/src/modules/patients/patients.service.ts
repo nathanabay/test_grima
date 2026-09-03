@@ -50,6 +50,15 @@ const WRITABLE_PATIENT_FIELDS = [
 ] as const;
 
 /**
+ * Fields that are a commercial decision rather than a clerical one.
+ *
+ * Granting a customer credit is not the same act as correcting their phone
+ * number, and it should not travel on the same permission: a counter assistant
+ * fixing a typo must not be able to hand out a credit line.
+ */
+const COMMERCIAL_PATIENT_FIELDS = ['creditLimit', 'customerGroupId'] as const;
+
+/**
  * Digits only, last nine kept.
  *
  * "+251 91 123 4567", "0911234567" and "251911234567" are the same phone, and
@@ -188,10 +197,11 @@ export class PatientsService {
       throw new ForbiddenException('You are not authorized to edit clinical patient information');
     }
 
-    const existing = await this.prisma.patient.findUniqueOrThrow({
+    const before = await this.prisma.patient.findUniqueOrThrow({
       where: { id },
-      select: { isAnonymized: true, mergedIntoId: true },
+      select: { isAnonymized: true, mergedIntoId: true, creditLimit: true },
     });
+    const existing = before;
     if (existing.isAnonymized) {
       throw new ConflictException('An anonymised patient record cannot be edited');
     }
@@ -205,6 +215,24 @@ export class PatientsService {
     for (const field of WRITABLE_PATIENT_FIELDS) {
       if (data[field] !== undefined) clean[field] = data[field];
     }
+    for (const field of COMMERCIAL_PATIENT_FIELDS) {
+      if (data[field] === undefined) continue;
+      if (!user.permissions.includes('catalog.price.EDIT')) {
+        throw new ForbiddenException(
+          `Setting a customer's ${field === 'creditLimit' ? 'credit limit' : 'pricing group'} ` +
+            `is a commercial decision and needs the pricing permission`,
+        );
+      }
+      if (field === 'creditLimit') {
+        const limit = Number(data[field]);
+        if (!Number.isFinite(limit) || limit < 0) {
+          throw new BadRequestException('A credit limit must be zero or a positive amount');
+        }
+        clean[field] = limit;
+      } else {
+        clean[field] = data[field];
+      }
+    }
     if (clean.dateOfBirth) clean.dateOfBirth = new Date(clean.dateOfBirth as string);
 
     const patient = await this.prisma.patient.update({ where: { id }, data: clean as any });
@@ -214,9 +242,15 @@ export class PatientsService {
       action: 'EDIT',
       entityType: 'Patient',
       entityId: id,
-      // Field names only: the audit trail records that clinical notes changed,
-      // never what they now say.
-      newValue: { fields: Object.keys(clean) },
+      // Field names only for the clerical fields — the audit trail records that
+      // clinical notes changed, never what they now say. A credit limit is the
+      // exception: the number IS the decision, and an auditor needs to see it.
+      newValue: {
+        fields: Object.keys(clean),
+        ...(clean.creditLimit !== undefined
+          ? { creditLimit: { from: before.creditLimit.toFixed(2), to: Number(clean.creditLimit).toFixed(2) } }
+          : {}),
+      },
     });
     return patient;
   }

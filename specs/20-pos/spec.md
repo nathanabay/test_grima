@@ -30,6 +30,10 @@ Requirement range `PHARM-POS-001` – `PHARM-POS-050`.
 - `POST /pos/held/:id/resume` — sales.sale.CREATE
 - `POST /pos/held/:id/abandon` — sales.sale.CANCEL
 - `POST /pos/sales/:id/refund` — sales.sale.CANCEL
+- `GET /pos/sales` — sales.sale.READ
+- `GET /pos/today` — sales.sale.READ
+- `GET /pos/cash-sessions/:id/report` — sales.cash_session.READ
+- `POST /pos/cash-sessions/:id/movements` — sales.cash_session.EDIT
 - `GET /pos/cash-sessions/current` — sales.cash_session.READ
 - `POST /pos/cash-sessions/open` — sales.cash_session.CREATE
 - `POST /pos/cash-sessions/:id/close` — sales.cash_session.EDIT

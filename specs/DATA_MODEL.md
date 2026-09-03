@@ -14,7 +14,7 @@ referenced in another without a central sequence.
 
 Generated 2026-09-03 from the schema, the route table and the permission catalogue.
 
-**114 tables, 28 enumerations.**
+**115 tables, 28 enumerations.**
 
 ## Identity and access
 
@@ -139,7 +139,7 @@ Indexes and constraints: `@@map("manufacturers")`
 ### Product — `products`
 
 
-Relations: `id` → String, `sku` → String, `gtin` → String, `genericName` → String, `brandName` → String, `activeIngredient` → String, `strength` → String, `dosageForm` → String, `routeOfAdmin` → String, `manufacturerId` → String, `marketingAuthHolder` → String, `countryOfOrigin` → String, `registrationNumber` → String, `registrationExpiry` → DateTime, `launchDate` → DateTime, `discontinuedDate` → DateTime, `categoryId` → String, `therapeuticClass` → String, `atcCode` → String, `baseUnit` → String, `purchaseUnitId` → String, `dispensingUnitId` → String, `packSize` → Int, `requiresPrescription` → Boolean, `isControlled` → Boolean, `controlledSchedule` → String, `isNarcotic` → Boolean, `isCytotoxic` → Boolean, `isFrozen` → Boolean, `isFragile` → Boolean, `isFlammable` → Boolean, `isLookAlikeSoundAlike` → Boolean, `isVeterinary` → Boolean, `isPediatric` → Boolean, `saleClassification` → String, `pregnancyInfo` → String, `lactationInfo` → String, `minHumidityPercent` → Decimal, `maxHumidityPercent` → Decimal, `maxExcursionMinutes` → Int, `isColdChain` → Boolean, `isRefrigerated` → Boolean, `isHazardous` → Boolean, `isHighAlert` → Boolean, `lightSensitive` → Boolean, `humidityRestricted` → Boolean, `storageCondition` → StorageCondition, `minTempC` → Decimal, `maxTempC` → Decimal, `minShelfLifeDaysOnReceipt` → Int, `reorderLevel` → Decimal, `safetyStock` → Decimal, `maximumStock` → Decimal, `leadTimeDays` → Int, `preferredSupplierId` → String, `secondarySupplierId` → String, `economicOrderQty` → Decimal, `minPurchaseQty` → Decimal, `purchaseMultiple` → Decimal, `minSaleQty` → Decimal, `maxDispenseQty` → Decimal, `procurementRestricted` → Boolean, `seasonalProfile` → Json, `purchaseCost` → Decimal, `averageCost` → Decimal, `lastPurchaseCost` → Decimal, `retailPrice` → Decimal, `wholesalePrice` → Decimal, `insurancePrice` → Decimal, `taxRate` → Decimal, `targetMarginPct` → Decimal, `imageUrl` → String, `patientInfoUrl` → String, `notes` → String, `isActive` → Boolean, `createdAt` → DateTime, `updatedAt` → DateTime, `createdById` → String, `manufacturer` → Manufacturer, `category` → ProductCategory, `units` → ProductUnit, `barcodes` → ProductBarcode, `batches` → Batch, `balances` → InventoryBalance, `transactions` → InventoryTransaction, `priceHistory` → PriceHistory, `supplierLinks` → SupplierProduct, `ingredients` → ProductIngredient, `attributes` → ProductAttribute, `relations` → ProductRelation, `relatedTo` → ProductRelation, `priceListItems` → PriceListItem
+Relations: `id` → String, `sku` → String, `gtin` → String, `genericName` → String, `brandName` → String, `activeIngredient` → String, `strength` → String, `dosageForm` → String, `routeOfAdmin` → String, `manufacturerId` → String, `marketingAuthHolder` → String, `countryOfOrigin` → String, `registrationNumber` → String, `registrationExpiry` → DateTime, `launchDate` → DateTime, `discontinuedDate` → DateTime, `categoryId` → String, `therapeuticClass` → String, `atcCode` → String, `baseUnit` → String, `purchaseUnitId` → String, `dispensingUnitId` → String, `packSize` → Int, `requiresPrescription` → Boolean, `isControlled` → Boolean, `controlledSchedule` → String, `isNarcotic` → Boolean, `isCytotoxic` → Boolean, `isFrozen` → Boolean, `isFragile` → Boolean, `isFlammable` → Boolean, `isLookAlikeSoundAlike` → Boolean, `isVeterinary` → Boolean, `isPediatric` → Boolean, `maxQuantityPerSale` → Decimal, `isAgeRestricted` → Boolean, `minimumAgeYears` → Int, `saleClassification` → String, `pregnancyInfo` → String, `lactationInfo` → String, `minHumidityPercent` → Decimal, `maxHumidityPercent` → Decimal, `maxExcursionMinutes` → Int, `isColdChain` → Boolean, `isRefrigerated` → Boolean, `isHazardous` → Boolean, `isHighAlert` → Boolean, `lightSensitive` → Boolean, `humidityRestricted` → Boolean, `storageCondition` → StorageCondition, `minTempC` → Decimal, `maxTempC` → Decimal, `minShelfLifeDaysOnReceipt` → Int, `reorderLevel` → Decimal, `safetyStock` → Decimal, `maximumStock` → Decimal, `leadTimeDays` → Int, `preferredSupplierId` → String, `secondarySupplierId` → String, `economicOrderQty` → Decimal, `minPurchaseQty` → Decimal, `purchaseMultiple` → Decimal, `minSaleQty` → Decimal, `maxDispenseQty` → Decimal, `procurementRestricted` → Boolean, `seasonalProfile` → Json, `purchaseCost` → Decimal, `averageCost` → Decimal, `lastPurchaseCost` → Decimal, `retailPrice` → Decimal, `wholesalePrice` → Decimal, `insurancePrice` → Decimal, `taxRate` → Decimal, `targetMarginPct` → Decimal, `imageUrl` → String, `patientInfoUrl` → String, `notes` → String, `isActive` → Boolean, `createdAt` → DateTime, `updatedAt` → DateTime, `createdById` → String, `manufacturer` → Manufacturer, `category` → ProductCategory, `units` → ProductUnit, `barcodes` → ProductBarcode, `batches` → Batch, `balances` → InventoryBalance, `transactions` → InventoryTransaction, `priceHistory` → PriceHistory, `supplierLinks` → SupplierProduct, `ingredients` → ProductIngredient, `attributes` → ProductAttribute, `relations` → ProductRelation, `relatedTo` → ProductRelation, `priceListItems` → PriceListItem
 
 Indexes and constraints: `@@index([genericName])`, `@@index([atcCode])`, `@@index([categoryId])`, `@@index([registrationExpiry])`, `@@index([brandName])`, `@@index([isControlled])`, `@@index([isActive])`, `@@map("products")`
 
@@ -400,7 +400,7 @@ Indexes and constraints: `@@map("supplier_quotation_items")`
 ### CashSession — `cash_sessions`
 
 
-Relations: `id` → String, `sessionNo` → String, `branchId` → String, `cashierId` → String, `openedAt` → DateTime, `closedAt` → DateTime, `openingCash` → Decimal, `cashSales` → Decimal, `refunds` → Decimal, `cashExpenses` → Decimal, `expectedCash` → Decimal, `actualCash` → Decimal, `variance` → Decimal, `varianceReason` → String, `isOpen` → Boolean, `sales` → Sale
+Relations: `id` → String, `sessionNo` → String, `branchId` → String, `cashierId` → String, `openedAt` → DateTime, `closedAt` → DateTime, `openingCash` → Decimal, `cashSales` → Decimal, `refunds` → Decimal, `cashExpenses` → Decimal, `expectedCash` → Decimal, `actualCash` → Decimal, `variance` → Decimal, `varianceReason` → String, `isOpen` → Boolean, `closedById` → String, `denominations` → Json, `isBlindClose` → Boolean, `sales` → Sale, `movements` → CashMovement
 
 Indexes and constraints: `@@index([branchId, isOpen])`, `@@map("cash_sessions")`
 
@@ -758,6 +758,13 @@ Indexes and constraints: `@@map("approval_actions")`
 Relations: `id` → String, `code` → String, `label` → String, `dataType` → String, `options` → String, `isRequired` → Boolean, `group` → String, `sequence` → Int, `isActive` → Boolean, `createdAt` → DateTime, `values` → ProductAttribute
 
 Indexes and constraints: `@@map("attribute_definitions")`
+
+### CashMovement — `cash_movements`
+
+
+Relations: `id` → String, `cashSessionId` → String, `movementType` → String, `amount` → Decimal, `reason` → String, `witnessedById` → String, `reference` → String, `performedById` → String, `occurredAt` → DateTime, `createdAt` → DateTime, `cashSession` → CashSession
+
+Indexes and constraints: `@@index([cashSessionId, occurredAt])`, `@@map("cash_movements")`
 
 ### Dock — `docks`
 

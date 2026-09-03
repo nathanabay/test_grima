@@ -212,6 +212,34 @@
    * instead of scrolling inside its own overflow-x container, and every
    * dashboard scrolled sideways on a phone.
    */
+  /*
+   * Printing a receipt should print the receipt.
+   *
+   * The till used to call window.print() on the whole page, so a customer's
+   * receipt came out with the sidebar, the navigation and the search box on it.
+   * When a receipt is on screen it becomes the only thing that prints.
+   */
+  @media print {
+    body :not(.receipt):not(.receipt *) {
+      visibility: hidden;
+    }
+    .receipt,
+    .receipt * {
+      visibility: visible;
+    }
+    .receipt {
+      position: absolute;
+      inset: 0 auto auto 0;
+      width: 80mm;
+      padding: 4mm;
+      color: #000;
+      background: #fff;
+    }
+    .no-print {
+      display: none !important;
+    }
+  }
+
   .card { @apply min-w-0 bg-surface rounded-card border border-border shadow-raised; }
 
   .btn {

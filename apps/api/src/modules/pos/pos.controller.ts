@@ -79,6 +79,58 @@ export class PosController {
     return this.pos.refund(id, body, user);
   }
 
+  @Get('sales')
+  @RequirePermissions('sales.sale.READ')
+  @ApiOperation({ summary: 'Find a past sale to reprint, void or return against (§22)' })
+  searchSales(@Query() query: any, @CurrentUser() user: AuthenticatedUser) {
+    return this.pos.searchSales(
+      {
+        q: query.q,
+        branchId: query.branchId,
+        patientId: query.patientId,
+        from: query.from ? new Date(query.from) : undefined,
+        to: query.to ? new Date(query.to) : undefined,
+        page: query.page ? Number(query.page) : 1,
+        pageSize: query.pageSize ? Number(query.pageSize) : 25,
+      },
+      user,
+    );
+  }
+
+  @Get('today')
+  @RequirePermissions('sales.sale.READ')
+  @ApiOperation({ summary: "Today's takings and top sellers for a branch" })
+  today(@Query('branchId') branchId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.pos.todaySummary(branchId, user);
+  }
+
+  @Get('cash-sessions/:id/report')
+  @RequirePermissions('sales.cash_session.READ')
+  @ApiOperation({
+    summary: 'Shift report (X mid-shift, Z after close). Reads only — it never closes anything.',
+  })
+  shiftReport(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.pos.shiftReport(id, user);
+  }
+
+  @Post('cash-sessions/:id/movements')
+  @RequirePermissions('sales.cash_session.EDIT')
+  @ApiOperation({ summary: 'Record a drop, payout, pickup or float top-up (§46)' })
+  cashMovement(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      movementType: string;
+      amount: number;
+      reason: string;
+      witnessedById?: string;
+      reference?: string;
+    },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.pos.recordCashMovement({ ...body, cashSessionId: id }, user);
+  }
+
   @Get('cash-sessions/current')
   @RequirePermissions('sales.cash_session.READ')
   currentSession(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId: string) {
@@ -87,7 +139,10 @@ export class PosController {
 
   @Post('cash-sessions/open')
   @RequirePermissions('sales.cash_session.CREATE')
-  openSession(@Body() body: { branchId: string; openingCash: number }, @CurrentUser() user: AuthenticatedUser) {
+  openSession(
+    @Body() body: { branchId: string; openingCash: number; isBlindClose?: boolean },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.pos.openSession(body, user);
   }
 
@@ -96,9 +151,20 @@ export class PosController {
   @ApiOperation({ summary: 'Reconcile and close a till; a material variance needs an explanation' })
   closeSession(
     @Param('id') id: string,
-    @Body() body: { actualCash: number; varianceReason?: string },
+    @Body()
+    body: {
+      actualCash: number;
+      varianceReason?: string;
+      denominations?: Record<string, number>;
+    },
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.pos.closeSession(id, body.actualCash, user, body.varianceReason);
+    return this.pos.closeSession(
+      id,
+      body.actualCash,
+      user,
+      body.varianceReason,
+      body.denominations,
+    );
   }
 }

@@ -1,42 +1,133 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Shell, PageHeader } from "@/components/Shell";
-import { api, money, qty, tokenStore } from "@/lib/api";
-import { Card, Empty, ErrorBox, Loading, Pill, Table } from "@/components/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Shell } from "@/components/Shell";
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  Field,
+  Loading,
+  PageHeader,
+  Stat,
+} from "@/components/primitives";
+import { StatusBadge } from "@/components/status";
+import { api, can, money, qty, tokenStore } from "@/lib/api";
+import { posQueue, QueuedSale } from "@/lib/posQueue";
+import { PaymentDialog, Tender } from "@/components/pos/PaymentDialog";
+import { ShiftDrawer } from "@/components/pos/ShiftDrawer";
+import { CustomerPicker, PosCustomer } from "@/components/pos/CustomerPicker";
+import { SaleLookup } from "@/components/pos/SaleLookup";
+import { Receipt } from "@/components/pos/Receipt";
+
+/**
+ * The till (§22, §46).
+ *
+ * A till is driven by a scanner and a keyboard, not a mouse: the cashier's eyes
+ * are on the customer and the goods. So the search box keeps focus, Enter adds
+ * the top result, and the function keys reach payment, hold and the drawer
+ * without anybody looking for a button.
+ *
+ * The cart survives a refresh. A browser that reloads mid-sale used to lose
+ * everything the customer had put on the counter.
+ */
 
 interface CartLine {
   productId: string;
   name: string;
+  sku: string;
   unitPrice: number;
+  listPrice: number;
   taxRate: number;
   quantity: number;
   available: number;
   baseUnit: string;
+  discountPct: number;
+  priceOverrideReason?: string;
+  batchId?: string;
+  batchLabel?: string;
+  overrideReason?: string;
+  unitCode?: string;
+  packSize?: number;
+  isColdChain?: boolean;
+  isAgeRestricted?: boolean;
+  minimumAgeYears?: number | null;
+  maxQuantityPerSale?: number | null;
 }
 
+const CART_KEY = "pharmacore.pos.cart";
+
 export default function PosPage() {
+  return (
+    <Shell>
+      <Till />
+    </Shell>
+  );
+}
+
+function Till() {
+  const user = typeof window !== "undefined" ? tokenStore.user : null;
+  const canDiscount = can(user, "sales.sale.APPROVE");
+  const canOverridePrice = can(user, "catalog.price.EDIT");
+  const canVoid = can(user, "sales.sale.CANCEL");
+  const canOverrideBatch = can(user, "inventory.fefo_override.CREATE");
+
+  const [branches, setBranches] = useState<any[]>([]);
   const [branchId, setBranchId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
-  const [branches, setBranches] = useState<any[]>([]);
+
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  // A scanner-style multiplier: type 3* then scan, and three go on.
+  const [multiplier, setMultiplier] = useState<number | null>(null);
+
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [method, setMethod] = useState("CASH");
-  const [error, setError] = useState<string | null>(null);
-  const [receipt, setReceipt] = useState<any | null>(null);
+  const [customer, setCustomer] = useState<PosCustomer | null>(null);
+  const [saleDiscountPct, setSaleDiscountPct] = useState(0);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [acknowledged, setAcknowledged] = useState<string[]>([]);
+
   const [session, setSession] = useState<any | null>(null);
   const [held, setHeld] = useState<any[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [searching, setSearching] = useState(false);
+  const [today, setToday] = useState<any | null>(null);
+  const [queue, setQueue] = useState<QueuedSale[]>([]);
 
-  // Default to a site the operator actually has access to.
+  const [paying, setPaying] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<any | null>(null);
+  const [shiftOpen, setShiftOpen] = useState(false);
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [lookupOpen, setLookupOpen] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+
+  const searchRef = useRef<HTMLInputElement>(null);
+  /**
+   * Stable for the life of this cart.
+   *
+   * The old till built the key from Date.now(), so a retry after a network
+   * error created a second sale for the same goods. One key per cart means a
+   * retry returns the sale that was already made.
+   */
+  const idempotencyKey = useRef<string>(newKey());
+
+  function newKey() {
+    return `pos-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  const focusSearch = useCallback(() => {
+    setTimeout(() => searchRef.current?.focus(), 30);
+  }, []);
+
+  // ---- Sites the cashier can actually reach ----
   useEffect(() => {
     api("/admin/branches")
       .then((all: any[]) => {
-        const user = tokenStore.user;
-        const allowed = user?.branchIds.length
-          ? all.filter((b) => user.branchIds.includes(b.id))
+        const me = tokenStore.user;
+        const allowed = me?.branchIds.length
+          ? all.filter((b) => me.branchIds.includes(b.id))
           : all;
         setBranches(allowed);
         const first = allowed[0];
@@ -50,9 +141,10 @@ export default function PosPage() {
         }
       })
       .catch((e) => setError(e.message));
+    setQueue(posQueue.list());
   }, []);
 
-  // §46: a till should show whose shift is open before anything is sold.
+  // ---- Shift, held carts and today's takings ----
   useEffect(() => {
     if (!branchId) return;
     api(`/pos/cash-sessions/current?branchId=${branchId}`)
@@ -61,96 +153,211 @@ export default function PosPage() {
     api(`/pos/held?branchId=${branchId}`)
       .then(setHeld)
       .catch(() => setHeld([]));
-  }, [branchId, receipt]);
+    api(`/pos/today?branchId=${branchId}`)
+      .then(setToday)
+      .catch(() => setToday(null));
+  }, [branchId, refresh]);
+
+  // ---- The cart survives a refresh ----
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CART_KEY) ?? "null");
+      if (saved?.lines?.length) {
+        setCart(saved.lines);
+        setCustomer(saved.customer ?? null);
+        idempotencyKey.current = saved.idempotencyKey ?? newKey();
+      }
+    } catch {
+      // A corrupt saved cart is discarded rather than crashing the till.
+    }
+  }, []);
 
   useEffect(() => {
-    if (!term || !warehouseId) {
+    try {
+      if (cart.length) {
+        localStorage.setItem(
+          CART_KEY,
+          JSON.stringify({ lines: cart, customer, idempotencyKey: idempotencyKey.current }),
+        );
+      } else {
+        localStorage.removeItem(CART_KEY);
+      }
+    } catch {
+      // Storage being unavailable must not stop a sale.
+    }
+  }, [cart, customer]);
+
+  // ---- Search, and barcode resolution ----
+  useEffect(() => {
+    if (!term.trim() || !warehouseId) {
       setResults([]);
       return;
     }
     const handle = setTimeout(async () => {
       setSearching(true);
       try {
-        setResults(
-          await api(
-            `/pos/search?q=${encodeURIComponent(term)}&warehouseId=${warehouseId}`,
-          ),
+        const found = await api<any[]>(
+          `/pos/search?q=${encodeURIComponent(term.trim())}&warehouseId=${warehouseId}`,
         );
+        setResults(found);
+        setHighlight(0);
       } catch (e: any) {
         setError(e.message);
       } finally {
         setSearching(false);
       }
-    }, 250);
+    }, 200);
     return () => clearTimeout(handle);
   }, [term, warehouseId]);
 
-  function addToCart(p: any) {
+  /**
+   * A scanned code goes through the scanner, not the search box.
+   *
+   * A GS1 DataMatrix carries the batch and expiry as well as the product, and
+   * resolving it properly is what lets the till put the scanned batch on the
+   * line rather than whatever FEFO would otherwise pick.
+   */
+  async function resolveScan(raw: string) {
+    try {
+      const res = await api<any>("/scan", { method: "POST", body: { code: raw } });
+      if (!res.product) {
+        setError(`Scanned code does not match any product in the drug master.`);
+        return false;
+      }
+      const priced = await api<any[]>(
+        `/pos/search?q=${encodeURIComponent(res.product.sku)}&warehouseId=${warehouseId}`,
+      );
+      const match = priced.find((p) => p.id === res.product.id);
+      if (!match) {
+        setError(`${res.product.genericName} has no sellable stock in this warehouse.`);
+        return false;
+      }
+      addToCart(match, multiplier ?? 1, res.batch?.id, res.batch?.batchNumber);
+      for (const w of res.warnings ?? []) {
+        if (/expired|quarantine|recall/i.test(w)) setError(w);
+      }
+      return true;
+    } catch (e: any) {
+      setError(e.message);
+      return false;
+    }
+  }
+
+  function addToCart(p: any, count = 1, batchId?: string, batchLabel?: string) {
     setError(null);
-    // The server enforces these too; blocking here avoids a pointless round trip.
     if (p.requiresPrescription || p.isControlled) {
       setError(
-        `${p.genericName} is prescription-only and must be dispensed against a prescription.`,
+        `${p.genericName} is ${p.isControlled ? "a controlled medicine" : "prescription-only"} ` +
+          `and must go through dispensing, where the prescription and the register are recorded.`,
       );
       return;
     }
     if (p.available <= 0) {
-      setError(`${p.genericName} is out of stock at this warehouse.`);
+      setError(`${p.genericName} is out of stock in this warehouse.`);
       return;
     }
     setCart((c) => {
       const existing = c.find((l) => l.productId === p.id);
       if (existing) {
         return c.map((l) =>
-          l.productId === p.id ? { ...l, quantity: l.quantity + 1 } : l,
+          l.productId === p.id
+            ? { ...l, quantity: Math.min(l.available, l.quantity + count) }
+            : l,
         );
       }
       return [
         ...c,
         {
           productId: p.id,
-          name: `${p.genericName} ${p.strength}`,
+          name: `${p.genericName} ${p.strength}`.trim(),
+          sku: p.sku,
           unitPrice: Number(p.retailPrice),
+          listPrice: Number(p.retailPrice),
           taxRate: Number(p.taxRate),
-          quantity: 1,
+          quantity: count,
           available: p.available,
           baseUnit: p.baseUnit,
+          discountPct: 0,
+          batchId,
+          batchLabel,
+          isColdChain: p.isColdChain,
+          isAgeRestricted: p.isAgeRestricted,
+          minimumAgeYears: p.minimumAgeYears,
+          maxQuantityPerSale: p.maxQuantityPerSale ? Number(p.maxQuantityPerSale) : null,
         },
       ];
     });
+    setMultiplier(null);
+    setTerm("");
+    setResults([]);
+    focusSearch();
   }
 
+  // ---- Totals ----
   const subtotal = cart.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
-  const tax = cart.reduce(
-    (s, l) => s + l.unitPrice * l.quantity * l.taxRate,
+  const lineDiscounts = cart.reduce(
+    (s, l) => s + l.unitPrice * l.quantity * l.discountPct,
     0,
   );
-  const total = subtotal + tax;
+  const afterLine = subtotal - lineDiscounts;
+  const saleDiscount = afterLine * saleDiscountPct;
+  const net = afterLine - saleDiscount;
+  const tax = cart.reduce(
+    (s, l) => s + l.unitPrice * l.quantity * (1 - l.discountPct) * (1 - saleDiscountPct) * l.taxRate,
+    0,
+  );
+  const total = Number((net + tax).toFixed(2));
 
-  async function checkout() {
+  const needsAge = cart.some((l) => l.isAgeRestricted);
+  const overLimit = cart.filter(
+    (l) => l.maxQuantityPerSale != null && l.quantity > l.maxQuantityPerSale,
+  );
+  const creditAvailable = customer
+    ? Math.max(0, Number(customer.creditLimit ?? 0) - Number(customer.creditBalance ?? 0))
+    : null;
+
+  // ---- Keyboard ----
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "F2" && cart.length) {
+        e.preventDefault();
+        setPaying(true);
+      } else if (e.key === "F3" && cart.length) {
+        e.preventDefault();
+        void holdCart();
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        setCustomerOpen(true);
+      } else if (e.key === "F8") {
+        e.preventDefault();
+        setLookupOpen(true);
+      } else if (e.key === "Escape" && !paying && !shiftOpen && !customerOpen && !lookupOpen) {
+        setTerm("");
+        setResults([]);
+        focusSearch();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  async function holdCart() {
+    if (!cart.length) return;
     setBusy(true);
-    setError(null);
-    setReceipt(null);
     try {
-      const sale = await api("/pos/checkout", {
+      await api("/pos/hold", {
         method: "POST",
         body: {
           branchId,
           warehouseId,
           cashSessionId: session?.id,
-          lines: cart.map((l) => ({
-            productId: l.productId,
-            quantity: l.quantity,
-          })),
-          payments: [{ method, amount: Number(total.toFixed(2)) }],
-          // Repeat-safe: a double click cannot create two sales.
-          idempotencyKey: `pos-${branchId}-${Date.now()}`,
+          patientId: customer?.id,
+          lines: cart.map(toLineInput),
+          payments: [],
         },
       });
-      setReceipt(sale);
-      setCart([]);
-      setTerm("");
-      setResults([]);
+      clearCart();
+      setHeld(await api<any[]>(`/pos/held?branchId=${branchId}`));
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -158,443 +365,683 @@ export default function PosPage() {
     }
   }
 
+  function toLineInput(l: CartLine) {
+    return {
+      productId: l.productId,
+      quantity: l.quantity,
+      unitCode: l.unitCode,
+      batchId: l.batchId,
+      overrideReason: l.overrideReason,
+      discountPct: l.discountPct || undefined,
+      priceOverride: l.unitPrice !== l.listPrice ? l.unitPrice : undefined,
+      priceOverrideReason: l.priceOverrideReason,
+    };
+  }
+
+  function clearCart() {
+    setCart([]);
+    setCustomer(null);
+    setSaleDiscountPct(0);
+    setAgeConfirmed(false);
+    setAcknowledged([]);
+    idempotencyKey.current = newKey();
+    focusSearch();
+  }
+
+  async function takePayment(tenders: Tender[]) {
+    setBusy(true);
+    setError(null);
+    const body = {
+      branchId,
+      warehouseId,
+      cashSessionId: session?.id,
+      patientId: customer?.id,
+      lines: cart.map(toLineInput),
+      payments: tenders,
+      saleDiscountPct: saleDiscountPct || undefined,
+      ageConfirmed: ageConfirmed || undefined,
+      acknowledgedWarnings: acknowledged.length ? acknowledged : undefined,
+      idempotencyKey: idempotencyKey.current,
+    };
+    try {
+      const sale = await api<any>("/pos/checkout", { method: "POST", body });
+      setReceipt(sale);
+      setPaying(false);
+      clearCart();
+      setRefresh((r) => r + 1);
+    } catch (e: any) {
+      // A duplicate-sale warning is a question, not a failure: acknowledge it
+      // and the same cart goes through.
+      if (/already bought/i.test(e.message)) {
+        setError(`${e.message} Press "Take payment" again to confirm.`);
+        setAcknowledged(cart.map((l) => `DUPLICATE:${l.productId}`));
+        setBusy(false);
+        return;
+      }
+      // The server was unreachable rather than unhappy. Hold the sale rather
+      // than losing it — and say plainly that it is queued, not done.
+      if (/fetch|network|Failed to fetch/i.test(e.message)) {
+        setQueue(posQueue.enqueue(idempotencyKey.current, body, e.message));
+        setError(
+          "The server could not be reached. This sale is QUEUED, not completed — " +
+            "the stock has not moved and the customer has not been charged. It will be sent " +
+            "when the connection returns.",
+        );
+        setPaying(false);
+        clearCart();
+      } else {
+        setError(e.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function flushQueue() {
+    setBusy(true);
+    for (const queued of posQueue.list()) {
+      try {
+        await api("/pos/checkout", { method: "POST", body: queued.body });
+        setQueue(posQueue.remove(queued.idempotencyKey));
+      } catch (e: any) {
+        setQueue(posQueue.recordFailure(queued.idempotencyKey, e.message));
+      }
+    }
+    setBusy(false);
+    setRefresh((r) => r + 1);
+  }
+
+  const branchName = branches.find((b) => b.id === branchId)?.name;
+
   return (
-    <Shell>
+    <>
       <PageHeader
-        title="Point of Sale"
-        subtitle="Batches are chosen automatically by FEFO. Prescription-only and controlled medicines are refused here."
+        title="Point of sale"
+        subtitle="FEFO picks the batch. Prescription-only and controlled medicines go through dispensing, where the prescription and the register are recorded."
         action={
-          <select
-            className="input w-auto"
-            value={branchId}
-            onChange={(e) => {
-              const b = branches.find((x) => x.id === e.target.value);
-              setBranchId(e.target.value);
-              setWarehouseId(
-                b?.warehouses.find((w: any) => !w.isColdRoom)?.id ?? "",
-              );
-              setCart([]);
-            }}
-          >
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="input w-auto py-1 text-small"
+              aria-label="Branch"
+              value={branchId}
+              onChange={(e) => {
+                const b = branches.find((x) => x.id === e.target.value);
+                setBranchId(e.target.value);
+                setWarehouseId(
+                  b?.warehouses.find((w: any) => !w.isColdRoom)?.id ?? b?.warehouses[0]?.id ?? "",
+                );
+                clearCart();
+              }}
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+            <button className="btn-ghost btn-sm" onClick={() => setLookupOpen(true)}>
+              Find a sale <kbd className="ml-1 text-caption text-ink-subtle">F8</kbd>
+            </button>
+          </div>
         }
       />
 
       {error && (
         <div className="mb-3">
-          <ErrorBox message={error} />
+          <ErrorState message={error} />
+        </div>
+      )}
+
+      {queue.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-card border border-warn/30 bg-warn-light px-3 py-2 text-small text-warn">
+          <span>
+            {queue.length} sale(s) are queued and NOT yet recorded. The stock has not moved.
+          </span>
+          <button className="btn-quiet btn-sm" disabled={busy} onClick={flushQueue}>
+            Send them now
+          </button>
         </div>
       )}
 
       {receipt && (
         <Card className="mb-4" title={`Sale ${receipt.saleNo} completed`}>
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <span className="text-lg font-semibold num">
-              {money(receipt.grandTotal)}
-            </span>
-            <span className="text-ink-muted">
-              {receipt.items.length} line(s)
-            </span>
-            <button className="btn-ghost" onClick={() => window.print()}>
-              Print receipt
-            </button>
-            <button
-              className="btn-ghost"
-              onClick={async () => {
-                const item = receipt.items[0];
-                const max = Number(item.quantity);
-                const q = window.prompt(
-                  `Quantity to refund (max ${max}):`,
-                  String(max),
-                );
-                if (!q) return;
-                const reason = window.prompt("Refund reason (required):");
-                if (!reason) return;
-                try {
-                  const refunded = await api(
-                    `/pos/sales/${receipt.id}/refund`,
-                    {
-                      method: "POST",
-                      body: {
-                        lines: [{ saleItemId: item.id, quantity: Number(q) }],
-                        reason,
-                      },
-                    },
-                  );
-                  setReceipt(refunded);
-                  setError(null);
-                } catch (e: any) {
-                  setError(e.message);
-                }
-              }}
-            >
-              Refund
-            </button>
-            <button className="btn-ghost" onClick={() => setReceipt(null)}>
-              New sale
-            </button>
+          <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="num text-title font-semibold">{money(receipt.grandTotal)}</span>
+                {Number(receipt.changeDue ?? 0) > 0 && (
+                  <span className="rounded-card bg-ok/10 px-2 py-1 text-body font-semibold text-ok">
+                    Change {money(receipt.changeDue)}
+                  </span>
+                )}
+                <span className="text-small text-ink-muted">{receipt.items.length} line(s)</span>
+              </div>
+              {(receipt.warnings ?? []).map((w: string) => (
+                <p key={w} className="text-small text-warn">{w}</p>
+              ))}
+              <div className="flex flex-wrap gap-2">
+                <button className="btn-primary btn-sm" onClick={() => window.print()}>
+                  Print receipt
+                </button>
+                <button className="btn-ghost btn-sm" onClick={() => { setReceipt(null); focusSearch(); }}>
+                  Next sale
+                </button>
+              </div>
+            </div>
+            <Receipt sale={receipt} branchName={branchName} />
           </div>
         </Card>
       )}
 
-      <Card className="mb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-          {session ? (
-            <>
-              <span>
-                <strong>Shift {session.sessionNo}</strong> open ·{" "}
-                <span className="text-ink-muted">
-                  opened with {money(session.openingCash)} · cash sales{" "}
-                  {money(session.cashSales)}
+      {/* Shift and takings */}
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {session ? (
+          <Stat
+            label={`Shift ${session.sessionNo}`}
+            value={money(session.cashSales)}
+            sub="Cash taken this shift"
+            tone="ok"
+            onClick={() => setShiftOpen(true)}
+          />
+        ) : (
+          <Stat
+            label="No shift open"
+            value="Open one"
+            sub="Cash sales will not reconcile to a drawer"
+            tone="warn"
+            onClick={async () => {
+              try {
+                const opened = await api("/pos/cash-sessions/open", {
+                  method: "POST",
+                  body: { branchId, openingCash: 0 },
+                });
+                setSession(opened);
+              } catch (e: any) {
+                setError(e.message);
+              }
+            }}
+          />
+        )}
+        <Stat label="Takings today" value={money(today?.takings ?? 0)} sub={`${today?.salesCount ?? 0} sale(s)`} />
+        <Stat label="Average basket" value={money(today?.averageBasket ?? 0)} sub="Today" />
+        <Stat
+          label="Held carts"
+          value={held.length}
+          sub={held.length ? "Waiting to be resumed" : "None parked"}
+        />
+      </div>
+
+      {today?.topSellers?.length > 0 && (
+        <Card className="mb-4" title="Top sellers today" padded={false}>
+          <ul className="divide-y divide-border">
+            {today.topSellers.slice(0, 5).map((t: any) => (
+              <li key={t.productId} className="flex justify-between px-4 py-1.5 text-small">
+                <span className="text-ink">{t.product}</span>
+                <span className="num text-ink-muted">
+                  {qty(t.quantity)} · {money(t.value)}
                 </span>
-              </span>
-              <button
-                className="btn-ghost"
-                onClick={async () => {
-                  const counted = window.prompt("Counted cash in the drawer:");
-                  if (!counted) return;
-                  const expected =
-                    Number(session.openingCash) +
-                    Number(session.cashSales) -
-                    Number(session.refunds) -
-                    Number(session.cashExpenses);
-                  const variance = Number(counted) - expected;
-                  let varianceReason: string | undefined;
-                  if (Math.abs(variance) > 50) {
-                    varianceReason =
-                      window.prompt(
-                        `Variance of ${variance.toFixed(2)} needs an explanation:`,
-                      ) ?? undefined;
-                    if (!varianceReason) return;
-                  }
-                  try {
-                    const closed = await api(
-                      `/pos/cash-sessions/${session.id}/close`,
-                      {
-                        method: "POST",
-                        body: { actualCash: Number(counted), varianceReason },
-                      },
-                    );
-                    setSession(null);
-                    setError(null);
-                    window.alert(
-                      `Shift closed. Expected ${Number(closed.expectedCash).toFixed(2)}, counted ${Number(closed.actualCash).toFixed(2)}, variance ${Number(closed.variance).toFixed(2)}.`,
-                    );
-                  } catch (e: any) {
-                    setError(e.message);
-                  }
-                }}
-              >
-                Close shift
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="text-warn">
-                No cash shift is open. Cash sales will not be reconciled to a
-                drawer.
-              </span>
-              <button
-                className="btn-primary"
-                onClick={async () => {
-                  const opening = window.prompt("Opening cash float:", "0");
-                  if (opening === null) return;
-                  try {
-                    setSession(
-                      await api("/pos/cash-sessions/open", {
-                        method: "POST",
-                        body: { branchId, openingCash: Number(opening) },
-                      }),
-                    );
-                  } catch (e: any) {
-                    setError(e.message);
-                  }
-                }}
-              >
-                Open shift
-              </button>
-            </>
-          )}
-        </div>
-      </Card>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {held.length > 0 && (
-        <Card className="mb-4" title={`${held.length} held cart(s)`}>
-          <Table head={["Sale", "Customer", "Lines", ""]}>
+        <Card className="mb-4" title={`${held.length} held cart(s)`} padded={false}>
+          <ul className="divide-y divide-border">
             {held.map((h) => (
-              <tr key={h.id}>
-                <td className="td font-medium">{h.saleNo}</td>
-                <td className="td text-xs text-ink-muted">
-                  {h.patient?.fullName ?? "Walk-in"}
-                </td>
-                <td className="td num">{h.items.length}</td>
-                <td className="td">
-                  <div className="flex gap-1">
-                    <button
-                      className="btn-ghost text-xs"
-                      onClick={async () => {
-                        try {
-                          const resumed = await api(
-                            `/pos/held/${h.id}/resume`,
-                            { method: "POST" },
-                          );
-                          // Reload the parked lines into the live cart.
-                          const restored: CartLine[] = [];
-                          for (const line of resumed.lines) {
-                            const found = (
-                              await api<any[]>(
-                                `/pos/search?q=${encodeURIComponent("")}&warehouseId=${warehouseId}`,
-                              ).catch(() => [])
-                            ).find((p: any) => p.id === line.productId);
-                            restored.push({
-                              productId: line.productId,
-                              name: found
-                                ? `${found.genericName} ${found.strength}`
-                                : line.productId.slice(0, 8),
-                              unitPrice: line.unitPrice,
-                              taxRate: found ? Number(found.taxRate) : 0,
-                              quantity: line.quantity,
-                              available: found?.available ?? line.quantity,
-                              baseUnit: found?.baseUnit ?? "",
-                            });
-                          }
-                          setCart(restored);
-                          setHeld((p) => p.filter((x) => x.id !== h.id));
-                        } catch (e: any) {
-                          setError(e.message);
-                        }
-                      }}
-                    >
-                      Resume
-                    </button>
-                    <button
-                      className="btn-ghost text-xs"
-                      onClick={async () => {
-                        if (
-                          !window.confirm(
-                            `Abandon ${h.saleNo}? Its reserved stock is released.`,
-                          )
-                        )
-                          return;
-                        try {
-                          await api(`/pos/held/${h.id}/abandon`, {
-                            method: "POST",
+              <li key={h.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
+                <span className="text-small">
+                  <span className="text-ink">{h.saleNo}</span>
+                  <span className="text-caption text-ink-subtle">
+                    {" "}· {h.patient?.fullName ?? "Walk-in"} · {h.items.length} line(s)
+                  </span>
+                </span>
+                <span className="flex gap-1">
+                  <button
+                    className="btn-quiet btn-sm"
+                    onClick={async () => {
+                      try {
+                        const resumed = await api<any>(`/pos/held/${h.id}/resume`, { method: "POST" });
+                        // The resume response carries the parked lines; each is
+                        // re-priced against live stock so the cart shows what is
+                        // actually sellable now rather than what it was then.
+                        const restored: CartLine[] = [];
+                        for (const line of resumed.lines) {
+                          const matches = await api<any[]>(
+                            `/pos/search?q=${encodeURIComponent(line.sku ?? line.productId)}&warehouseId=${warehouseId}`,
+                          ).catch(() => []);
+                          const p = matches.find((m: any) => m.id === line.productId);
+                          restored.push({
+                            productId: line.productId,
+                            name: p ? `${p.genericName} ${p.strength}`.trim() : (line.productName ?? "Parked line"),
+                            sku: p?.sku ?? "",
+                            unitPrice: Number(line.unitPrice),
+                            listPrice: p ? Number(p.retailPrice) : Number(line.unitPrice),
+                            taxRate: p ? Number(p.taxRate) : 0,
+                            quantity: Number(line.quantity),
+                            available: p?.available ?? Number(line.quantity),
+                            baseUnit: p?.baseUnit ?? "",
+                            discountPct: 0,
+                            isColdChain: p?.isColdChain,
+                            isAgeRestricted: p?.isAgeRestricted,
+                            maxQuantityPerSale: p?.maxQuantityPerSale ? Number(p.maxQuantityPerSale) : null,
                           });
-                          setHeld((p) => p.filter((x) => x.id !== h.id));
-                        } catch (e: any) {
-                          setError(e.message);
                         }
-                      }}
-                    >
-                      Abandon
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                        setCart(restored);
+                        setHeld((prev) => prev.filter((x) => x.id !== h.id));
+                        focusSearch();
+                      } catch (e: any) {
+                        setError(e.message);
+                      }
+                    }}
+                  >
+                    Resume
+                  </button>
+                  <button
+                    className="btn-quiet btn-sm"
+                    onClick={async () => {
+                      if (!window.confirm(`Abandon ${h.saleNo}? Its reserved stock is released.`)) return;
+                      try {
+                        await api(`/pos/held/${h.id}/abandon`, { method: "POST" });
+                        setHeld((prev) => prev.filter((x) => x.id !== h.id));
+                      } catch (e: any) {
+                        setError(e.message);
+                      }
+                    }}
+                  >
+                    Abandon
+                  </button>
+                </span>
+              </li>
             ))}
-          </Table>
+          </ul>
         </Card>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Search products">
-          <input
-            className="input"
-            placeholder="Scan a barcode or type a generic/brand name"
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            autoFocus
-          />
+        <Card
+          title="Scan or search"
+          description="Enter adds the highlighted result. Type a number then * to set a quantity before scanning."
+        >
+          <div className="flex gap-2">
+            <input
+              ref={searchRef}
+              className="input"
+              autoFocus
+              placeholder="Scan a barcode, or type a name, brand or SKU"
+              aria-label="Scan or search for a product"
+              value={term}
+              onChange={(e) => {
+                const v = e.target.value;
+                // "3*" sets a quantity for the next thing scanned.
+                const m = /^(\d+)\*$/.exec(v);
+                if (m) {
+                  setMultiplier(Number(m[1]));
+                  setTerm("");
+                  return;
+                }
+                setTerm(v);
+              }}
+              onKeyDown={async (e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setHighlight((h) => Math.min(h + 1, results.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setHighlight((h) => Math.max(0, h - 1));
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  const raw = term.trim();
+                  if (!raw) return;
+                  // A long numeric or GS1-looking string is a scan, not a query.
+                  if (/^[\x1D0-9A-Za-z()\[\]{}\-\.]{8,}$/.test(raw) && !results.length) {
+                    if (await resolveScan(raw)) return;
+                  }
+                  if (results[highlight]) addToCart(results[highlight], multiplier ?? 1);
+                }
+              }}
+            />
+            {multiplier && (
+              <span className="flex items-center rounded-card bg-brand/10 px-2 text-small font-medium text-brand-dark">
+                ×{multiplier}
+              </span>
+            )}
+          </div>
+
           <div className="mt-3">
             {searching && <Loading label="Searching" />}
-            {!searching && term && !results.length && (
-              <Empty>No products match.</Empty>
+            {!searching && term && results.length === 0 && (
+              <EmptyState
+                title="Nothing matches"
+                body="Try the generic name, the brand, or the SKU. A scanned pack resolves through the barcode reader."
+              />
             )}
             {results.length > 0 && (
-              <Table head={["Product", "Price", "Available", ""]}>
-                {results.map((p) => (
-                  <tr key={p.id}>
-                    <td className="td">
-                      <div className="font-medium">
-                        {p.genericName} {p.strength}
-                      </div>
-                      <div className="text-xs text-ink-subtle">
-                        {p.brandName} · {p.sku}
-                        {p.requiresPrescription && (
-                          <>
-                            {" "}
-                            · <Pill tone="warn">Rx only</Pill>
-                          </>
-                        )}
-                        {p.isControlled && (
-                          <>
-                            {" "}
-                            · <Pill tone="danger">Controlled</Pill>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                    <td className="td num">{money(p.retailPrice)}</td>
-                    <td
-                      className={`td num ${p.available <= 0 ? "text-danger" : ""}`}
-                    >
-                      {qty(p.available)}
-                    </td>
-                    <td className="td">
+              <ul className="divide-y divide-border rounded-card border border-border">
+                {results.map((p, i) => {
+                  const blocked = p.requiresPrescription || p.isControlled;
+                  return (
+                    <li key={p.id}>
                       <button
-                        className="btn-ghost text-xs"
-                        disabled={
-                          p.available <= 0 ||
-                          p.requiresPrescription ||
-                          p.isControlled
-                        }
-                        onClick={() => addToCart(p)}
+                        className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left
+                          ${i === highlight ? "bg-brand/5" : "hover:bg-surface-sunken"}
+                          ${blocked ? "opacity-60" : ""}`}
+                        disabled={blocked || p.available <= 0}
+                        onClick={() => addToCart(p, multiplier ?? 1)}
                       >
-                        Add
+                        <span className="min-w-0">
+                          <span className="block truncate text-small text-ink">
+                            {p.genericName} {p.strength}
+                          </span>
+                          <span className="block text-caption text-ink-subtle">
+                            {p.brandName ? `${p.brandName} · ` : ""}{p.sku}
+                            {p.isColdChain && " · cold chain"}
+                            {p.isAgeRestricted && ` · age ${p.minimumAgeYears ?? 18}+`}
+                            {p.maxQuantityPerSale && ` · max ${Number(p.maxQuantityPerSale)} per sale`}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          {blocked && (
+                            <StatusBadge status={p.isControlled ? "CONTROLLED" : "PENDING"} />
+                          )}
+                          <span className="num text-small">{money(p.retailPrice)}</span>
+                          <span className={`num text-caption ${p.available <= 0 ? "text-danger" : "text-ink-muted"}`}>
+                            {qty(p.available)}
+                          </span>
+                        </span>
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </Table>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </div>
         </Card>
 
-        <Card title={`Cart (${cart.length})`}>
-          {cart.length ? (
+        <Card
+          title={`Cart (${cart.length})`}
+          action={
+            <button className="btn-quiet btn-sm" onClick={() => setCustomerOpen(true)}>
+              {customer ? customer.fullName : "Attach customer"}{" "}
+              <kbd className="text-caption text-ink-subtle">F4</kbd>
+            </button>
+          }
+        >
+          {!cart.length ? (
+            <EmptyState
+              title="Nothing on the counter yet"
+              body="Scan a pack or search for a product to start a sale. F2 takes payment, F3 holds the cart, F4 attaches a customer."
+            />
+          ) : (
             <>
-              <Table head={["Product", "Qty", "Unit", "Line", ""]}>
-                {cart.map((l) => (
-                  <tr key={l.productId}>
-                    <td className="td">{l.name}</td>
-                    <td className="td">
-                      <input
-                        className="input w-20 num"
-                        type="number"
-                        min={1}
-                        max={l.available}
-                        value={l.quantity}
-                        onChange={(e) =>
-                          setCart((c) =>
-                            c.map((x) =>
-                              x.productId === l.productId
-                                ? {
-                                    ...x,
-                                    quantity: Math.max(
-                                      1,
-                                      Math.min(
-                                        l.available,
-                                        Number(e.target.value),
-                                      ),
-                                    ),
-                                  }
-                                : x,
-                            ),
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="td num">{money(l.unitPrice)}</td>
-                    <td className="td num">
-                      {money(l.unitPrice * l.quantity)}
-                    </td>
-                    <td className="td">
-                      <button
-                        className="btn-ghost text-xs"
-                        onClick={() =>
-                          setCart((c) =>
-                            c.filter((x) => x.productId !== l.productId),
-                          )
-                        }
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </Table>
+              {customer && (
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-card bg-surface-sunken px-3 py-2 text-small">
+                  <span>
+                    <span className="text-ink">{customer.fullName}</span>
+                    <span className="text-caption text-ink-subtle"> · {customer.patientCode}</span>
+                  </span>
+                  <span className="text-caption text-ink-muted">
+                    {creditAvailable !== null && creditAvailable > 0
+                      ? `${money(creditAvailable)} credit available`
+                      : "No credit agreed"}
+                    <button className="btn-quiet btn-sm ml-2" onClick={() => setCustomer(null)}>
+                      Remove
+                    </button>
+                  </span>
+                </div>
+              )}
 
-              <dl className="mt-4 space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-ink-muted">Subtotal</dt>
-                  <dd className="num">{money(subtotal)}</dd>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[34rem] text-small">
+                  <thead>
+                    <tr>
+                      <th className="th">Product</th>
+                      <th className="th text-right">Qty</th>
+                      <th className="th text-right">Unit</th>
+                      {canDiscount && <th className="th text-right">Disc %</th>}
+                      <th className="th text-right">Line</th>
+                      <th className="th"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cart.map((l) => {
+                      const over =
+                        l.maxQuantityPerSale != null && l.quantity > l.maxQuantityPerSale;
+                      return (
+                        <tr key={l.productId} className={over ? "bg-danger/5" : ""}>
+                          <td className="td">
+                            <div className="text-ink">{l.name}</div>
+                            <div className="text-caption text-ink-subtle">
+                              {l.batchLabel && `batch ${l.batchLabel} · `}
+                              {l.isColdChain && "cold chain · "}
+                              {l.unitPrice !== l.listPrice && (
+                                <span className="text-warn">
+                                  price overridden from {money(l.listPrice)} ·{" "}
+                                </span>
+                              )}
+                              {over && (
+                                <span className="text-danger">
+                                  over the {l.maxQuantityPerSale} limit for one sale
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="td text-right">
+                            <input
+                              className="input num w-16 text-right"
+                              type="number"
+                              min={1}
+                              max={l.available}
+                              aria-label={`Quantity of ${l.name}`}
+                              value={l.quantity}
+                              onChange={(e) =>
+                                setCart((c) =>
+                                  c.map((x) =>
+                                    x.productId === l.productId
+                                      ? {
+                                          ...x,
+                                          quantity: Math.max(
+                                            1,
+                                            Math.min(l.available, Number(e.target.value) || 1),
+                                          ),
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                            />
+                          </td>
+                          <td className="td num text-right">
+                            {canOverridePrice ? (
+                              <input
+                                className="input num w-24 text-right"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                aria-label={`Unit price of ${l.name}`}
+                                value={l.unitPrice}
+                                onChange={(e) => {
+                                  const value = Number(e.target.value);
+                                  setCart((c) =>
+                                    c.map((x) =>
+                                      x.productId === l.productId
+                                        ? {
+                                            ...x,
+                                            unitPrice: value,
+                                            priceOverrideReason:
+                                              value !== x.listPrice
+                                                ? x.priceOverrideReason || "Agreed at the counter"
+                                                : undefined,
+                                          }
+                                        : x,
+                                    ),
+                                  );
+                                }}
+                              />
+                            ) : (
+                              money(l.unitPrice)
+                            )}
+                          </td>
+                          {canDiscount && (
+                            <td className="td text-right">
+                              <input
+                                className="input num w-16 text-right"
+                                type="number"
+                                min="0"
+                                max="100"
+                                aria-label={`Discount on ${l.name}`}
+                                value={Math.round(l.discountPct * 100)}
+                                onChange={(e) =>
+                                  setCart((c) =>
+                                    c.map((x) =>
+                                      x.productId === l.productId
+                                        ? {
+                                            ...x,
+                                            discountPct: Math.min(
+                                              1,
+                                              Math.max(0, Number(e.target.value) / 100),
+                                            ),
+                                          }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                              />
+                            </td>
+                          )}
+                          <td className="td num text-right">
+                            {money(l.unitPrice * l.quantity * (1 - l.discountPct))}
+                          </td>
+                          <td className="td">
+                            <button
+                              className="btn-quiet btn-sm"
+                              aria-label={`Remove ${l.name}`}
+                              onClick={() =>
+                                setCart((c) => c.filter((x) => x.productId !== l.productId))
+                              }
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {needsAge && (
+                <label className="mt-3 flex items-start gap-2 rounded-card border border-warn/30 bg-warn-light px-3 py-2 text-small text-warn">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={ageConfirmed}
+                    onChange={(e) => setAgeConfirmed(e.target.checked)}
+                  />
+                  <span>
+                    This sale contains an age-restricted product. Confirm you have checked the
+                    buyer is at least{" "}
+                    {cart.find((l) => l.isAgeRestricted)?.minimumAgeYears ?? 18}.
+                  </span>
+                </label>
+              )}
+
+              {overLimit.length > 0 && (
+                <p className="mt-2 text-small text-danger">
+                  {overLimit.map((l) => l.name).join(", ")} exceed(s) the quantity a single sale may
+                  supply. The server will refuse this until the quantity comes down.
+                </p>
+              )}
+
+              {canDiscount && (
+                <div className="mt-3">
+                  <Field label="Discount on the whole sale (%)">
+                    <input
+                      className="input num w-24"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={Math.round(saleDiscountPct * 100)}
+                      onChange={(e) =>
+                        setSaleDiscountPct(Math.min(1, Math.max(0, Number(e.target.value) / 100)))
+                      }
+                    />
+                  </Field>
                 </div>
-                <div className="flex justify-between">
-                  <dt className="text-ink-muted">Tax</dt>
-                  <dd className="num">{money(tax)}</dd>
-                </div>
-                <div className="flex justify-between border-t border-surface-border pt-1 text-base font-semibold">
+              )}
+
+              <dl className="mt-4 space-y-1 text-small">
+                <Row label="Subtotal" value={money(subtotal)} />
+                {lineDiscounts > 0 && <Row label="Line discounts" value={`-${money(lineDiscounts)}`} />}
+                {saleDiscount > 0 && <Row label="Sale discount" value={`-${money(saleDiscount)}`} />}
+                <Row label="Tax" value={money(tax)} />
+                <div className="flex justify-between border-t border-border pt-1 text-section font-semibold">
                   <dt>Total</dt>
                   <dd className="num">{money(total)}</dd>
                 </div>
               </dl>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <select
-                  className="input w-auto"
-                  value={method}
-                  onChange={(e) => setMethod(e.target.value)}
-                >
-                  {["CASH", "CARD", "MOBILE_MONEY", "BANK_TRANSFER"].map(
-                    (m) => (
-                      <option key={m} value={m}>
-                        {m.replace("_", " ")}
-                      </option>
-                    ),
-                  )}
-                </select>
                 <button
                   className="btn-primary flex-1"
-                  disabled={busy}
-                  onClick={checkout}
+                  disabled={busy || (needsAge && !ageConfirmed) || overLimit.length > 0}
+                  onClick={() => setPaying(true)}
                 >
-                  {busy ? "Processing..." : `Take payment ${money(total)}`}
+                  Take payment {money(total)} <kbd className="ml-1 text-caption opacity-70">F2</kbd>
                 </button>
-                <button
-                  className="btn-ghost"
-                  disabled={busy}
-                  onClick={async () => {
-                    try {
-                      await api("/pos/hold", {
-                        method: "POST",
-                        body: {
-                          branchId,
-                          warehouseId,
-                          cashSessionId: session?.id,
-                          lines: cart.map((l) => ({
-                            productId: l.productId,
-                            quantity: l.quantity,
-                          })),
-                          payments: [],
-                        },
-                      });
-                      setCart([]);
-                      const list = await api<any[]>(
-                        `/pos/held?branchId=${branchId}`,
-                      );
-                      setHeld(list);
-                    } catch (e: any) {
-                      setError(e.message);
-                    }
-                  }}
-                >
-                  Hold cart
+                <button className="btn-ghost" disabled={busy} onClick={holdCart}>
+                  Hold <kbd className="text-caption text-ink-subtle">F3</kbd>
                 </button>
-                <button className="btn-ghost" onClick={() => setCart([])}>
+                <button className="btn-quiet" onClick={clearCart}>
                   Clear
                 </button>
               </div>
             </>
-          ) : (
-            <Empty>Search for a product to start a sale.</Empty>
           )}
         </Card>
       </div>
-    </Shell>
+
+      <PaymentDialog
+        open={paying}
+        total={total}
+        customerName={customer?.fullName ?? null}
+        creditAvailable={creditAvailable}
+        busy={busy}
+        error={error}
+        onClose={() => setPaying(false)}
+        onConfirm={takePayment}
+      />
+
+      <ShiftDrawer
+        open={shiftOpen}
+        session={session}
+        onClose={() => setShiftOpen(false)}
+        onChanged={() => setRefresh((r) => r + 1)}
+      />
+
+      <CustomerPicker
+        open={customerOpen}
+        onClose={() => { setCustomerOpen(false); focusSearch(); }}
+        onSelect={setCustomer}
+      />
+
+      <SaleLookup
+        open={lookupOpen}
+        branchId={branchId}
+        branchName={branchName}
+        canVoid={canVoid}
+        canRefund={canVoid}
+        onClose={() => { setLookupOpen(false); focusSearch(); }}
+        onChanged={() => setRefresh((r) => r + 1)}
+      />
+    </>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between">
+      <dt className="text-ink-muted">{label}</dt>
+      <dd className="num">{value}</dd>
+    </div>
   );
 }

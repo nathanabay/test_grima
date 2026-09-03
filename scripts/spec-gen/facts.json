@@ -2768,6 +2768,30 @@
       "relation": true
      },
      {
+      "name": "maxQuantityPerSale",
+      "type": "Decimal?",
+      "attributes": "@db.Decimal(18, 4)",
+      "doc": "The most that may go out on one sale, for products a pharmacy is required to limit — pseudoephedrine and codeine preparations being the usual ones. Null means no limit.",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "isAgeRestricted",
+      "type": "Boolean",
+      "attributes": "@default(false)",
+      "doc": "Requires the cashier to confirm the buyer's age before it can be sold.",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "minimumAgeYears",
+      "type": "Int?",
+      "attributes": "",
+      "doc": "",
+      "optional": true,
+      "relation": true
+     },
+     {
       "name": "saleClassification",
       "type": "String",
       "attributes": "@default(\"OTC\")",
@@ -8908,8 +8932,40 @@
       "relation": true
      },
      {
+      "name": "closedById",
+      "type": "String?",
+      "attributes": "@db.Uuid",
+      "doc": "Who closed it, which need not be who opened it on a shift handover.",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "denominations",
+      "type": "Json?",
+      "attributes": "",
+      "doc": "The drawer counted note by note: {\"100\": 4, \"50\": 12, ...}. Kept because \"the drawer was 200 short\" is a different investigation from \"there were no fifties in it\".",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "isBlindClose",
+      "type": "Boolean",
+      "attributes": "@default(false)",
+      "doc": "A blind close hides the expected figure until the count is submitted, so the cashier counts what is there rather than what the screen predicts.",
+      "optional": false,
+      "relation": true
+     },
+     {
       "name": "sales",
       "type": "Sale[]",
+      "attributes": "",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "movements",
+      "type": "CashMovement[]",
       "attributes": "",
       "doc": "",
       "optional": false,
@@ -8919,6 +8975,105 @@
     "indexes": [
      "@@index([branchId, isOpen])",
      "@@map(\"cash_sessions\")"
+    ]
+   },
+   {
+    "name": "CashMovement",
+    "table": "cash_movements",
+    "doc": "",
+    "fields": [
+     {
+      "name": "id",
+      "type": "String",
+      "attributes": "@id @default(uuid()) @db.Uuid",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "cashSessionId",
+      "type": "String",
+      "attributes": "@db.Uuid",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "movementType",
+      "type": "String",
+      "attributes": "",
+      "doc": "DROP | PAYOUT | FLOAT_IN | PICKUP",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "amount",
+      "type": "Decimal",
+      "attributes": "@db.Decimal(18, 4)",
+      "doc": "Always positive. The type decides the direction.",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "reason",
+      "type": "String",
+      "attributes": "",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "witnessedById",
+      "type": "String?",
+      "attributes": "@db.Uuid",
+      "doc": "Who witnessed it. A drop to the safe with no second person is how money goes missing with nobody accountable.",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "reference",
+      "type": "String?",
+      "attributes": "",
+      "doc": "",
+      "optional": true,
+      "relation": true
+     },
+     {
+      "name": "performedById",
+      "type": "String",
+      "attributes": "@db.Uuid",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "occurredAt",
+      "type": "DateTime",
+      "attributes": "@default(now())",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "createdAt",
+      "type": "DateTime",
+      "attributes": "@default(now())",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     },
+     {
+      "name": "cashSession",
+      "type": "CashSession",
+      "attributes": "@relation(fields: [cashSessionId], references: [id], onDelete: Cascade)",
+      "doc": "",
+      "optional": false,
+      "relation": true
+     }
+    ],
+    "indexes": [
+     "@@index([cashSessionId, occurredAt])",
+     "@@map(\"cash_movements\")"
     ]
    },
    {
@@ -14874,6 +15029,22 @@
    "statements": 7,
    "destructive": false,
    "addsNotNullWithoutDefault": false
+  },
+  {
+   "name": "20260903043611_pos_cash_and_sale_limits",
+   "timestamp": "20260903043611",
+   "label": "pos cash and sale limits",
+   "statements": 0,
+   "destructive": false,
+   "addsNotNullWithoutDefault": false
+  },
+  {
+   "name": "20260903043627_pos_cash_and_sale_limits",
+   "timestamp": "20260903043627",
+   "label": "pos cash and sale limits",
+   "statements": 5,
+   "destructive": false,
+   "addsNotNullWithoutDefault": false
   }
  ],
  "routes": [
@@ -15694,6 +15865,14 @@
    "path": "/api/pos/cash-sessions/:id/close"
   },
   {
+   "method": "POST",
+   "path": "/api/pos/cash-sessions/:id/movements"
+  },
+  {
+   "method": "GET",
+   "path": "/api/pos/cash-sessions/:id/report"
+  },
+  {
    "method": "GET",
    "path": "/api/pos/cash-sessions/current"
   },
@@ -15723,6 +15902,10 @@
   },
   {
    "method": "GET",
+   "path": "/api/pos/sales"
+  },
+  {
+   "method": "GET",
    "path": "/api/pos/sales/:id"
   },
   {
@@ -15736,6 +15919,10 @@
   {
    "method": "GET",
    "path": "/api/pos/search"
+  },
+  {
+   "method": "GET",
+   "path": "/api/pos/today"
   },
   {
    "method": "GET",
@@ -19116,6 +19303,54 @@
    "tag": "Point of Sale",
    "method": "GET",
    "controllerPath": "pos",
+   "routePath": "sales",
+   "permissions": [
+    "sales.sale.READ"
+   ],
+   "isPublic": false,
+   "summary": "Find a past sale to reprint, void or return against (§22)"
+  },
+  {
+   "module": "pos",
+   "tag": "Point of Sale",
+   "method": "GET",
+   "controllerPath": "pos",
+   "routePath": "today",
+   "permissions": [
+    "sales.sale.READ"
+   ],
+   "isPublic": false,
+   "summary": null
+  },
+  {
+   "module": "pos",
+   "tag": "Point of Sale",
+   "method": "GET",
+   "controllerPath": "pos",
+   "routePath": "cash-sessions/:id/report",
+   "permissions": [
+    "sales.cash_session.READ"
+   ],
+   "isPublic": false,
+   "summary": "Shift report (X mid-shift, Z after close). Reads only — it never closes anything."
+  },
+  {
+   "module": "pos",
+   "tag": "Point of Sale",
+   "method": "POST",
+   "controllerPath": "pos",
+   "routePath": "cash-sessions/:id/movements",
+   "permissions": [
+    "sales.cash_session.EDIT"
+   ],
+   "isPublic": false,
+   "summary": "Record a drop, payout, pickup or float top-up (§46)"
+  },
+  {
+   "module": "pos",
+   "tag": "Point of Sale",
+   "method": "GET",
+   "controllerPath": "pos",
    "routePath": "cash-sessions/current",
    "permissions": [
     "sales.cash_session.READ"
@@ -22227,7 +22462,7 @@
   ]
  },
  "settings": {
-  "count": 65,
+  "count": 68,
   "notEnforced": 21
  },
  "testCountsFrom": "jest --json",
@@ -22384,7 +22619,7 @@
    "suites": [
     "Settings catalogue (§65)"
    ],
-   "cases": 67,
+   "cases": 70,
    "integration": false
   },
   {
@@ -22412,6 +22647,10 @@
   {
    "file": "e2e-lifecycle.mjs",
    "checks": 89
+  },
+  {
+   "file": "e2e-pos.mjs",
+   "checks": 34
   },
   {
    "file": "e2e-procurement.mjs",

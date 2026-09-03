@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-03T01:02:12.542Z",
+ "generated": "2026-09-03T04:54:57.994Z",
  "totals": {
   "requirements": 1000,
   "implemented": 780,
@@ -7,8 +7,8 @@
   "notImplemented": 71,
   "withNamedTests": 929,
   "implementedWithoutNamedTests": 0,
-  "unitAndIntegrationCases": 325,
-  "endToEndChecks": 345,
+  "unitAndIntegrationCases": 328,
+  "endToEndChecks": 379,
   "pagesVerifiedInBrowser": 43
  },
  "suites": [
@@ -178,7 +178,7 @@
    "id": "settings-enforced",
    "kind": "unit",
    "path": "apps/api/test/settings-enforced.spec.ts",
-   "cases": 67,
+   "cases": 70,
    "describes": [
     "Settings catalogue (§65)"
    ]
@@ -218,6 +218,13 @@
    "kind": "end-to-end",
    "path": "scripts/e2e-lifecycle.mjs",
    "cases": 89,
+   "describes": []
+  },
+  {
+   "id": "pos",
+   "kind": "end-to-end",
+   "path": "scripts/e2e-pos.mjs",
+   "cases": 34,
    "describes": []
   },
   {

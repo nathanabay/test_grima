@@ -14,7 +14,7 @@ buried in the table.
 
 Generated 2026-09-03 from the schema, the route table and the permission catalogue.
 
-**361 routes across 31 areas.**
+**365 routes across 31 areas.**
 
 Every route is served twice: unversioned under `/api`, and under `/api/v1`.
 A client that has been calling `/api/...` keeps working; a new integration
@@ -322,6 +322,8 @@ can pin `/api/v1/...`. A future `v2` is added per controller with
 | Method | Path | Requires | Purpose |
 | --- | --- | --- | --- |
 | POST | `/pos/cash-sessions/:id/close` | `sales.cash_session.EDIT` | Reconcile and close a till; a material variance needs an explanation |
+| POST | `/pos/cash-sessions/:id/movements` | `sales.cash_session.EDIT` | Record a drop, payout, pickup or float top-up (§46) |
+| GET | `/pos/cash-sessions/:id/report` | `sales.cash_session.READ` | Shift report (X mid-shift, Z after close). Reads only — it never closes anything. |
 | GET | `/pos/cash-sessions/current` | `sales.cash_session.READ` |  |
 | POST | `/pos/cash-sessions/open` | `sales.cash_session.CREATE` |  |
 | POST | `/pos/checkout` | `sales.sale.CREATE` | Complete a sale: FEFO allocation, stock movement and payment in one transaction |
@@ -329,10 +331,12 @@ can pin `/api/v1/...`. A future `v2` is added per controller with
 | POST | `/pos/held/:id/abandon` | `sales.sale.CANCEL` |  |
 | POST | `/pos/held/:id/resume` | `sales.sale.CREATE` | Resume a held cart; releases its reservations and returns the lines |
 | POST | `/pos/hold` | `sales.sale.CREATE` | Park a cart, reserving its stock so another till cannot sell it |
+| GET | `/pos/sales` | `sales.sale.READ` | Find a past sale to reprint, void or return against (§22) |
 | GET | `/pos/sales/:id` | `sales.sale.READ` |  |
 | POST | `/pos/sales/:id/refund` | `sales.sale.CANCEL` | Refund whole or part of a sale, returning stock to its original batches |
 | POST | `/pos/sales/:id/void` | `sales.sale.CANCEL` |  |
 | GET | `/pos/search` | `sales.sale.CREATE` | Product search with live availability for the till |
+| GET | `/pos/today` | `sales.sale.READ` |  |
 
 ## Prescriptions & Dispensing
 

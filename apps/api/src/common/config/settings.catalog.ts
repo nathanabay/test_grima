@@ -307,6 +307,38 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     max: 100,
   },
   {
+    key: 'pos.loyaltyPointsPerCurrencyUnit',
+    group: 'Point of Sale',
+    label: 'Loyalty points per currency unit',
+    description:
+      'Points a customer earns per unit of currency spent. Zero turns loyalty accrual off.',
+    type: 'number',
+    default: 0,
+    min: 0,
+    max: 100,
+  },
+  {
+    key: 'pos.requireOpenShift',
+    group: 'Point of Sale',
+    label: 'Require an open cash shift',
+    description:
+      'When on, a sale is refused unless a cash shift is open, so takings always reconcile to a drawer.',
+    type: 'boolean',
+    default: false,
+  },
+  {
+    key: 'pos.duplicateSaleWindowMinutes',
+    group: 'Point of Sale',
+    label: 'Duplicate sale window (minutes)',
+    description:
+      'Selling the same product to the same customer again inside this window raises a warning the ' +
+      'cashier must acknowledge. Zero turns the check off.',
+    type: 'number',
+    default: 10,
+    min: 0,
+    max: 240,
+  },
+  {
     key: 'pos.cashVarianceTolerance',
     group: 'Point of sale',
     label: 'Till variance tolerance',
