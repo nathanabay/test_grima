@@ -418,11 +418,17 @@ Ordered by how many people each unblocks, not by how interesting it is.
    quantity, disposal witness — were done first. `dialog-check.mjs` stubs
    `window.prompt` to record a call, so a screen that quietly fell back to one
    fails rather than passing. §5.3.
-5. **Decide between the workflow engine and the inline chains**, and implement
-   distinct approvers wherever `approval.requireDistinctApprovers` claims to
-   apply. §2.
+5. ~~**Decide between the workflow engine and the inline chains.**~~ **Done —
+   the engine stays.** It already enforces a permission per step and distinct
+   approvers, which is precisely what the inline chains lacked; deleting it
+   would have meant reimplementing that in eight places. What was missing was
+   the rule reaching those eight places, so `SeparationOfDutiesService` now
+   holds it once and every chain calls it. The purchase-order chain gained a
+   permission per stage and a real finance gate, and
+   `approval.purchaseOrder.managerThreshold` decides where the finance step
+   becomes necessary — it used to be read by nothing. §2.
 6. Per-field validation, success confirmation on the fourteen silent pages,
    polling on the three live screens, and translation in page bodies. §5.4–§5.7.
 
 Items 1–3 are the difference between a system that demonstrates and a system
-that runs a pharmacy. Items 1–4 are done; item 5 is next.
+that runs a pharmacy. Items 1–5 are done; item 6 is next.

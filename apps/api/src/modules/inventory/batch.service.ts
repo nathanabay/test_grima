@@ -11,6 +11,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { LedgerService } from './ledger.service';
 import { ScopeService } from '../../common/guards/scope.service';
+import { SeparationOfDutiesService } from '../../common/approval/separation.service';
 
 /**
  * Batch lifecycle and the quarantine workflow (§7, §16).
@@ -66,6 +67,7 @@ export class BatchService {
     private readonly audit: AuditService,
     private readonly ledger: LedgerService,
     private readonly scope: ScopeService,
+    private readonly separation: SeparationOfDutiesService,
   ) {}
 
   /**
@@ -389,6 +391,26 @@ export class BatchService {
       batch.expiryDate.getTime() < Date.now()
     ) {
       throw new BadRequestException('An expired batch can never be released to available stock');
+    }
+    // A batch has no single raiser — it is received, quarantined and released
+    // over its life — so the meaningful rule is narrower than "anyone who ever
+    // touched it": whoever quarantined a batch cannot be the one who clears it.
+    if (
+      (next === BatchStatus.RELEASED || next === BatchStatus.AVAILABLE) &&
+      batch.status === BatchStatus.QUARANTINED &&
+      (await this.separation.enforced())
+    ) {
+      const quarantinedBy = await this.separation.whoMovedTo(
+        'Batch',
+        id,
+        BatchStatus.QUARANTINED,
+      );
+      if (quarantinedBy && quarantinedBy === user.id) {
+        throw new ForbiddenException(
+          'You quarantined this batch, so you cannot release it yourself. ' +
+            'A second quality decision is required.',
+        );
+      }
     }
 
     const updated = await this.prisma.batch.update({

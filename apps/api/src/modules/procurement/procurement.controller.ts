@@ -242,7 +242,11 @@ export class ProcurementController {
   }
 
   @Post('purchase-orders/:id/transition')
-  @RequirePermissions('procurement.purchase_order.APPROVE')
+  // Deliberately the weakest of the stage permissions: which one a transition
+  // actually needs depends on the order's current status, which only the
+  // service knows. It checks the real one — see STAGE_PERMISSION — so this
+  // guard keeps strangers out and the service keeps the wrong role out.
+  @RequirePermissions('procurement.purchase_order.READ')
   @ApiOperation({ summary: 'Advance a PO through DRAFT -> ... -> APPROVED -> ORDERED' })
   transition(
     @Param('id') id: string,

@@ -87,6 +87,12 @@ export const RESOURCE_CATALOG: ResourceDefinition[] = [
   { module: 'quality', resource: 'cold_chain', label: 'Cold Chain', actions: ['READ', 'EDIT', 'APPROVE'] },
 
   { module: 'finance', resource: 'invoice', label: 'Invoices & Credit Notes', actions: [...CRUD, 'APPROVE'] },
+  // The finance review of a purchase order is a finance decision, not a
+  // procurement one. Without its own permission the finance stage required
+  // `procurement.purchase_order.APPROVE`, which finance does not hold — so a
+  // buyer cleared the finance step themselves and the chain recorded that the
+  // stage happened without recording that finance had seen it.
+  { module: 'finance', resource: 'purchase_order', label: 'Purchase Order Finance Review', actions: ['READ', 'APPROVE', 'REJECT'] },
   { module: 'finance', resource: 'account', label: 'Chart of Accounts', actions: CRUD },
   { module: 'finance', resource: 'journal', label: 'General Ledger', actions: [...CRUD, 'APPROVE', 'CANCEL'] },
   { module: 'finance', resource: 'report', label: 'Financial Reports', actions: REPORTING },

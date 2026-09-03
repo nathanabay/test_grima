@@ -9,6 +9,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SeparationOfDutiesService } from '../../common/approval/separation.service';
 
 /**
  * One step in an approval chain. A step applies only when the document's
@@ -53,6 +54,7 @@ export class WorkflowService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly separation: SeparationOfDutiesService,
   ) {}
 
   private parseSteps(raw: Prisma.JsonValue): WorkflowStep[] {
@@ -202,8 +204,15 @@ export class WorkflowService {
       throw new BadRequestException(`A comment is required to ${action.toLowerCase()} a document`);
     }
 
-    // Segregation of duties: an approver cannot approve their own earlier step.
-    if (action === 'APPROVE' && instance.actions.some((a) => a.actorId === user.id && a.action === 'APPROVE')) {
+    // Segregation of duties. This used to be hardcoded on, ignoring
+    // `approval.requireDistinctApprovers` — so a setting an administrator had
+    // switched off was still enforced here and nowhere else. It now reads the
+    // setting, like every other chain does.
+    if (
+      action === 'APPROVE' &&
+      instance.actions.some((a) => a.actorId === user.id && a.action === 'APPROVE') &&
+      (await this.separation.enforced())
+    ) {
       throw new ForbiddenException(
         'You have already approved an earlier step of this document; a second approver is required',
       );

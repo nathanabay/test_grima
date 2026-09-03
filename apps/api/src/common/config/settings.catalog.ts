@@ -227,8 +227,6 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     default: 50000,
     min: 0,
     sensitive: true,
-    notEnforced:
-      'As above: purchase-order approval steps carry their own amounts on the workflow definition.',
   },
   {
     key: 'approval.purchaseOrder.directorThreshold',
@@ -240,7 +238,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     min: 0,
     sensitive: true,
     notEnforced:
-      'As above: purchase-order approval steps carry their own amounts on the workflow definition.',
+      'There is no director tier: the purchase-order chain ends at finance review, and no role or permission represents a director. Enforcing this needs that stage to exist first, not a setting to be read.',
   },
   {
     key: 'approval.adjustment.approvalThreshold',
@@ -252,7 +250,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     min: 0,
     sensitive: true,
     notEnforced:
-      'The approval engine reads its thresholds from each WorkflowDefinition step (minAmount/maxAmount), which is per document type and already in use. This key would need the engine to consult it as a default.',
+      'Stock adjustments post in one step with no approval stage to gate, so there is nothing for a threshold to require. The variance that does gate a posting is the stock-count tolerance below, which is enforced.',
   },
   {
     key: 'approval.requireDistinctApprovers',

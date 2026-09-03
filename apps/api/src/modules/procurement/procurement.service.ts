@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import {
   DocumentStatus,
   Prisma,
@@ -10,6 +10,8 @@ import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { DocumentNumberService } from '../common-services/document-number.service';
 import { ScopeService } from '../../common/guards/scope.service';
+import { SeparationOfDutiesService } from '../../common/approval/separation.service';
+import { ConfigService } from '../../common/config/config.service';
 
 /** Weighting used to score quotations (§14). Configurable per organization. */
 export interface QuotationWeights {
@@ -35,6 +37,8 @@ export class ProcurementService {
     private readonly audit: AuditService,
     private readonly docNumbers: DocumentNumberService,
     private readonly scope: ScopeService,
+    private readonly separation: SeparationOfDutiesService,
+    private readonly config: ConfigService,
   ) {}
 
   // ---- Automatic replenishment (§12) ----
@@ -209,6 +213,17 @@ export class ProcurementService {
     }
     if (decision === 'REJECT' && !reason?.trim()) {
       throw new BadRequestException('A rejection reason is required');
+    }
+    if (decision === 'APPROVE') {
+      await this.separation.assertDistinct({
+        entityType: 'PurchaseRequest',
+        entityId: id,
+        actor: user,
+        raisedById: request.requestedById,
+        stage: 'approve',
+        // One decision, one approver: only the raiser is barred.
+        countPriorSteps: false,
+      });
     }
 
     const updated = await this.prisma.purchaseRequest.update({
@@ -638,6 +653,35 @@ export class ProcurementService {
   }
 
   /** Move a PO through its approval chain (§43). */
+  /**
+   * The permission each stage of the chain actually requires.
+   *
+   * Every stage used to be guarded by one permission,
+   * `procurement.purchase_order.APPROVE`, so a single buyer walked
+   * DRAFT → SUBMITTED → PROCUREMENT_REVIEW → FINANCE_REVIEW → APPROVED →
+   * ORDERED alone, including the finance step, without holding any finance
+   * permission at all. The chain recorded that the stages happened. It did not
+   * record that different people did them, because they need not have.
+   */
+  private static readonly STAGE_PERMISSION: Partial<
+    Record<PurchaseOrderStatus, string>
+  > = {
+    [PurchaseOrderStatus.SUBMITTED]: 'procurement.purchase_order.EDIT',
+    [PurchaseOrderStatus.PROCUREMENT_REVIEW]: 'procurement.purchase_order.APPROVE',
+    // The finance review is a finance decision.
+    [PurchaseOrderStatus.FINANCE_REVIEW]: 'finance.purchase_order.APPROVE',
+    [PurchaseOrderStatus.APPROVED]: 'procurement.purchase_order.APPROVE',
+    [PurchaseOrderStatus.ORDERED]: 'procurement.purchase_order.EDIT',
+    [PurchaseOrderStatus.CANCELLED]: 'procurement.purchase_order.CANCEL',
+  };
+
+  /** The stages where a second pair of eyes is the point of the stage. */
+  private static readonly APPROVING_STAGES: PurchaseOrderStatus[] = [
+    PurchaseOrderStatus.PROCUREMENT_REVIEW,
+    PurchaseOrderStatus.FINANCE_REVIEW,
+    PurchaseOrderStatus.APPROVED,
+  ];
+
   async transitionPurchaseOrder(
     id: string,
     next: PurchaseOrderStatus,
@@ -659,11 +703,65 @@ export class ProcurementService {
       CLOSED: [],
     };
 
+    // A small order does not need finance. `approval.purchaseOrder.
+    // managerThreshold` says where "small" ends, and until now it said it to
+    // nobody: the key was marked notEnforced and read by nothing.
+    const managerCeiling = await this.config.getNumber(
+      'approval.purchaseOrder.managerThreshold',
+    );
+    const withinManagerCeiling = po.grandTotal.lessThanOrEqualTo(managerCeiling);
+    if (
+      po.status === PurchaseOrderStatus.PROCUREMENT_REVIEW &&
+      next === PurchaseOrderStatus.APPROVED &&
+      withinManagerCeiling
+    ) {
+      allowed[PurchaseOrderStatus.PROCUREMENT_REVIEW] = [
+        ...allowed[PurchaseOrderStatus.PROCUREMENT_REVIEW],
+        PurchaseOrderStatus.APPROVED,
+      ];
+    }
+    if (
+      po.status === PurchaseOrderStatus.PROCUREMENT_REVIEW &&
+      next === PurchaseOrderStatus.APPROVED &&
+      !withinManagerCeiling
+    ) {
+      throw new BadRequestException(
+        `${po.poNo} is worth ${po.grandTotal.toString()}, above the ` +
+          `${managerCeiling} manager ceiling, so it needs a finance review before ` +
+          'it can be approved.',
+      );
+    }
+
     if (!allowed[po.status]?.includes(next)) {
       throw new BadRequestException(
         `Cannot move purchase order from ${po.status} to ${next}. ` +
           `Permitted: ${allowed[po.status]?.join(', ') || 'none'}`,
       );
+    }
+
+    // The stage's own permission, checked here because only here is the
+    // current status known. The route guard can only require the weakest of
+    // them; this is the one that matters.
+    const required = ProcurementService.STAGE_PERMISSION[next];
+    if (required && !user.permissions.includes(required)) {
+      throw new ForbiddenException(
+        `Moving a purchase order to ${next.replace(/_/g, ' ').toLowerCase()} ` +
+          `requires the ${required} permission.`,
+      );
+    }
+
+    if (ProcurementService.APPROVING_STAGES.includes(next)) {
+      await this.separation.assertDistinct({
+        entityType: 'PurchaseOrder',
+        entityId: id,
+        actor: user,
+        raisedById: po.createdById,
+        stage: `move it to ${next.replace(/_/g, ' ').toLowerCase()}`,
+        // Only the approving stages count. Submitting a draft is not an
+        // approval, so a buyer who submits their own order is not thereby
+        // barred from placing it once somebody else has approved it.
+        priorStages: ProcurementService.APPROVING_STAGES,
+      });
     }
 
     if (next === PurchaseOrderStatus.APPROVED) {

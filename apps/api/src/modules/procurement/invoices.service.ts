@@ -10,6 +10,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { DocumentNumberService } from '../common-services/document-number.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SeparationOfDutiesService } from '../../common/approval/separation.service';
 
 export interface CreateInvoiceInput {
   supplierInvoiceNo: string;
@@ -48,6 +49,7 @@ export class InvoicesService {
     private readonly audit: AuditService,
     private readonly docNumbers: DocumentNumberService,
     private readonly notifications: NotificationsService,
+    private readonly separation: SeparationOfDutiesService,
   ) {}
 
   async create(input: CreateInvoiceInput, user: AuthenticatedUser) {
@@ -264,6 +266,15 @@ export class InvoicesService {
           `Approving it anyway requires a written reason.`,
       );
     }
+
+    await this.separation.assertDistinct({
+      entityType: 'SupplierInvoice',
+      entityId: invoiceId,
+      actor: user,
+      raisedById: invoice.createdById,
+      stage: 'approve',
+      countPriorSteps: false,
+    });
 
     const updated = await this.prisma.supplierInvoice.update({
       where: { id: invoiceId },

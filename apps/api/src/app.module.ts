@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AppConfigModule } from './common/config/config.module';
 import { AuditModule } from './common/audit/audit.module';
+import { ApprovalModule } from './common/approval/approval.module';
 import { AppCacheModule } from './common/cache/cache.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -48,6 +49,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     PrismaModule,
     AppConfigModule,
     AuditModule,
+    ApprovalModule,
     AppCacheModule,
     CommonServicesModule,
     NotificationsModule,

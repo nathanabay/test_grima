@@ -14,6 +14,7 @@ import { LedgerService } from '../inventory/ledger.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { IncidentsService } from './incidents.service';
+import { SeparationOfDutiesService } from '../../common/approval/separation.service';
 
 export const DAMAGE_TYPES = [
   'BREAKAGE',
@@ -60,6 +61,7 @@ export class DamageService {
     private readonly docNumbers: DocumentNumberService,
     private readonly notifications: NotificationsService,
     private readonly incidents: IncidentsService,
+    private readonly separation: SeparationOfDutiesService,
   ) {}
 
   async report(input: ReportDamageInput, user: AuthenticatedUser) {
@@ -213,6 +215,16 @@ export class DamageService {
         'Rejecting a damage report requires a reason — the stock is being returned to inventory',
       );
     }
+    // Verifying a damage report writes stock off. The person who reported the
+    // damage cannot be the person who confirms it.
+    await this.separation.assertDistinct({
+      entityType: 'DamageReport',
+      entityId: id,
+      actor: user,
+      raisedById: report.reportedById,
+      stage: decision === 'VERIFY' ? 'verify' : 'reject',
+      countPriorSteps: false,
+    });
 
     await this.prisma.$transaction(async (tx) => {
       if (decision === 'REJECT') {

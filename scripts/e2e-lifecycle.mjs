@@ -267,15 +267,21 @@ const po = await admin('POST', '/purchase-orders', {
   items: [{ productId: balance.productId, orderedQty: 10, unitPrice: 100 }],
 });
 if (po.ok) {
-  for (const next of ['SUBMITTED', 'PROCUREMENT_REVIEW', 'FINANCE_REVIEW']) {
-    await admin('POST', `/purchase-orders/${po.body.id}/transition`, { status: next });
-  }
-  const approve = await admin('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'APPROVED' });
+  // Separation of duties bars one person from clearing two steps, so the walk
+  // up to the credit check uses the people the chain is designed for.
+  const financeUser = client(await login('finance'));
+  const procurementUser = client(await login('procurement'));
+  await procurementUser('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'SUBMITTED' });
+  // `admin` raised this order, so it cannot also review it.
+  const managerUser = client(await login('manager'));
+  await managerUser('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'PROCUREMENT_REVIEW' });
+  await financeUser('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'FINANCE_REVIEW' });
+  const approve = await procurementUser('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'APPROVED' });
   check('approving past the credit limit is refused', approve.status === 400,
     `HTTP ${approve.status}: ${approve.body?.error ?? ''}`);
 
   await admin('PATCH', `/suppliers/${supplier.id}`, { creditLimit: 0 });
-  const allowed = await admin('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'APPROVED' });
+  const allowed = await procurementUser('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'APPROVED' });
   check('with no limit agreed the same order approves', allowed.ok,
     `HTTP ${allowed.status}: ${allowed.body?.error ?? ''}`);
 } else {

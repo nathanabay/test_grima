@@ -11,6 +11,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/decorators';
 import { LedgerService } from '../inventory/ledger.service';
 import { DocumentNumberService } from '../common-services/document-number.service';
+import { SeparationOfDutiesService } from '../../common/approval/separation.service';
 
 /**
  * Waste and disposal (§31).
@@ -26,6 +27,7 @@ export class DisposalService {
     private readonly ledger: LedgerService,
     private readonly audit: AuditService,
     private readonly docNumbers: DocumentNumberService,
+    private readonly separation: SeparationOfDutiesService,
   ) {}
 
   async create(data: any, user: AuthenticatedUser) {
@@ -82,6 +84,14 @@ export class DisposalService {
     if (disposal.status !== DocumentStatus.SUBMITTED) {
       throw new ConflictException(`Disposal is ${disposal.status} and cannot be approved`);
     }
+    await this.separation.assertDistinct({
+      entityType: 'Disposal',
+      entityId: id,
+      actor: user,
+      raisedById: disposal.createdById,
+      stage: 'approve',
+      countPriorSteps: false,
+    });
     const updated = await this.prisma.disposal.update({
       where: { id },
       data: { status: DocumentStatus.APPROVED, approvedById: user.id, approvedAt: new Date() },

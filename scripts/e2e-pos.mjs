@@ -138,6 +138,14 @@ const cashSale = await cashier('POST', '/pos/checkout', {
   idempotencyKey: cashKey,
 });
 check('a cash sale completes', cashSale.ok, `HTTP ${cashSale.status}: ${cashSale.body?.error ?? ''}`);
+// The invariant, not one product's arithmetic: whatever is sold, the total a
+// customer is charged is a whole number of cents. A sale of 1.725 handed back
+// change of 9998.275, which no drawer can balance.
+const charged = String(cashSale.body?.grandTotal ?? '');
+const decimals = charged.includes('.') ? charged.split('.')[1].replace(/0+$/, '').length : 0;
+check('the total charged is a whole number of cents', cashSale.ok && decimals <= 2,
+  `grandTotal ${charged}`);
+
 check('the till is told the change to hand back',
   cashSale.ok && Number(cashSale.body.changeDue) ===
     Number((10000 - Number(cashSale.body.grandTotal)).toFixed(2)),

@@ -451,6 +451,20 @@ export class PosService {
           discountTotal = discountTotal.plus(saleDiscount);
         }
 
+        // Money the customer is charged is rounded to the currency's minor
+        // unit. A sale of 1.725 is a total no till can tender and no drawer can
+        // balance — the change came back as 9998.275 and the payment check
+        // papered over the difference with a one-cent tolerance.
+        //
+        // The rounding is applied to the components, not only to the sum, so
+        // that net + tax still equals gross exactly. Rounding the total alone
+        // makes the sale header disagree with its own parts, and the journal
+        // then refuses to balance: debits 1.73 against credits 1.725.
+        const round = (d: Prisma.Decimal) =>
+          d.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+        subtotal = round(subtotal);
+        discountTotal = round(discountTotal);
+        taxTotal = round(taxTotal);
         const grandTotal = subtotal.minus(discountTotal).plus(taxTotal);
 
         // Selling on account puts money on the customer's balance, so the

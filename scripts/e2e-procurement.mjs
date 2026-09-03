@@ -20,6 +20,7 @@ const admin = client(await login('admin'));
 const proc = client(await login('procurement'));
 const wh = client(await login('warehouse'));
 const fin = client(await login('finance'));
+const mgr = client(await login('manager'));
 
 const org = (await admin('GET', '/admin/organization')).body;
 const ho = org.branches.find(b => b.isHeadOffice);
@@ -61,8 +62,36 @@ const po = await proc('POST', '/purchase-orders', {
   expectedDate: new Date(Date.now() + 7 * 864e5).toISOString(),
   items: [{ productId: amox.id, orderedQty: 1000, unitPrice: 2.4, taxRate: 0.15 }],
 });
-for (const s of ['SUBMITTED', 'PROCUREMENT_REVIEW', 'FINANCE_REVIEW', 'APPROVED', 'ORDERED'])
-  await admin('POST', `/purchase-orders/${po.body.id}/transition`, { status: s });
+// Each stage of the chain now needs its own permission, and separation of
+// duties bars one person from clearing two of them, so the walk takes four
+// people rather than one. That is the point: the chain used to record that
+// the stages happened without recording that different people did them.
+const selfReview = await proc('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'SUBMITTED' });
+check('the buyer may submit their own draft', selfReview.ok, String(selfReview.body?.error ?? '').slice(0, 70));
+
+const selfApprove = await proc('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'PROCUREMENT_REVIEW' });
+check('the buyer cannot review the order they raised', selfApprove.status === 409,
+  String(selfApprove.body?.error ?? '').slice(0, 90));
+
+const review = await admin('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'PROCUREMENT_REVIEW' });
+check('somebody else reviews it', review.ok, String(review.body?.error ?? '').slice(0, 70));
+
+const procFinance = await proc('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'FINANCE_REVIEW' });
+check('procurement cannot clear the finance step', procFinance.status === 403,
+  String(procFinance.body?.error ?? '').slice(0, 90));
+
+const financeReview = await fin('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'FINANCE_REVIEW' });
+check('finance clears the finance step', financeReview.ok, String(financeReview.body?.error ?? '').slice(0, 70));
+
+const secondByAdmin = await admin('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'APPROVED' });
+check('the reviewer cannot also approve', secondByAdmin.status === 409,
+  String(secondByAdmin.body?.error ?? '').slice(0, 90));
+
+const approved = await mgr('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'APPROVED' });
+check('a third person approves', approved.ok, String(approved.body?.error ?? '').slice(0, 70));
+
+const ordered = await proc('POST', `/purchase-orders/${po.body.id}/transition`, { status: 'ORDERED' });
+check('the buyer places the approved order', ordered.ok, String(ordered.body?.error ?? '').slice(0, 70));
 
 const rejectNoReason = await wh('POST', '/goods-receipts', {
   purchaseOrderId: po.body.id, supplierId: sups[0].id, warehouseId: cw.id, branchId: ho.id,
@@ -120,7 +149,11 @@ console.log('\nSTEP D  Payment (§11 final step)');
 const payBeforeApprove = await fin('POST', `/supplier-invoices/${goodInv.body.id}/pay`, { amount: 100, method: 'BANK_TRANSFER' });
 check('paying an unapproved invoice is refused', !payBeforeApprove.ok, String(payBeforeApprove.body.error).slice(0, 70));
 
-await fin('POST', `/supplier-invoices/${goodInv.body.id}/approve`, {});
+const selfApproveInvoice = await fin('POST', `/supplier-invoices/${goodInv.body.id}/approve`, {});
+check('the person who entered an invoice cannot approve it', selfApproveInvoice.status === 409,
+  String(selfApproveInvoice.body?.error ?? '').slice(0, 90));
+
+await admin('POST', `/supplier-invoices/${goodInv.body.id}/approve`, {});
 const total = Number(goodInv.body.grandTotal);
 const part = await fin('POST', `/supplier-invoices/${goodInv.body.id}/pay`, { amount: Math.round(total / 2 * 100) / 100, method: 'BANK_TRANSFER', reference: 'TT-001' });
 check('part payment recorded', part.ok && part.body.status === 'PARTIALLY_PAID', `paid ${part.body?.amountPaid} of ${total}`);

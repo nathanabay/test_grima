@@ -71,7 +71,13 @@ check('damaged units LEFT sellable stock immediately', Number(after.onHand) === 
 const rejectNoReason = await qa('POST', `/damage-reports/${dmg.body.id}/verify`, { decision: 'REJECT' });
 check('rejecting a damage report without a reason is refused', !rejectNoReason.ok, String(rejectNoReason.body.error).slice(0,70));
 
-const rejected = await qa('POST', `/damage-reports/${dmg.body.id}/verify`, { decision:'REJECT', notes:'Outer carton only; product intact on inspection' });
+// Verifying a damage report writes stock off, so the person who reported the
+// damage cannot be the one who confirms it.
+const selfVerify = await qa('POST', `/damage-reports/${dmg.body.id}/verify`, { decision:'REJECT', notes:'Outer carton only; product intact on inspection' });
+check('the person who reported damage cannot verify it', selfVerify.status === 409,
+  String(selfVerify.body?.error ?? '').slice(0, 90));
+
+const rejected = await admin('POST', `/damage-reports/${dmg.body.id}/verify`, { decision:'REJECT', notes:'Outer carton only; product intact on inspection' });
 check('rejection returns the units to stock', rejected.ok);
 const restored = { onHand: await batchTotal(stock.batch.id) };
 check('stock is back where it was', Number(restored.onHand) === before, `${Number(restored.onHand)} of ${before}`);
@@ -80,7 +86,7 @@ const dmg2 = await qa('POST','/damage-reports', {
   productId: stock.productId, batchId: stock.batch.id, warehouseId: wh.id, branchId: branch.id,
   quantity: 12, damageType: 'CONTAMINATION', reason: 'Water ingress in store room B',
 });
-const verified = await qa('POST', `/damage-reports/${dmg2.body.id}/verify`, { decision:'VERIFY', notes:'Confirmed unusable' });
+const verified = await admin('POST', `/damage-reports/${dmg2.body.id}/verify`, { decision:'VERIFY', notes:'Confirmed unusable' });
 check('verified damage is held for disposal', verified.body.status === 'VERIFIED');
 const summary = await qa('GET','/damage-reports/summary?days=30');
 check('damage summary computed', summary.body.totalValue > 0,

@@ -161,9 +161,21 @@ const po = await procurement('POST', '/purchase-orders', {
 });
 check('purchase order created', po.ok, `${po.body.poNo} total ${po.body.grandTotal}`);
 
-for (const status of ['SUBMITTED', 'PROCUREMENT_REVIEW', 'FINANCE_REVIEW', 'APPROVED', 'ORDERED']) {
-  const t = await admin('POST', `/purchase-orders/${po.body.id}/transition`, { status });
-  check(`PO -> ${status}`, t.ok && t.body.status === status);
+// Each stage carries its own permission and no one person may clear two of
+// them, so the walk names who does each step rather than running the whole
+// chain as one signed-in user.
+const finance = client(await login('finance'));
+const chain = [
+  ['SUBMITTED', procurement],
+  ['PROCUREMENT_REVIEW', admin],
+  ['FINANCE_REVIEW', finance],
+  ['APPROVED', manager],
+  ['ORDERED', procurement],
+];
+for (const [status, who] of chain) {
+  const t = await who('POST', `/purchase-orders/${po.body.id}/transition`, { status });
+  check(`PO -> ${status}`, t.ok && t.body.status === status,
+    t.ok ? '' : String(t.body?.error ?? '').slice(0, 80));
 }
 
 const badTransition = await admin('POST', `/purchase-orders/${po.body.id}/transition`, {
