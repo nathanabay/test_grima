@@ -203,6 +203,13 @@
 }
 
 @layer components {
+  /* A key as it appears on a keyboard, for the shortcut list. */
+  .kbd {
+    @apply inline-flex min-w-[1.5rem] items-center justify-center rounded border
+           border-surface-border bg-surface-sunken px-1.5 py-0.5 font-mono
+           text-caption text-ink-muted;
+  }
+
   /*
    * The row a notification link pointed at.
    *

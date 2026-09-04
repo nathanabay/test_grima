@@ -160,14 +160,51 @@ export function Skeleton({
   );
 }
 
-export function Loading({ label = "Loading" }: { label?: string }) {
+/**
+ * What a screen shows while it is fetching.
+ *
+ * This was a spinner on thirty-nine pages and a content-shaped skeleton on
+ * one. A spinner collapses the layout, so the page jumps when the data lands
+ * and the reader loses their place; it also says nothing about what is coming.
+ * The default is now a skeleton the shape of a list, which holds the space and
+ * shows the shape of the answer. `rows={0}` asks for the old spinner, for the
+ * few places where a single value rather than a list is loading.
+ *
+ * The label stays: it is what a screen reader announces, and `role="status"`
+ * is why it is announced at all.
+ */
+export function Loading({
+  label = "Loading",
+  rows = 4,
+}: {
+  label?: string;
+  /** How many placeholder lines to hold. 0 falls back to the spinner. */
+  rows?: number;
+}) {
+  if (rows <= 0) {
+    return (
+      <div
+        className="flex items-center gap-2 px-1 py-6 text-small text-ink-muted"
+        role="status"
+      >
+        <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+        {label}…
+      </div>
+    );
+  }
+
   return (
-    <div
-      className="flex items-center gap-2 px-1 py-6 text-small text-ink-muted"
-      role="status"
-    >
-      <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-      {label}…
+    <div className="space-y-2 py-2" role="status" aria-busy="true">
+      <span className="sr-only">{label}…</span>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className="h-8 animate-pulse rounded bg-surface-sunken"
+          // Slightly uneven widths read as content rather than as a bar chart.
+          style={{ width: `${100 - (i % 3) * 6}%` }}
+        />
+      ))}
     </div>
   );
 }

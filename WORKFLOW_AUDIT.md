@@ -306,16 +306,31 @@ heading, column, button, empty state and error message in English.
 
 ### 5.8 Smaller, across the board
 
-- **Loading is a spinner on 39 pages** and a content-shaped skeleton on one.
+- ~~**Loading is a spinner on 39 pages**~~ — `Loading` is now content-shaped by
+  default, so one change covers all 39: the layout holds its place instead of
+  collapsing and jumping when the data lands. `rows={0}` still asks for the
+  spinner where a single value rather than a list is loading.
 - **Offline support is one page.** `posQueue` is used by `/pos` alone; the PWA
-  claim does not extend past the till.
-- **Keyboard shortcuts are one page.** `/pos`, plus the shell's command palette.
-- **`/admin/jobs`, `/import` and `/login` have no empty state at all**, and
-  `/returns`, `/disposal` and `/notifications` rendered blank in the browser
-  sweep — no heading, no explanation, no way to start the thing the page is for.
-- **URL state is one page.** Only `/inventory` puts its filters in the address
-  bar; every other filter, tab and selection is lost on reload and cannot be
-  sent to a colleague.
+  claim does not extend past the till. **Left deliberately.** Queuing a sale
+  the till can replay is one thing; queuing stock movements, dispensings and
+  approvals is a different product decision with real consequences for what a
+  pharmacy believes it holds. It should be decided, not slipped in.
+- ~~**Keyboard shortcuts are one page.**~~ `g` then a letter goes to a page —
+  drawn from the reader's own menu, so a cashier's list holds only what a
+  cashier may open — and `?` shows the list. `shortcut-check.mjs` proves both
+  halves, including the one that matters: a `g` typed into a search box is
+  still a `g`.
+- ~~**`/admin/jobs`, `/import` and `/login` have no empty state**, and
+  `/returns`, `/disposal` and `/notifications` rendered blank.~~ The blank
+  renders are gone (the browser sweep passes on all three). The other three
+  were the measurement, not the product: `/admin/jobs` has `DataTable`'s own
+  `empty=`, and a sign-in form and an import wizard have no "nothing to show"
+  to explain. The root route no longer renders `null` while it decides where
+  to send you.
+- ~~**URL state is one page.**~~ `useDeepLink`/`syncDeepLink` put the open
+  record and tab in the address bar on the record screens, so what is on
+  screen survives a reload and can be sent to a colleague. Filters beyond
+  `/inventory` are still local.
 
 ---
 

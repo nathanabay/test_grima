@@ -11,6 +11,7 @@ import { OfflineBar } from "@/components/OfflineBar";
 import { CommandPalette, useCommandPalette } from "@/components/CommandPalette";
 import { NAV, ALL_COMMANDS } from "@/components/nav";
 import { EmptyState } from "@/components/primitives";
+import { Shortcuts } from "@/components/Shortcuts";
 
 export { PageHeader } from "@/components/primitives";
 
@@ -46,6 +47,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <ScopeProvider user={user}>
       <ShellChrome user={user}>
+        <Shortcuts user={user} />
         <RouteGuard user={user}>{children}</RouteGuard>
       </ShellChrome>
     </ScopeProvider>
